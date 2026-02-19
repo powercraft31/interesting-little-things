@@ -1,0 +1,7 @@
+{
+  "index.html": "Plataforma principal - Painel de Lucros, Arbitragem, Portfólio de Ativos, Relatórios Financeiros (pt-BR)",
+  "style.css": "Estilo visual - Design financeiro com KPIs, cards de trade, gráficos ROI, Material Icons",
+  "app.js": "Lógica da aplicação - Dados financeiros simulados, gráficos Chart.js, trades em tempo real",
+  "presentation.html": "Página de apresentação - Descrição do demo em pt-BR com acesso à plataforma",
+  "index-server.html": "Redirecionamento automático para a página de apresentação"
+}

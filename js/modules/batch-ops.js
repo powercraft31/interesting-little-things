@@ -1,0 +1,577 @@
+// ============================================
+// SOLFACIL - Batch Operations Module
+// Asset selection, mode dispatch, progress tracking
+// ============================================
+
+import { t } from '../utils/i18n.js';
+import { showInfoModal, setupBackdropClose } from '../utils/modal.js';
+import { getAssets, getAssetCount, getAssetsToChange, updateAssetMode, OPERATION_MODES } from './data.js';
+
+// ============================================
+// Batch State (module-scoped, not global)
+// ============================================
+const batchState = {
+    selectedAssets: new Set(),
+    targetMode: null,
+    isDispatching: false,
+    dispatchResults: []
+};
+
+// ============================================
+// Populate Asset Cards
+// ============================================
+export function populateAssets() {
+    const grid = document.getElementById('assetsGrid');
+    if (!grid) return;
+
+    const assets = getAssets();
+
+    assets.forEach(asset => {
+        const card = document.createElement('div');
+        card.className = 'site-card';
+        card.setAttribute('data-asset-id', asset.id);
+
+        const statusClass = asset.status === 'operando' ? 'status-online' : 'status-charging';
+        const statusText = asset.status === 'operando' ? t('sell_operation') : t('charging');
+        const statusIcon = asset.status === 'operando' ? 'trending_up' : 'battery_charging_full';
+
+        const modeConfig = OPERATION_MODES[asset.operationMode];
+        const isSelected = batchState.selectedAssets.has(asset.id);
+
+        if (isSelected) {
+            card.classList.add('selected');
+        }
+
+        card.innerHTML = `
+            <div class="site-header">
+                <div class="site-name">
+                    <label class="asset-checkbox-wrapper" onclick="event.stopPropagation()">
+                        <input type="checkbox"
+                               class="asset-checkbox"
+                               data-asset-id="${asset.id}"
+                               ${isSelected ? 'checked' : ''}>
+                        <span class="asset-checkmark"></span>
+                    </label>
+                    <span class="material-icons asset-region-icon">location_on</span>
+                    ${asset.name}
+                </div>
+                <div class="site-status ${statusClass}">
+                    <span class="material-icons tiny-icon">${statusIcon}</span> ${statusText}
+                </div>
+            </div>
+            <div class="asset-mode-badge"
+                 style="background:${modeConfig.bgColor};color:${modeConfig.color};border:1px solid ${modeConfig.borderColor}">
+                <span class="material-icons tiny-icon">${modeConfig.icon}</span>
+                ${t('current_mode')}: ${t('mode_' + asset.operationMode)}
+            </div>
+            <div class="site-metrics">
+                <div class="metric">
+                    <span class="metric-label"><span class="material-icons tiny-icon">payments</span> ${t('today_profit')}</span>
+                    <span class="metric-value profit-text">R$ ${asset.lucroHoje.toLocaleString('pt-BR')}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label"><span class="material-icons tiny-icon">trending_up</span> ${t('monthly_roi')}</span>
+                    <span class="metric-value">${asset.roi}%</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label"><span class="material-icons tiny-icon">savings</span> ${t('investment')}</span>
+                    <span class="metric-value">R$ ${(asset.investimento / 1000000).toFixed(1)}M</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label"><span class="material-icons tiny-icon">battery_std</span> ${t('soc')} ${t('average')}</span>
+                    <span class="metric-value">${asset.socMedio}%</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label"><span class="material-icons tiny-icon">devices</span> ${t('units')}</span>
+                    <span class="metric-value">${asset.unidades.toLocaleString('pt-BR')}</span>
+                </div>
+                <div class="metric">
+                    <span class="metric-label"><span class="material-icons tiny-icon">update</span> ${t('payback')}</span>
+                    <span class="metric-value">${asset.payback} ${t('years')}</span>
+                </div>
+            </div>
+            <div class="asset-footer">
+                <div class="asset-progress">
+                    <span class="asset-progress-label">${t('daily_progress')} ${t('vs_target')}</span>
+                    <div class="progress-bar">
+                        <div class="progress-fill" style="width: ${Math.min(100, (asset.receitaHoje / 20000) * 100)}%"></div>
+                    </div>
+                    <span class="asset-progress-text">R$ ${asset.receitaHoje.toLocaleString('pt-BR')} / R$ 20.000</span>
+                </div>
+            </div>
+        `;
+
+        // Checkbox change handler
+        const checkbox = card.querySelector('.asset-checkbox');
+        checkbox.addEventListener('change', () => {
+            toggleAssetSelection(asset.id);
+        });
+
+        // Card click toggles selection (except when clicking checkbox directly)
+        card.addEventListener('click', (e) => {
+            if (!e.target.closest('.asset-checkbox-wrapper')) {
+                toggleAssetSelection(asset.id);
+            }
+        });
+
+        grid.appendChild(card);
+    });
+}
+
+export function refreshAssets() {
+    const grid = document.getElementById('assetsGrid');
+    if (grid) {
+        grid.innerHTML = '';
+        populateAssets();
+    }
+}
+
+// ============================================
+// Batch Toolbar Initialization
+// ============================================
+export function initBatchToolbar() {
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    const batchResetBtn = document.getElementById('batchResetBtn');
+    const batchDispatchBtn = document.getElementById('batchDispatchBtn');
+    const modeBtnGroup = document.getElementById('modeBtnGroup');
+
+    if (!selectAllCheckbox) return;
+
+    // Select All checkbox
+    selectAllCheckbox.addEventListener('change', () => {
+        toggleSelectAll();
+    });
+
+    // Select All label click
+    const batchLabel = document.querySelector('.batch-label');
+    if (batchLabel) {
+        batchLabel.addEventListener('click', () => {
+            selectAllCheckbox.checked = !selectAllCheckbox.checked;
+            toggleSelectAll();
+        });
+    }
+
+    // Reset button
+    batchResetBtn.addEventListener('click', () => {
+        resetBatchSelection();
+    });
+
+    // Mode buttons
+    modeBtnGroup.addEventListener('click', (e) => {
+        const btn = e.target.closest('.mode-btn');
+        if (btn) {
+            selectMode(btn.getAttribute('data-mode'));
+        }
+    });
+
+    // Dispatch button
+    batchDispatchBtn.addEventListener('click', () => {
+        startBatchDispatch();
+    });
+
+    // Update total count
+    document.getElementById('totalCount').textContent = getAssetCount();
+
+    // Setup modal backdrop close
+    setupBackdropClose('batchConfirmModal', closeBatchConfirmModal);
+
+    // Progress modal: only close when not dispatching
+    const progressModal = document.getElementById('batchProgressModal');
+    if (progressModal) {
+        progressModal.addEventListener('click', (e) => {
+            if (e.target === progressModal && !batchState.isDispatching) {
+                closeProgressModal();
+            }
+        });
+    }
+}
+
+// ============================================
+// Selection Logic
+// ============================================
+function toggleAssetSelection(assetId) {
+    if (batchState.isDispatching) return;
+
+    if (batchState.selectedAssets.has(assetId)) {
+        batchState.selectedAssets.delete(assetId);
+    } else {
+        batchState.selectedAssets.add(assetId);
+    }
+    updateBatchUI();
+}
+
+function toggleSelectAll() {
+    if (batchState.isDispatching) return;
+
+    const assets = getAssets();
+    const allIds = assets.map(a => a.id);
+    if (batchState.selectedAssets.size === allIds.length) {
+        batchState.selectedAssets.clear();
+    } else {
+        allIds.forEach(id => batchState.selectedAssets.add(id));
+    }
+    updateBatchUI();
+}
+
+function updateBatchUI() {
+    const count = batchState.selectedAssets.size;
+    const total = getAssetCount();
+
+    // Update count display
+    document.getElementById('selectedCount').textContent = count;
+
+    // Update select-all checkbox state
+    const selectAllCheckbox = document.getElementById('selectAllCheckbox');
+    const checkmark = selectAllCheckbox.nextElementSibling;
+    if (count === 0) {
+        selectAllCheckbox.checked = false;
+        checkmark.classList.remove('indeterminate');
+    } else if (count === total) {
+        selectAllCheckbox.checked = true;
+        checkmark.classList.remove('indeterminate');
+    } else {
+        selectAllCheckbox.checked = false;
+        checkmark.classList.add('indeterminate');
+    }
+
+    // Update reset button
+    document.getElementById('batchResetBtn').disabled = count === 0 && !batchState.targetMode;
+
+    // Update dispatch button
+    document.getElementById('batchDispatchBtn').disabled = count === 0 || !batchState.targetMode;
+
+    // Update toolbar border
+    const toolbar = document.getElementById('batchToolbar');
+    toolbar.classList.toggle('has-selection', count > 0);
+
+    // Update card checkboxes and selection highlight
+    const assets = getAssets();
+    assets.forEach(asset => {
+        const card = document.querySelector(`.site-card[data-asset-id="${asset.id}"]`);
+        if (!card) return;
+        const checkbox = card.querySelector('.asset-checkbox');
+        const isSelected = batchState.selectedAssets.has(asset.id);
+        if (checkbox) checkbox.checked = isSelected;
+        card.classList.toggle('selected', isSelected);
+    });
+}
+
+function selectMode(mode) {
+    if (batchState.isDispatching) return;
+
+    batchState.targetMode = mode;
+
+    // Update mode buttons
+    document.querySelectorAll('.mode-btn').forEach(btn => {
+        btn.classList.toggle('active', btn.getAttribute('data-mode') === mode);
+    });
+
+    updateBatchUI();
+}
+
+function resetBatchSelection() {
+    batchState.selectedAssets.clear();
+    batchState.targetMode = null;
+
+    // Reset mode buttons
+    document.querySelectorAll('.mode-btn').forEach(btn => btn.classList.remove('active'));
+
+    updateBatchUI();
+}
+
+// ============================================
+// Dispatch Flow
+// ============================================
+function startBatchDispatch() {
+    if (batchState.selectedAssets.size === 0 || !batchState.targetMode) return;
+
+    const assetsToChange = getAssetsToChange(batchState.selectedAssets, batchState.targetMode);
+    if (assetsToChange.length === 0) {
+        showInfoModal(t('batch_dispatch'), t('all_in_target_mode'), { icon: 'info' });
+        return;
+    }
+
+    showConfirmModal(assetsToChange);
+}
+
+function showConfirmModal(assetsToChange) {
+    const list = document.getElementById('batchChangeList');
+    const impact = document.getElementById('batchImpactBox');
+
+    let totalUnits = 0;
+    list.innerHTML = assetsToChange.map(asset => {
+        totalUnits += asset.unidades;
+        const fromMode = t('mode_' + asset.operationMode);
+        const toMode = t('mode_' + batchState.targetMode);
+        return `
+            <div class="batch-change-item">
+                <span class="material-icons">location_on</span>
+                <strong>${asset.name}</strong>
+                <span>${fromMode}</span>
+                <span class="material-icons batch-change-arrow">arrow_forward</span>
+                <span>${toMode}</span>
+            </div>
+        `;
+    }).join('');
+
+    impact.innerHTML = `
+        <span class="material-icons">warning</span>
+        <span>${t('batch_impact_warning')}</span>
+        <span style="margin-left:auto; font-weight:700;">
+            ${assetsToChange.length} ${t('affected_sites')} / ${totalUnits.toLocaleString('pt-BR')} ${t('affected_units')}
+        </span>
+    `;
+
+    document.getElementById('batchConfirmModal').classList.add('show');
+}
+
+function closeBatchConfirmModal() {
+    document.getElementById('batchConfirmModal').classList.remove('show');
+}
+
+// Exposed for onclick in HTML
+export { closeBatchConfirmModal };
+
+export async function executeBatchDispatch() {
+    // Close confirm modal
+    document.getElementById('batchConfirmModal').classList.remove('show');
+
+    // Show progress modal
+    const progressModal = document.getElementById('batchProgressModal');
+    progressModal.classList.add('show');
+
+    batchState.isDispatching = true;
+    batchState.dispatchResults = [];
+    const assetsToChange = getAssetsToChange(batchState.selectedAssets, batchState.targetMode);
+
+    // Reset progress UI
+    document.getElementById('progressIcon').textContent = 'sync';
+    document.getElementById('progressIcon').className = 'material-icons modal-icon spinning';
+    document.getElementById('progressTitle').textContent = t('batch_dispatching');
+    document.getElementById('closeProgressBtn').disabled = true;
+    document.getElementById('retryBtn').style.display = 'none';
+    document.getElementById('overallProgressText').textContent = `0 / ${assetsToChange.length}`;
+    document.getElementById('overallProgressFill').style.width = '0%';
+
+    // Render progress list
+    const progressList = document.getElementById('dispatchProgressList');
+    progressList.innerHTML = assetsToChange.map(asset => {
+        const toMode = t('mode_' + batchState.targetMode);
+        return `
+            <div class="dispatch-progress-item" data-progress-asset="${asset.id}">
+                <span class="material-icons progress-status-icon status-waiting">hourglass_empty</span>
+                <div class="dispatch-item-info">
+                    <div class="dispatch-item-name">${asset.name}</div>
+                    <div class="dispatch-item-detail">${toMode} (${asset.unidades} ${t('affected_units')})</div>
+                </div>
+                <div class="dispatch-item-progress">
+                    <div class="progress-bar">
+                        <div class="progress-fill dispatch-progress-fill" style="width:0%"></div>
+                    </div>
+                </div>
+                <span class="progress-status-text">${t('dispatch_waiting')}</span>
+            </div>
+        `;
+    }).join('');
+
+    // Execute sequentially
+    for (let i = 0; i < assetsToChange.length; i++) {
+        const asset = assetsToChange[i];
+        updateDispatchProgress(asset.id, 'executing', 0);
+
+        const result = await simulateAssetModeChange(asset, batchState.targetMode);
+        batchState.dispatchResults.push(result);
+
+        updateDispatchProgress(asset.id, result.success ? 'success' : 'failed', 100);
+
+        if (result.success) {
+            updateAssetMode(asset.id, batchState.targetMode);
+        }
+
+        // Update overall progress
+        updateOverallProgress(assetsToChange.length);
+    }
+
+    batchState.isDispatching = false;
+
+    // Show result
+    showDispatchResult(batchState.dispatchResults);
+
+    // Refresh asset cards
+    refreshAssets();
+    updateBatchUI();
+}
+
+function simulateAssetModeChange(asset, newMode) {
+    return new Promise((resolve) => {
+        const duration = 2000 + Math.random() * 2000;
+        const steps = 10;
+        let currentStep = 0;
+
+        const interval = setInterval(() => {
+            currentStep++;
+            const progress = Math.round((currentStep / steps) * 100);
+            updateDispatchProgress(asset.id, 'executing', progress);
+
+            if (currentStep >= steps) {
+                clearInterval(interval);
+                const success = Math.random() > 0.1; // 90% success rate
+                resolve({
+                    assetId: asset.id,
+                    assetName: asset.name,
+                    fromMode: asset.operationMode,
+                    toMode: newMode,
+                    success,
+                    error: success ? null : 'communication_timeout',
+                    units: asset.unidades,
+                    timestamp: new Date().toISOString()
+                });
+            }
+        }, duration / steps);
+    });
+}
+
+function updateDispatchProgress(assetId, status, progress) {
+    const item = document.querySelector(`[data-progress-asset="${assetId}"]`);
+    if (!item) return;
+
+    const statusIcon = item.querySelector('.progress-status-icon');
+    const progressBar = item.querySelector('.dispatch-progress-fill');
+    const statusText = item.querySelector('.progress-status-text');
+
+    if (status === 'executing') {
+        statusIcon.textContent = 'sync';
+        statusIcon.className = 'material-icons progress-status-icon spinning';
+        statusText.textContent = `${progress}%`;
+        item.className = 'dispatch-progress-item';
+    } else if (status === 'success') {
+        statusIcon.textContent = 'check_circle';
+        statusIcon.className = 'material-icons progress-status-icon status-success';
+        statusText.textContent = t('dispatch_success');
+        item.className = 'dispatch-progress-item success';
+    } else if (status === 'failed') {
+        statusIcon.textContent = 'error';
+        statusIcon.className = 'material-icons progress-status-icon status-failed';
+        statusText.textContent = t('dispatch_failed');
+        item.className = 'dispatch-progress-item failed';
+    } else if (status === 'waiting') {
+        statusIcon.textContent = 'hourglass_empty';
+        statusIcon.className = 'material-icons progress-status-icon status-waiting';
+        statusText.textContent = t('dispatch_waiting');
+    }
+
+    if (progressBar) {
+        progressBar.style.width = `${progress}%`;
+    }
+}
+
+function updateOverallProgress(total) {
+    const completed = batchState.dispatchResults.length;
+    const overallBar = document.getElementById('overallProgressFill');
+    const overallText = document.getElementById('overallProgressText');
+
+    if (overallBar) overallBar.style.width = `${(completed / total) * 100}%`;
+    if (overallText) overallText.textContent = `${completed} / ${total}`;
+}
+
+function showDispatchResult(results) {
+    const successCount = results.filter(r => r.success).length;
+    const failedCount = results.filter(r => !r.success).length;
+
+    // Update title
+    document.getElementById('progressIcon').textContent = failedCount > 0 ? 'warning' : 'check_circle';
+    document.getElementById('progressIcon').className = 'material-icons modal-icon';
+    document.getElementById('progressIcon').style.color = failedCount > 0 ? '#d97706' : '#059669';
+    document.getElementById('progressTitle').textContent = t('batch_complete');
+
+    // Add result summary before progress list
+    const progressList = document.getElementById('dispatchProgressList');
+    const summaryDiv = document.createElement('div');
+    summaryDiv.className = 'dispatch-result-summary';
+    summaryDiv.innerHTML = `
+        <span class="result-success-count">${t('success_count')}: ${successCount}/${results.length}</span>
+        <span class="result-failed-count">${t('failed_count')}: ${failedCount}/${results.length}</span>
+    `;
+    progressList.insertBefore(summaryDiv, progressList.firstChild);
+
+    // Update failed items with error reason
+    results.filter(r => !r.success).forEach(r => {
+        const item = document.querySelector(`[data-progress-asset="${r.assetId}"]`);
+        if (item) {
+            const detail = item.querySelector('.dispatch-item-detail');
+            if (detail) {
+                detail.textContent = t(r.error);
+            }
+        }
+    });
+
+    // Enable close button
+    document.getElementById('closeProgressBtn').disabled = false;
+
+    // Show retry button if there are failures
+    if (failedCount > 0) {
+        document.getElementById('retryBtn').style.display = 'flex';
+    }
+}
+
+export function closeProgressModal() {
+    document.getElementById('batchProgressModal').classList.remove('show');
+    resetBatchSelection();
+}
+
+export async function retryFailedItems() {
+    const failedResults = batchState.dispatchResults.filter(r => !r.success);
+    const assets = getAssets();
+    const failedAssets = failedResults.map(r =>
+        assets.find(a => a.id === r.assetId)
+    ).filter(Boolean);
+
+    if (failedAssets.length === 0) return;
+
+    // Keep only successful results
+    batchState.dispatchResults = batchState.dispatchResults.filter(r => r.success);
+    batchState.isDispatching = true;
+
+    // Reset UI for retry
+    document.getElementById('progressIcon').textContent = 'sync';
+    document.getElementById('progressIcon').className = 'material-icons modal-icon spinning';
+    document.getElementById('progressIcon').style.color = '#3730a3';
+    document.getElementById('progressTitle').textContent = t('batch_dispatching');
+    document.getElementById('closeProgressBtn').disabled = true;
+    document.getElementById('retryBtn').style.display = 'none';
+
+    // Remove summary
+    const summary = document.querySelector('.dispatch-result-summary');
+    if (summary) summary.remove();
+
+    // Reset failed items UI
+    failedAssets.forEach(asset => {
+        updateDispatchProgress(asset.id, 'waiting', 0);
+    });
+
+    const total = batchState.dispatchResults.length + failedAssets.length;
+    updateOverallProgress(total);
+
+    for (let i = 0; i < failedAssets.length; i++) {
+        const asset = failedAssets[i];
+        updateDispatchProgress(asset.id, 'executing', 0);
+
+        const result = await simulateAssetModeChange(asset, batchState.targetMode);
+        batchState.dispatchResults.push(result);
+
+        updateDispatchProgress(asset.id, result.success ? 'success' : 'failed', 100);
+
+        if (result.success) {
+            updateAssetMode(asset.id, batchState.targetMode);
+        }
+
+        updateOverallProgress(total);
+    }
+
+    batchState.isDispatching = false;
+    showDispatchResult(batchState.dispatchResults);
+
+    // Refresh asset cards
+    refreshAssets();
+    updateBatchUI();
+}

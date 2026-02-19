@@ -1,0 +1,119 @@
+/* ============================================
+   SOLFACIL Design System - CSS Custom Properties
+   ============================================ */
+
+:root {
+    /* === Brand Colors === */
+    --color-primary: #3730a3;
+    --color-primary-hover: #4338ca;
+    --color-primary-light: #eef2ff;
+    --color-primary-lighter: #e0e7ff;
+    --color-primary-border: #c7d2fe;
+    --color-secondary: #4c1d95;
+    --color-secondary-hover: #5b21b6;
+
+    /* === Semantic Colors === */
+    --color-success: #059669;
+    --color-success-dark: #047857;
+    --color-success-darker: #065f46;
+    --color-success-light: #34d399;
+    --color-success-bg: #ecfdf5;
+    --color-success-bg-alt: #d1fae5;
+    --color-success-border: #a7f3d0;
+
+    --color-danger: #dc2626;
+    --color-danger-dark: #991b1b;
+    --color-danger-bg: #fef2f2;
+    --color-danger-bg-alt: #fee2e2;
+    --color-danger-bg-light: #fecaca;
+
+    --color-warning: #d97706;
+    --color-warning-dark: #92400e;
+    --color-warning-bg: #fffbeb;
+    --color-warning-bg-alt: #fef3c7;
+    --color-warning-border: #fde68a;
+
+    --color-info: #3b82f6;
+    --color-info-dark: #1d4ed8;
+    --color-info-bg: #dbeafe;
+
+    /* === Neutral Colors === */
+    --color-text-primary: #1e293b;
+    --color-text-secondary: #334155;
+    --color-text-body: #2d3748;
+    --color-text-muted: #475569;
+    --color-text-light: #64748b;
+    --color-text-lighter: #94a3b8;
+
+    --color-bg-page: #f0f2f5;
+    --color-bg-card: #ffffff;
+    --color-bg-subtle: #f8fafc;
+    --color-bg-muted: #f1f5f9;
+    --color-bg-gray: #f3f4f6;
+    --color-bg-gray-hover: #e5e7eb;
+
+    --color-border: #e2e8f0;
+    --color-border-light: #f1f5f9;
+    --color-border-muted: #cbd5e1;
+
+    /* === Gradients === */
+    --gradient-header: linear-gradient(135deg, #1e3a8a 0%, var(--color-primary) 50%, var(--color-secondary) 100%);
+    --gradient-primary: linear-gradient(135deg, var(--color-primary), var(--color-secondary));
+    --gradient-primary-hover: linear-gradient(135deg, var(--color-primary-hover), var(--color-secondary-hover));
+    --gradient-success: linear-gradient(135deg, var(--color-success), var(--color-success-dark));
+    --gradient-nav-indicator: linear-gradient(90deg, var(--color-primary), var(--color-secondary));
+
+    /* === Shadows === */
+    --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.08);
+    --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.1);
+    --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.1);
+    --shadow-xl: 0 20px 60px rgba(0, 0, 0, 0.2);
+    --shadow-header: 0 4px 20px rgba(0, 0, 0, 0.15);
+    --shadow-primary: 0 4px 12px rgba(55, 48, 163, 0.3);
+    --shadow-primary-lg: 0 4px 16px rgba(55, 48, 163, 0.35);
+    --shadow-success: 0 4px 12px rgba(5, 150, 105, 0.3);
+
+    /* === Typography === */
+    --font-family: 'Inter', sans-serif;
+    --font-size-xs: 0.75rem;
+    --font-size-sm: 0.8rem;
+    --font-size-base: 0.85rem;
+    --font-size-md: 0.9rem;
+    --font-size-lg: 0.95rem;
+    --font-size-xl: 1rem;
+    --font-size-2xl: 1.1rem;
+    --font-size-3xl: 1.15rem;
+    --font-size-4xl: 1.25rem;
+    --font-size-5xl: 1.35rem;
+    --font-size-6xl: 1.4rem;
+    --font-size-7xl: 1.5rem;
+    --font-size-8xl: 1.6rem;
+    --font-size-9xl: 1.8rem;
+    --font-size-10xl: 2rem;
+
+    /* === Spacing & Radius === */
+    --radius-sm: 4px;
+    --radius-md: 6px;
+    --radius-lg: 8px;
+    --radius-xl: 10px;
+    --radius-2xl: 12px;
+    --radius-3xl: 16px;
+    --radius-full: 20px;
+
+    /* === Transitions === */
+    --transition-fast: 0.2s ease;
+    --transition-base: 0.3s ease;
+    --transition-slow: 0.5s ease;
+
+    /* === Layout === */
+    --max-width: 1400px;
+    --header-padding: 1.25rem;
+    --section-padding: 1.5rem 2rem;
+    --card-padding: 1.5rem;
+    --gap-sm: 0.5rem;
+    --gap-md: 0.75rem;
+    --gap-lg: 1rem;
+    --gap-xl: 1.25rem;
+    --gap-2xl: 1.5rem;
+    --gap-3xl: 1.75rem;
+}

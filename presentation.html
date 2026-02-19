@@ -1,0 +1,152 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOLFACIL - Gestão de Ativos de Energia | Demo</title>
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; }
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 50%, #4c1d95 100%);
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .container {
+            background: white;
+            border-radius: 20px;
+            padding: 48px;
+            max-width: 640px;
+            width: 100%;
+            box-shadow: 0 20px 60px rgba(0,0,0,0.2);
+            text-align: center;
+        }
+        .logo-badge {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+            padding: 8px 20px;
+            border-radius: 30px;
+            margin-bottom: 24px;
+            color: #3730a3;
+            font-weight: 600;
+            font-size: 0.9em;
+        }
+        .logo-badge .material-icons { font-size: 1.2em; }
+        h1 {
+            color: #1e293b;
+            margin-bottom: 12px;
+            font-size: 2.2em;
+        }
+        .subtitle {
+            color: #64748b;
+            margin-bottom: 32px;
+            font-size: 1.1em;
+            line-height: 1.5;
+        }
+        .features {
+            text-align: left;
+            margin: 28px 0;
+            background: #f8fafc;
+            padding: 24px;
+            border-radius: 12px;
+            border: 1px solid #e2e8f0;
+        }
+        .features h3 {
+            color: #1e293b;
+            margin-bottom: 16px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+        .features h3 .material-icons { color: #3730a3; font-size: 1.3em; }
+        .features li {
+            color: #475569;
+            margin: 12px 0;
+            list-style: none;
+            display: flex;
+            align-items: center;
+            gap: 10px;
+            font-size: 0.95em;
+        }
+        .features li .material-icons {
+            color: #059669;
+            font-size: 1.2em;
+        }
+        .demo-btn {
+            display: inline-flex;
+            align-items: center;
+            gap: 8px;
+            padding: 16px 44px;
+            background: linear-gradient(135deg, #3730a3, #4c1d95);
+            color: white;
+            text-decoration: none;
+            border-radius: 12px;
+            font-size: 1.15em;
+            font-weight: 600;
+            transition: all 0.3s;
+            margin: 24px 0;
+        }
+        .demo-btn:hover {
+            background: linear-gradient(135deg, #4338ca, #5b21b6);
+            transform: translateY(-2px);
+            box-shadow: 0 8px 24px rgba(55, 48, 163, 0.4);
+        }
+        .demo-btn .material-icons { font-size: 1.3em; }
+        .tech-info {
+            margin-top: 28px;
+            padding: 16px 20px;
+            background: #f1f5f9;
+            border-radius: 10px;
+            font-size: 0.85em;
+            color: #64748b;
+            line-height: 1.6;
+        }
+        .timestamp {
+            margin-top: 16px;
+            color: #94a3b8;
+            font-size: 0.8em;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="logo-badge">
+            <span class="material-icons">account_balance</span>
+            SOLFACIL | Fintech Solar
+        </div>
+        <h1>Gestão de Ativos de Energia</h1>
+        <p class="subtitle">Plataforma de gestão financeira para baterias como ativos de investimento. Visão fintech para o mercado de energia distribuída do Brasil.</p>
+
+        <div class="features">
+            <h3><span class="material-icons">featured_play_list</span> Funcionalidades do Demo:</h3>
+            <ul>
+                <li><span class="material-icons">check_circle</span> Painel de lucros com KPIs financeiros em tempo real</li>
+                <li><span class="material-icons">check_circle</span> Execução de trades com arbitragem tarifária (Tarifa Branca)</li>
+                <li><span class="material-icons">check_circle</span> Portfólio de ativos com ROI, payback e TIR</li>
+                <li><span class="material-icons">check_circle</span> 4 regiões piloto (SP, RJ, MG, PR) com 2.847 unidades</li>
+                <li><span class="material-icons">check_circle</span> Relatórios financeiros com composição de receita</li>
+                <li><span class="material-icons">check_circle</span> Sinais de mercado e oportunidades de trade</li>
+            </ul>
+        </div>
+
+        <a href="index.html" class="demo-btn">
+            <span class="material-icons">rocket_launch</span> Acessar Plataforma
+        </a>
+
+        <div class="tech-info">
+            <strong>Informação técnica:</strong><br>
+            Front-end puro (HTML/CSS/JavaScript) com Chart.js e Material Icons.<br>
+            Dados simulados para demonstração. Interface em português brasileiro (pt-BR).<br>
+            Perspectiva: baterias como ativos financeiros, não equipamentos de energia.
+        </div>
+
+        <p class="timestamp">Criado em 15 de fevereiro de 2026</p>
+    </div>
+</body>
+</html>

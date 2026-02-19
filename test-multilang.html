@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>多语言功能测试</title>
+    <link rel="stylesheet" href="style.css">
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <style>
+        .test-section {
+            max-width: 1200px;
+            margin: 20px auto;
+            padding: 20px;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        .test-grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+            gap: 20px;
+            margin-top: 20px;
+        }
+        .test-item {
+            padding: 15px;
+            background: #f9fafb;
+            border-radius: 8px;
+            border: 1px solid #e5e7eb;
+        }
+        .test-label {
+            font-size: 14px;
+            color: #6b7280;
+            margin-bottom: 5px;
+        }
+        .test-value {
+            font-size: 16px;
+            font-weight: 600;
+            color: #1f2937;
+        }
+    </style>
+</head>
+<body>
+    <!-- Header with Language Switcher -->
+    <header class="header">
+        <div class="header-container">
+            <div class="logo">
+                <h1><span class="material-icons logo-icon">account_balance</span> SOLFACIL</h1>
+                <span class="subtitle"></span>
+            </div>
+            
+            <div class="header-stats">
+                <div class="stat-item">
+                    <span class="material-icons stat-icon">pie_chart</span>
+                    <div>
+                        <span class="stat-label"></span>
+                        <span class="stat-value">R$ 12,4M</span>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <span class="material-icons stat-icon">trending_up</span>
+                    <div>
+                        <span class="stat-label"></span>
+                        <span class="stat-value">+18,7%</span>
+                    </div>
+                </div>
+                <div class="stat-item highlight">
+                    <span class="material-icons stat-icon">payments</span>
+                    <div>
+                        <span class="stat-label"></span>
+                        <span class="stat-value">R$ 48.235</span>
+                    </div>
+                </div>
+            </div>
+            
+            <div class="language-switcher">
+                <button class="lang-btn active" data-lang="zh" onclick="changeLanguage('zh')">中文</button>
+                <button class="lang-btn" data-lang="en" onclick="changeLanguage('en')">EN</button>
+                <button class="lang-btn" data-lang="pt" onclick="changeLanguage('pt')">PT</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Test Content -->
+    <div class="test-section">
+        <h2>多语言翻译测试</h2>
+        
+        <div class="test-grid">
+            <!-- Navigation -->
+            <div class="test-item">
+                <div class="test-label">导航菜单 / Navigation / Navegação</div>
+                <div class="test-value">
+                    <div data-translate="portfolio_title"></div>
+                    <div data-translate="arbitrage_title"></div>
+                    <div data-translate="assets_title"></div>
+                    <div data-translate="reports_title"></div>
+                </div>
+            </div>
+            
+            <!-- KPI Labels -->
+            <div class="test-item">
+                <div class="test-label">KPI 标签 / KPI Labels / Rótulos KPI</div>
+                <div class="test-value">
+                    <div data-translate="gross_revenue_today"></div>
+                    <div data-translate="loading_cost"></div>
+                    <div data-translate="net_profit"></div>
+                    <div data-translate="arbitrage_spread"></div>
+                </div>
+            </div>
+            
+            <!-- Market Conditions -->
+            <div class="test-item">
+                <div class="test-label">市场条件 / Market Conditions / Condições de Mercado</div>
+                <div class="test-value">
+                    <div data-translate="current_tariff"></div>
+                    <div data-translate="charge_cost"></div>
+                    <div data-translate="current_margin"></div>
+                    <div data-translate="next_window"></div>
+                </div>
+            </div>
+            
+            <!-- Trading -->
+            <div class="test-item">
+                <div class="test-label">交易术语 / Trading Terms / Termos de Negociação</div>
+                <div class="test-value">
+                    <div data-translate="buy_operation"></div>
+                    <div data-translate="sell_operation"></div>
+                    <div data-translate="hold"></div>
+                    <div data-translate="profit_margin"></div>
+                </div>
+            </div>
+            
+            <!-- Status -->
+            <div class="test-item">
+                <div class="test-label">状态 / Status / Status</div>
+                <div class="test-value">
+                    <div data-translate="executed"></div>
+                    <div data-translate="executing"></div>
+                    <div data-translate="scheduled"></div>
+                    <div data-translate="window_open"></div>
+                </div>
+            </div>
+            
+            <!-- Time Periods -->
+            <div class="test-item">
+                <div class="test-label">时段 / Periods / Períodos</div>
+                <div class="test-value">
+                    <div data-translate="peak"></div>
+                    <div data-translate="intermediate"></div>
+                    <div data-translate="off_peak"></div>
+                </div>
+            </div>
+            
+            <!-- Weekdays -->
+            <div class="test-item">
+                <div class="test-label">星期 / Weekdays / Dias da Semana</div>
+                <div class="test-value">
+                    <span data-translate="mon"></span>,
+                    <span data-translate="tue"></span>,
+                    <span data-translate="wed"></span>,
+                    <span data-translate="thu"></span>,
+                    <span data-translate="fri"></span>,
+                    <span data-translate="sat"></span>,
+                    <span data-translate="sun"></span>
+                </div>
+            </div>
+            
+            <!-- Actions -->
+            <div class="test-item">
+                <div class="test-label">操作 / Actions / Ações</div>
+                <div class="test-value">
+                    <div data-translate="simulate_opportunity"></div>
+                    <div data-translate="performance_report"></div>
+                    <div data-translate="asset_management"></div>
+                </div>
+            </div>
+        </div>
+        
+        <div style="margin-top: 30px; text-align: center;">
+            <a href="index.html" class="action-btn primary">
+                <span id="back-to-demo">返回完整 Demo</span>
+            </a>
+        </div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        // Override to show translation test
+        document.addEventListener('DOMContentLoaded', function() {
+            updateAllTranslations();
+            
+            // Update back button text
+            const backBtn = document.getElementById('back-to-demo');
+            if (backBtn) {
+                const textMap = {
+                    'zh': '返回完整 Demo',
+                    'en': 'Back to Full Demo',
+                    'pt': 'Voltar ao Demo Completo'
+                };
+                backBtn.textContent = textMap[currentLanguage] || textMap['zh'];
+            }
+        });
+        
+        // Override changeLanguage to update back button
+        const originalChangeLanguage = changeLanguage;
+        changeLanguage = function(lang) {
+            originalChangeLanguage(lang);
+            
+            const backBtn = document.getElementById('back-to-demo');
+            if (backBtn) {
+                const textMap = {
+                    'zh': '返回完整 Demo',
+                    'en': 'Back to Full Demo',
+                    'pt': 'Voltar ao Demo Completo'
+                };
+                backBtn.textContent = textMap[currentLanguage] || textMap['zh'];
+            }
+        }
+    </script>
+</body>
+</html>

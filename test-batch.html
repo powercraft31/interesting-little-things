@@ -1,0 +1,216 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>批量功能测试</title>
+    <style>
+        body {
+            font-family: Arial, sans-serif;
+            margin: 20px;
+            background: #f5f5f5;
+        }
+        .test-section {
+            background: white;
+            padding: 20px;
+            margin-bottom: 20px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+        }
+        .test-result {
+            padding: 10px;
+            margin: 5px 0;
+            border-radius: 4px;
+        }
+        .pass {
+            background: #d4edda;
+            color: #155724;
+        }
+        .fail {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        button {
+            padding: 10px 20px;
+            margin: 5px;
+            cursor: pointer;
+            border: none;
+            border-radius: 4px;
+            background: #007bff;
+            color: white;
+        }
+        button:hover {
+            background: #0056b3;
+        }
+    </style>
+</head>
+<body>
+    <h1>VPP 批量模式功能测试</h1>
+    
+    <div class="test-section">
+        <h2>1. 基础对象检查</h2>
+        <button onclick="testBasicObjects()">运行测试</button>
+        <div id="basicResults"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>2. 函数定义检查</h2>
+        <button onclick="testFunctions()">运行测试</button>
+        <div id="functionResults"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>3. DOM 元素检查</h2>
+        <button onclick="testDOMElements()">运行测试</button>
+        <div id="domResults"></div>
+    </div>
+    
+    <div class="test-section">
+        <h2>4. 批量选择功能测试</h2>
+        <button onclick="testBatchSelection()">运行测试</button>
+        <div id="selectionResults"></div>
+    </div>
+
+    <script src="app.js"></script>
+    <script>
+        function addTestResult(containerId, text, success) {
+            const div = document.createElement('div');
+            div.className = 'test-result ' + (success ? 'pass' : 'fail');
+            div.textContent = (success ? '✅ ' : '❌ ') + text;
+            document.getElementById(containerId).appendChild(div);
+        }
+        
+        function testBasicObjects() {
+            const results = document.getElementById('basicResults');
+            results.innerHTML = '';
+            
+            // 测试 OPERATION_MODES
+            try {
+                addTestResult('basicResults', 'OPERATION_MODES 已定义', typeof OPERATION_MODES !== 'undefined');
+                if (OPERATION_MODES) {
+                    addTestResult('basicResults', '包含 self_consumption 模式', !!OPERATION_MODES.self_consumption);
+                    addTestResult('basicResults', '包含 peak_valley_arbitrage 模式', !!OPERATION_MODES.peak_valley_arbitrage);
+                    addTestResult('basicResults', '包含 peak_shaving 模式', !!OPERATION_MODES.peak_shaving);
+                }
+            } catch (e) {
+                addTestResult('basicResults', 'OPERATION_MODES 测试失败: ' + e.message, false);
+            }
+            
+            // 测试 batchState
+            try {
+                addTestResult('basicResults', 'batchState 已定义', typeof batchState !== 'undefined');
+                if (batchState) {
+                    addTestResult('basicResults', 'batchState.selectedAssets 是 Set 对象', batchState.selectedAssets instanceof Set);
+                    addTestResult('basicResults', 'batchState.targetMode 已定义', 'targetMode' in batchState);
+                }
+            } catch (e) {
+                addTestResult('basicResults', 'batchState 测试失败: ' + e.message, false);
+            }
+            
+            // 测试 mockData
+            try {
+                addTestResult('basicResults', 'mockData 已定义', typeof mockData !== 'undefined');
+                if (mockData && mockData.assets) {
+                    addTestResult('basicResults', '资产数据存在', mockData.assets.length > 0);
+                    const hasOperationMode = mockData.assets.every(asset => 'operationMode' in asset);
+                    addTestResult('basicResults', '所有资产都有 operationMode 字段', hasOperationMode);
+                }
+            } catch (e) {
+                addTestResult('basicResults', 'mockData 测试失败: ' + e.message, false);
+            }
+        }
+        
+        function testFunctions() {
+            const results = document.getElementById('functionResults');
+            results.innerHTML = '';
+            
+            const functions = [
+                'initBatchToolbar',
+                'toggleAssetSelection',
+                'updateBatchUI',
+                'selectMode',
+                'startBatchDispatch',
+                'closeBatchConfirmModal',
+                'executeBatchDispatch',
+                'resetBatchSelection'
+            ];
+            
+            functions.forEach(func => {
+                try {
+                    const exists = typeof window[func] === 'function';
+                    addTestResult('functionResults', `函数 ${func}() 已定义`, exists);
+                } catch (e) {
+                    addTestResult('functionResults', `检查 ${func} 失败: ${e.message}`, false);
+                }
+            });
+        }
+        
+        function testDOMElements() {
+            const results = document.getElementById('domResults');
+            results.innerHTML = '';
+            
+            // 先加载主页面的 HTML
+            const iframe = document.createElement('iframe');
+            iframe.src = 'index.html';
+            iframe.style.display = 'none';
+            document.body.appendChild(iframe);
+            
+            iframe.onload = function() {
+                const doc = iframe.contentDocument;
+                
+                const elements = [
+                    { id: 'batchToolbar', name: '批量工具栏' },
+                    { id: 'selectAllCheckbox', name: '全选复选框' },
+                    { id: 'selectedCount', name: '选中计数' },
+                    { id: 'batchDispatchBtn', name: '批量下发按钮' },
+                    { id: 'batchConfirmModal', name: '确认弹窗' },
+                    { id: 'batchProgressModal', name: '进度弹窗' }
+                ];
+                
+                elements.forEach(elem => {
+                    const exists = !!doc.getElementById(elem.id);
+                    addTestResult('domResults', `${elem.name} (${elem.id})`, exists);
+                });
+                
+                // 测试模式按钮
+                const modeButtons = doc.querySelectorAll('.mode-btn');
+                addTestResult('domResults', `模式选择按钮数量: ${modeButtons.length}`, modeButtons.length === 3);
+                
+                document.body.removeChild(iframe);
+            };
+        }
+        
+        function testBatchSelection() {
+            const results = document.getElementById('selectionResults');
+            results.innerHTML = '';
+            
+            try {
+                // 测试添加选择
+                batchState.selectedAssets.clear();
+                toggleAssetSelection('ASSET_SP_001');
+                addTestResult('selectionResults', '添加单个选择', batchState.selectedAssets.has('ASSET_SP_001'));
+                
+                // 测试取消选择
+                toggleAssetSelection('ASSET_SP_001');
+                addTestResult('selectionResults', '取消选择', !batchState.selectedAssets.has('ASSET_SP_001'));
+                
+                // 测试多个选择
+                toggleAssetSelection('ASSET_SP_001');
+                toggleAssetSelection('ASSET_RJ_002');
+                addTestResult('selectionResults', '多个选择', batchState.selectedAssets.size === 2);
+                
+                // 测试重置
+                resetBatchSelection();
+                addTestResult('selectionResults', '重置选择', batchState.selectedAssets.size === 0);
+                
+                // 测试模式选择
+                selectMode('peak_valley_arbitrage');
+                addTestResult('selectionResults', '设置目标模式', batchState.targetMode === 'peak_valley_arbitrage');
+                
+            } catch (e) {
+                addTestResult('selectionResults', '批量选择测试失败: ' + e.message, false);
+            }
+        }
+    </script>
+</body>
+</html>

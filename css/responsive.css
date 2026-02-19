@@ -1,0 +1,98 @@
+/* ============================================
+   SOLFACIL - Responsive Styles
+   ============================================ */
+
+@media (max-width: 1024px) {
+    .kpi-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .portfolio-overview {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .trade-summary-row {
+        grid-template-columns: 1fr;
+    }
+
+    .reports-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-card-wide {
+        grid-column: 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .header-container {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .header-stats {
+        margin-top: var(--gap-lg);
+        gap: var(--gap-md);
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .stat-item {
+        padding: 0.4rem 0.75rem;
+    }
+
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-card {
+        grid-column: 1;
+        grid-row: auto;
+    }
+
+    .kpi-row {
+        grid-template-columns: 1fr;
+    }
+
+    .portfolio-overview {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .sites-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .nav {
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    .nav-item {
+        padding: 0.75rem 1.25rem;
+        font-size: var(--font-size-base);
+    }
+
+    .section-header {
+        flex-direction: column;
+        gap: var(--gap-md);
+        align-items: flex-start;
+    }
+
+    .modal-actions {
+        flex-direction: column;
+    }
+
+    .batch-toolbar-body {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .mode-btn-group {
+        flex-direction: column;
+        width: 100%;
+    }
+
+    .language-switcher {
+        margin-left: 0;
+    }
+}

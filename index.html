@@ -1,0 +1,557 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOLFACIL - Gestão de Ativos de Energia</title>
+    <!-- Modular CSS -->
+    <link rel="stylesheet" href="css/variables.css">
+    <link rel="stylesheet" href="css/layout.css">
+    <link rel="stylesheet" href="css/components.css">
+    <link rel="stylesheet" href="css/batch.css">
+    <link rel="stylesheet" href="css/responsive.css">
+    <!-- External Resources -->
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+    <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+</head>
+<body>
+    <!-- Header -->
+    <header class="header">
+        <div class="header-container">
+            <div class="logo">
+                <h1><span class="material-icons logo-icon">account_balance</span> SOLFACIL</h1>
+                <span class="subtitle">Gestão de Ativos de Energia | Fintech Solar</span>
+            </div>
+            <div class="header-stats">
+                <div class="stat-item">
+                    <span class="material-icons stat-icon">pie_chart</span>
+                    <div>
+                        <span class="stat-label" data-translate="portfolio_value">Valor do Portfólio</span>
+                        <span class="stat-value" id="portfolioValue">R$ 12,4M</span>
+                    </div>
+                </div>
+                <div class="stat-item">
+                    <span class="material-icons stat-icon">trending_up</span>
+                    <div>
+                        <span class="stat-label" data-translate="monthly_roi">ROI Mensal</span>
+                        <span class="stat-value" id="monthlyROI">+18,7%</span>
+                    </div>
+                </div>
+                <div class="stat-item highlight">
+                    <span class="material-icons stat-icon">payments</span>
+                    <div>
+                        <span class="stat-label" data-translate="today_profit">Lucro Hoje</span>
+                        <span class="stat-value" id="todayProfit">R$ 48.235</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Language Switcher -->
+            <div class="language-switcher">
+                <button class="lang-btn active" data-lang="zh" onclick="changeLanguage('zh')">中文</button>
+                <button class="lang-btn" data-lang="en" onclick="changeLanguage('en')">EN</button>
+                <button class="lang-btn" data-lang="pt" onclick="changeLanguage('pt')">PT</button>
+            </div>
+        </div>
+    </header>
+
+    <!-- Navigation -->
+    <nav class="nav">
+        <a href="#portfolio" class="nav-item active" data-section="portfolio">
+            <span class="material-icons">dashboard</span> <span data-translate="portfolio_title">Portfólio</span>
+        </a>
+        <a href="#arbitragem" class="nav-item" data-section="arbitragem">
+            <span class="material-icons">swap_horiz</span> <span data-translate="arbitrage_title">Arbitragem</span>
+        </a>
+        <a href="#ativos" class="nav-item" data-section="ativos">
+            <span class="material-icons">battery_charging_full</span> <span data-translate="assets_title">Ativos</span>
+        </a>
+        <a href="#relatorios" class="nav-item" data-section="relatorios">
+            <span class="material-icons">assessment</span> <span data-translate="reports_title">Relatórios</span>
+        </a>
+    </nav>
+
+    <!-- Main Content -->
+    <main class="main">
+
+        <!-- Portfólio Section (Main Dashboard) -->
+        <section id="portfolio" class="section active">
+            <div class="section-header">
+                <h2><span class="material-icons">dashboard</span> <span data-translate="profit_dashboard">Painel de Lucros</span></h2>
+                <div class="date-badge" id="currentDate"></div>
+            </div>
+
+            <!-- KPI Cards Row -->
+            <div class="kpi-row">
+                <div class="kpi-card kpi-profit">
+                    <div class="kpi-icon"><span class="material-icons">trending_up</span></div>
+                    <div class="kpi-content">
+                        <span class="kpi-label" data-translate="gross_revenue">Receita Bruta Hoje</span>
+                        <span class="kpi-value" id="kpiRevenue">R$ 62.450</span>
+                        <span class="kpi-delta positive">+12,3% <span data-translate="vs_yesterday">vs ontem</span></span>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-cost">
+                    <div class="kpi-icon"><span class="material-icons">receipt_long</span></div>
+                    <div class="kpi-content">
+                        <span class="kpi-label" data-translate="loading_cost">Custo de Carga</span>
+                        <span class="kpi-value" id="kpiCost">R$ 14.215</span>
+                        <span class="kpi-delta negative">-3,1% <span data-translate="vs_yesterday">vs ontem</span></span>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-net">
+                    <div class="kpi-icon"><span class="material-icons">account_balance_wallet</span></div>
+                    <div class="kpi-content">
+                        <span class="kpi-label" data-translate="net_profit">Lucro Líquido</span>
+                        <span class="kpi-value" id="kpiNet">R$ 48.235</span>
+                        <span class="kpi-delta positive">+18,7% <span data-translate="vs_yesterday">vs ontem</span></span>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-arb">
+                    <div class="kpi-icon"><span class="material-icons">swap_vert</span></div>
+                    <div class="kpi-content">
+                        <span class="kpi-label" data-translate="arbitrage_spread">Spread de Arbitragem</span>
+                        <span class="kpi-value" id="kpiSpread">R$ 0,57/kWh</span>
+                        <span class="kpi-delta positive" data-translate="window_open">Janela aberta</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Main Charts -->
+            <div class="dashboard-grid">
+                <!-- Revenue Curve -->
+                <div class="card chart-card">
+                    <div class="card-header">
+                        <h3><span class="material-icons">show_chart</span> <span data-translate="revenue_cost_24h">Curva de Receita vs Custo (24h)</span></h3>
+                        <div class="chart-legend">
+                            <span class="legend-item legend-revenue"><span class="legend-dot"></span> <span data-translate="revenue">Receita</span></span>
+                            <span class="legend-item legend-cost"><span class="legend-dot"></span> <span data-translate="cost">Custo</span></span>
+                            <span class="legend-item legend-profit"><span class="legend-dot"></span> <span data-translate="accumulated_profit">Lucro Acumulado</span></span>
+                        </div>
+                    </div>
+                    <canvas id="revenueCurveChart"></canvas>
+                </div>
+
+                <!-- Market Status -->
+                <div class="card">
+                    <h3><span class="material-icons">storefront</span> <span data-translate="market_conditions">Condições de Mercado</span></h3>
+                    <div class="market-info">
+                        <div class="market-row">
+                            <span class="label"><span data-translate="current_tariff">Tarifa Atual</span>:</span>
+                            <span class="value" id="currentTariff">Ponta</span>
+                            <span class="badge badge-peak" id="tariffBadge">R$ 0,82/kWh</span>
+                        </div>
+                        <div class="market-row">
+                            <span class="label"><span data-translate="charge_cost">Custo de Carga</span>:</span>
+                            <span class="value" id="chargeCost">R$ 0,25/kWh</span>
+                        </div>
+                        <div class="market-row">
+                            <span class="label"><span data-translate="current_margin">Margem Atual</span>:</span>
+                            <span class="value profit-highlight" id="currentMargin">R$ 0,57/kWh</span>
+                        </div>
+                        <div class="market-row">
+                            <span class="label"><span data-translate="next_window">Próxima Janela</span>:</span>
+                            <span class="value" id="nextWindow">20:00 (Tarifa Intermediária)</span>
+                        </div>
+                        <div class="market-signal" id="marketSignal">
+                            <span class="material-icons">bolt</span>
+                            <span id="marketSignalText" data-translate="sell_now">VENDER AGORA - Margem máxima ativa</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Quick Actions -->
+                <div class="card">
+                    <h3><span class="material-icons">flash_on</span> <span data-translate="quick_actions">Ações Rápidas</span></h3>
+                    <div class="actions">
+                        <button class="action-btn primary" onclick="simulateTradeOpportunity()">
+                            <span class="material-icons">gavel</span> <span data-translate="simulate_opportunity">Simular Oportunidade de Trade</span>
+                        </button>
+                        <button class="action-btn" onclick="navigateTo('relatorios')">
+                            <span class="material-icons">analytics</span> <span data-translate="performance_report">Relatório de Performance</span>
+                        </button>
+                        <button class="action-btn" onclick="navigateTo('ativos')">
+                            <span class="material-icons">inventory_2</span> <span data-translate="asset_management">Gestão de Ativos</span>
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Arbitragem Section (Trade Execution) -->
+        <section id="arbitragem" class="section">
+            <div class="section-header">
+                <h2><span class="material-icons">swap_horiz</span> <span data-translate="trade_execution">Execução de Trades</span></h2>
+                <div class="live-badge"><span class="live-dot"></span> <span data-translate="live">Ao vivo</span></div>
+            </div>
+
+            <!-- Arbitrage Opportunity Chart -->
+            <div class="card chart-card-full">
+                <div class="card-header">
+                    <h3><span class="material-icons">waterfall_chart</span> <span data-translate="arbitrage_window">Janelas de Arbitragem - Tarifa Branca</span></h3>
+                </div>
+                <canvas id="arbitrageChart"></canvas>
+            </div>
+
+            <!-- Trade Schedule -->
+            <div class="card">
+                <h3><span class="material-icons">schedule</span> <span data-translate="arbitrage_trades">Agenda de Trades Hoje</span></h3>
+                <div class="schedule-table">
+                    <table>
+                        <thead>
+                            <tr>
+                                <th data-translate="time">Horário</th>
+                                <th data-translate="tariff">Tipo de Tarifa</th>
+                                <th data-translate="operation">Operação</th>
+                                <th data-translate="price">Preço</th>
+                                <th><span data-translate="volume">Volume</span> (MWh)</th>
+                                <th><span data-translate="result">Resultado</span> (R$)</th>
+                                <th data-translate="status">Status</th>
+                            </tr>
+                        </thead>
+                        <tbody id="tradeTable">
+                            <!-- Populated by JavaScript -->
+                        </tbody>
+                    </table>
+                </div>
+            </div>
+
+            <!-- Trade Summary -->
+            <div class="trade-summary-row">
+                <div class="card trade-summary-card">
+                    <div class="summary-icon buy"><span class="material-icons">download</span></div>
+                    <div>
+                        <span class="summary-label" data-translate="total_bought">Total Comprado</span>
+                        <span class="summary-value" id="totalBought">47,2 MWh</span>
+                        <span class="summary-cost"><span data-translate="cost">Custo</span>: R$ 11.800</span>
+                    </div>
+                </div>
+                <div class="card trade-summary-card">
+                    <div class="summary-icon sell"><span class="material-icons">upload</span></div>
+                    <div>
+                        <span class="summary-label" data-translate="total_sold">Total Vendido</span>
+                        <span class="summary-value" id="totalSold">38,6 MWh</span>
+                        <span class="summary-cost"><span data-translate="revenue">Receita</span>: R$ 31.652</span>
+                    </div>
+                </div>
+                <div class="card trade-summary-card">
+                    <div class="summary-icon profit"><span class="material-icons">emoji_events</span></div>
+                    <div>
+                        <span class="summary-label" data-translate="arbitrage_profit">Lucro de Arbitragem</span>
+                        <span class="summary-value profit-text" id="arbitrageProfit">R$ 19.852</span>
+                        <span class="summary-cost"><span data-translate="margin">Margem</span>: 62,7%</span>
+                    </div>
+                </div>
+            </div>
+        </section>
+
+        <!-- Ativos Section (Asset Portfolio) -->
+        <section id="ativos" class="section">
+            <div class="section-header">
+                <h2><span class="material-icons">battery_charging_full</span> <span data-translate="portfolio_assets">Portfólio de Ativos</span></h2>
+                <div class="asset-count"><span id="activeAssets">2.847</span> <span data-translate="active_assets">ativos ativos</span></div>
+            </div>
+
+            <!-- Portfolio Overview -->
+            <div class="portfolio-overview">
+                <div class="card portfolio-stat">
+                    <span class="material-icons portfolio-stat-icon">savings</span>
+                    <span class="portfolio-stat-label" data-translate="total_investment">Investimento Total</span>
+                    <span class="portfolio-stat-value">R$ 12,4M</span>
+                </div>
+                <div class="card portfolio-stat">
+                    <span class="material-icons portfolio-stat-icon">speed</span>
+                    <span class="portfolio-stat-label" data-translate="total_capacity">Capacidade Total</span>
+                    <span class="portfolio-stat-value">15,6 MWh</span>
+                </div>
+                <div class="card portfolio-stat">
+                    <span class="material-icons portfolio-stat-icon">update</span>
+                    <span class="portfolio-stat-label" data-translate="avg_payback">Payback Estimado</span>
+                    <span class="portfolio-stat-value">4,2 <span data-translate="years">anos</span></span>
+                </div>
+                <div class="card portfolio-stat">
+                    <span class="material-icons portfolio-stat-icon">percent</span>
+                    <span class="portfolio-stat-label" data-translate="annual_irr">TIR Projetada</span>
+                    <span class="portfolio-stat-value">22,4% <span data-translate="per_year">a.a.</span></span>
+                </div>
+            </div>
+
+            <!-- Batch Operations Toolbar -->
+            <div class="batch-toolbar" id="batchToolbar">
+                <div class="batch-toolbar-header">
+                    <div class="batch-toolbar-left">
+                        <label class="batch-checkbox-wrapper">
+                            <input type="checkbox" id="selectAllCheckbox">
+                            <span class="batch-checkmark"></span>
+                        </label>
+                        <span class="batch-label" data-translate="select_all">全选</span>
+                        <span class="batch-divider">|</span>
+                        <span class="batch-count">
+                            <span data-translate="selected">已选</span>:
+                            <strong id="selectedCount">0</strong> /
+                            <strong id="totalCount">4</strong>
+                            <span data-translate="sites">站点</span>
+                        </span>
+                    </div>
+                    <button class="batch-reset-btn" id="batchResetBtn" disabled>
+                        <span class="material-icons">refresh</span>
+                        <span data-translate="reset_selection">重置选择</span>
+                    </button>
+                </div>
+
+                <div class="batch-toolbar-body">
+                    <span class="mode-label" data-translate="target_mode">目标模式</span>
+                    <div class="mode-btn-group" id="modeBtnGroup">
+                        <button class="mode-btn mode-self-consumption" data-mode="self_consumption">
+                            <span class="material-icons">home</span>
+                            <div class="mode-btn-text">
+                                <span class="mode-btn-title" data-translate="mode_self_consumption">自发自用</span>
+                                <span class="mode-btn-desc" data-translate="mode_self_desc">优先自用, 多余才卖</span>
+                            </div>
+                        </button>
+                        <button class="mode-btn mode-peak-valley" data-mode="peak_valley_arbitrage">
+                            <span class="material-icons">swap_vert</span>
+                            <div class="mode-btn-text">
+                                <span class="mode-btn-title" data-translate="mode_peak_valley_arbitrage">峰谷套利</span>
+                                <span class="mode-btn-desc" data-translate="mode_pv_desc">全额买入/卖出 (VPP)</span>
+                            </div>
+                        </button>
+                        <button class="mode-btn mode-peak-shaving" data-mode="peak_shaving">
+                            <span class="material-icons">compress</span>
+                            <div class="mode-btn-text">
+                                <span class="mode-btn-title" data-translate="mode_peak_shaving">削峰模式</span>
+                                <span class="mode-btn-desc" data-translate="mode_ps_desc">功率限制, 避免罚款</span>
+                            </div>
+                        </button>
+                    </div>
+                </div>
+
+                <div class="batch-toolbar-footer">
+                    <button class="batch-dispatch-btn" id="batchDispatchBtn" disabled>
+                        <span class="material-icons">send</span>
+                        <span data-translate="batch_dispatch">批量下发模式</span>
+                    </button>
+                </div>
+            </div>
+
+            <!-- Asset Cards -->
+            <div class="sites-grid" id="assetsGrid">
+                <!-- Populated by JavaScript -->
+            </div>
+        </section>
+
+        <!-- Relatórios Section -->
+        <section id="relatorios" class="section">
+            <div class="section-header">
+                <h2><span class="material-icons">assessment</span> <span data-translate="financial_reports">Relatórios Financeiros</span></h2>
+                <div class="period-selector">
+                    <button class="period-btn active" onclick="setPeriod(this, 7)" data-translate="7_days">7 dias</button>
+                    <button class="period-btn" onclick="setPeriod(this, 30)" data-translate="30_days">30 dias</button>
+                    <button class="period-btn" onclick="setPeriod(this, 90)" data-translate="90_days">90 dias</button>
+                </div>
+            </div>
+
+            <div class="reports-grid">
+                <!-- Revenue Trend -->
+                <div class="card chart-card-wide">
+                    <h3><span class="material-icons">trending_up</span> <span data-translate="revenue_trend_7d">Evolução da Receita (Últimos 7 dias)</span></h3>
+                    <canvas id="revenueTrendChart"></canvas>
+                </div>
+
+                <!-- Revenue Breakdown -->
+                <div class="card">
+                    <h3><span class="material-icons">donut_large</span> <span data-translate="revenue_breakdown">Composição da Receita</span></h3>
+                    <canvas id="revenueBreakdownChart"></canvas>
+                </div>
+
+                <!-- Financial Summary -->
+                <div class="card">
+                    <h3><span class="material-icons">summarize</span> <span data-translate="financial_summary">Resumo Financeiro</span></h3>
+                    <div class="breakdown">
+                        <div class="breakdown-item">
+                            <span class="label"><span class="material-icons small-icon">swap_horiz</span> <span data-translate="tariff_arbitrage">Arbitragem Tarifária</span>:</span>
+                            <span class="value">R$ 32.450</span>
+                        </div>
+                        <div class="breakdown-item">
+                            <span class="label"><span class="material-icons small-icon">bolt</span> <span data-translate="demand_response">Resposta à Demanda</span>:</span>
+                            <span class="value">R$ 12.385</span>
+                        </div>
+                        <div class="breakdown-item">
+                            <span class="label"><span class="material-icons small-icon">electrical_services</span> <span data-translate="ancillary_services">Serviços Ancilares</span>:</span>
+                            <span class="value">R$ 3.400</span>
+                        </div>
+                        <div class="breakdown-item total">
+                            <span class="label"><span class="material-icons small-icon">account_balance</span> <span data-translate="total_weekly_revenue">Receita Total Semanal</span>:</span>
+                            <span class="value">R$ 48.235</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Cost Analysis -->
+                <div class="card">
+                    <h3><span class="material-icons">price_check</span> <span data-translate="cost_analysis">Análise de Custos</span></h3>
+                    <div class="breakdown">
+                        <div class="breakdown-item">
+                            <span class="label"><span class="material-icons small-icon">power</span> <span data-translate="charge_cost_offpeak">Custo de Carga (fora ponta)</span>:</span>
+                            <span class="value cost-text">-R$ 8.200</span>
+                        </div>
+                        <div class="breakdown-item">
+                            <span class="label"><span class="material-icons small-icon">settings</span> <span data-translate="battery_om">O&M Baterias</span>:</span>
+                            <span class="value cost-text">-R$ 1.450</span>
+                        </div>
+                        <div class="breakdown-item">
+                            <span class="label"><span class="material-icons small-icon">cell_tower</span> <span data-translate="connection_costs">Custos de Conexão</span>:</span>
+                            <span class="value cost-text">-R$ 580</span>
+                        </div>
+                        <div class="breakdown-item total">
+                            <span class="label"><span class="material-icons small-icon">savings</span> <span data-translate="weekly_net_profit">Lucro Líquido Semanal</span>:</span>
+                            <span class="value profit-text">R$ 38.005</span>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- ROI Metrics -->
+                <div class="card">
+                    <h3><span class="material-icons">insights</span> <span data-translate="return_indicators">Indicadores de Retorno</span></h3>
+                    <div class="roi-metrics">
+                        <div class="roi-item">
+                            <div class="roi-circle" id="roiMonthly">
+                                <svg viewBox="0 0 36 36">
+                                    <path class="roi-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                                    <path class="roi-fill" stroke-dasharray="18.7, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                                </svg>
+                                <span class="roi-text">18,7%</span>
+                            </div>
+                            <span class="roi-label" data-translate="monthly_roi">ROI Mensal</span>
+                        </div>
+                        <div class="roi-item">
+                            <div class="roi-circle">
+                                <svg viewBox="0 0 36 36">
+                                    <path class="roi-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                                    <path class="roi-fill roi-fill-alt" stroke-dasharray="22.4, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                                </svg>
+                                <span class="roi-text">22,4%</span>
+                            </div>
+                            <span class="roi-label" data-translate="annual_irr">TIR Anual</span>
+                        </div>
+                        <div class="roi-item">
+                            <div class="roi-circle">
+                                <svg viewBox="0 0 36 36">
+                                    <path class="roi-bg" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                                    <path class="roi-fill roi-fill-green" stroke-dasharray="62.7, 100" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831"/>
+                                </svg>
+                                <span class="roi-text">62,7%</span>
+                            </div>
+                            <span class="roi-label" data-translate="gross_margin">Margem Bruta</span>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </section>
+    </main>
+
+    <!-- Batch Confirm Modal -->
+    <div id="batchConfirmModal" class="modal">
+        <div class="modal-content modal-batch-confirm">
+            <h2>
+                <span class="material-icons modal-icon" style="color:#d97706">bolt</span>
+                <span data-translate="confirm_batch_change">确认批量模式更改</span>
+            </h2>
+            <div class="modal-body">
+                <p data-translate="confirm_batch_desc">您即将更改以下站点的运行模式:</p>
+                <div class="batch-change-list" id="batchChangeList"></div>
+                <div class="batch-impact-box" id="batchImpactBox"></div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-accept" onclick="executeBatchDispatch()">
+                    <span class="material-icons">check_circle</span>
+                    <span data-translate="confirm_dispatch">确认下发</span>
+                </button>
+                <button class="btn-reject" onclick="closeBatchConfirmModal()">
+                    <span class="material-icons">cancel</span>
+                    <span data-translate="cancel">取消</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Batch Progress Modal -->
+    <div id="batchProgressModal" class="modal">
+        <div class="modal-content modal-batch-progress">
+            <h2>
+                <span class="material-icons modal-icon spinning" style="color:#3730a3" id="progressIcon">sync</span>
+                <span id="progressTitle" data-translate="batch_dispatching">批量模式下发中...</span>
+            </h2>
+            <div class="modal-body">
+                <div class="overall-progress">
+                    <span data-translate="overall_progress">总进度</span>:
+                    <span id="overallProgressText">0 / 0</span>
+                    <div class="progress-bar overall-progress-bar">
+                        <div class="progress-fill overall-progress-fill" id="overallProgressFill" style="width:0%"></div>
+                    </div>
+                </div>
+                <div class="dispatch-progress-list" id="dispatchProgressList"></div>
+            </div>
+            <div class="modal-actions" id="progressActions">
+                <button class="btn-view" id="closeProgressBtn" onclick="closeProgressModal()" disabled>
+                    <span class="material-icons">close</span>
+                    <span data-translate="close">关闭</span>
+                </button>
+                <button class="btn-accept" id="retryBtn" onclick="retryFailedItems()" style="display:none">
+                    <span class="material-icons">refresh</span>
+                    <span data-translate="retry_failed">重试失败项</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Trade Opportunity Modal -->
+    <div id="tradeModal" class="modal">
+        <div class="modal-content">
+            <h2><span class="material-icons modal-icon">notifications_active</span> <span data-translate="trade_opportunity">Oportunidade de Trade</span></h2>
+            <div class="modal-body">
+                <p><strong><span data-translate="market_signal_label">Sinal de mercado</span>:</strong> <span data-translate="market_signal_desc">Preço de ponta subiu 15% acima da média</span></p>
+                <p><strong><span data-translate="recommended_action">Ação recomendada</span>:</strong> <span data-translate="recommended_action_desc">Vender 4,0 MWh imediatamente</span></p>
+                <p><strong><span data-translate="estimated_duration">Duração estimada</span>:</strong> <span data-translate="estimated_duration_desc">2 horas</span></p>
+                <p><strong><span data-translate="spot_price">Preço spot</span>:</strong> R$ 2,50/kWh</p>
+                <div class="modal-profit-box">
+                    <span class="material-icons">payments</span>
+                    <div>
+                        <span class="modal-profit-label" data-translate="estimated_profit">Lucro Estimado</span>
+                        <span class="modal-profit-value">R$ 10.000</span>
+                    </div>
+                </div>
+            </div>
+            <div class="modal-actions">
+                <button class="btn-accept" onclick="acceptTrade()">
+                    <span class="material-icons">check_circle</span> <span data-translate="execute_trade">Executar Trade</span>
+                </button>
+                <button class="btn-view" onclick="viewDetails()">
+                    <span class="material-icons">visibility</span> <span data-translate="view_details">Ver Detalhes</span>
+                </button>
+                <button class="btn-reject" onclick="rejectTrade()">
+                    <span class="material-icons">cancel</span> <span data-translate="reject">Recusar</span>
+                </button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Info Modal (replaces native alert()) -->
+    <div id="infoModal" class="modal">
+        <div class="modal-content modal-info">
+            <h2>
+                <span class="material-icons modal-icon info-modal-icon info-icon">info</span>
+                <span class="info-modal-title"></span>
+            </h2>
+            <div class="modal-body info-modal-body"></div>
+            <div class="modal-actions">
+                <button class="btn-accept info-modal-btn" onclick="closeInfoModal()">OK</button>
+            </div>
+        </div>
+    </div>
+
+    <!-- Modular JavaScript (ES Modules) -->
+    <script type="module" src="js/app.js"></script>
+</body>
+</html>

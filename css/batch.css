@@ -1,0 +1,422 @@
+/* ============================================
+   SOLFACIL - Batch Operations Styles
+   Toolbar, Checkboxes, Mode Buttons, Modals
+   ============================================ */
+
+/* ============================================
+   Batch Toolbar
+   ============================================ */
+.batch-toolbar {
+    background: var(--color-bg-card);
+    border-radius: var(--radius-2xl);
+    padding: 1.25rem 1.5rem;
+    box-shadow: var(--shadow-sm);
+    margin-bottom: var(--gap-2xl);
+    border: 2px solid var(--color-border);
+    transition: border-color var(--transition-base), box-shadow var(--transition-base);
+}
+
+.batch-toolbar.has-selection {
+    border-color: var(--color-primary);
+    box-shadow: 0 2px 8px rgba(55, 48, 163, 0.1);
+}
+
+.batch-toolbar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--gap-lg);
+    padding-bottom: var(--gap-md);
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.batch-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-md);
+}
+
+.batch-checkbox-wrapper {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.batch-checkbox-wrapper input[type="checkbox"] {
+    display: none;
+}
+
+.batch-checkmark {
+    width: 22px;
+    height: 22px;
+    border: 2px solid var(--color-border-muted);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.batch-checkbox-wrapper input[type="checkbox"]:checked + .batch-checkmark {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.batch-checkbox-wrapper input[type="checkbox"]:checked + .batch-checkmark::after {
+    content: '\2713';
+    color: white;
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+}
+
+.batch-checkmark.indeterminate {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.batch-checkmark.indeterminate::after {
+    content: '\2014';
+    color: white;
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+}
+
+.batch-label {
+    font-size: var(--font-size-md);
+    font-weight: 600;
+    color: var(--color-text-muted);
+    cursor: pointer;
+}
+
+.batch-count {
+    font-size: var(--font-size-md);
+    color: var(--color-text-light);
+}
+
+.batch-count strong {
+    color: var(--color-primary);
+    font-size: var(--font-size-2xl);
+}
+
+.batch-divider {
+    color: var(--color-border);
+    font-size: 1.2rem;
+}
+
+.batch-reset-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.8rem;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-card);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-base);
+    color: var(--color-text-light);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.batch-reset-btn:hover:not(:disabled) {
+    border-color: var(--color-danger);
+    color: var(--color-danger);
+}
+
+.batch-reset-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.batch-reset-btn .material-icons {
+    font-size: var(--font-size-xl);
+}
+
+/* ============================================
+   Mode Button Group
+   ============================================ */
+.batch-toolbar-body {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-lg);
+    margin-bottom: var(--gap-lg);
+}
+
+.mode-label {
+    font-size: var(--font-size-base);
+    font-weight: 600;
+    color: var(--color-text-muted);
+    white-space: nowrap;
+}
+
+.mode-btn-group {
+    display: flex;
+    gap: var(--gap-md);
+    flex: 1;
+}
+
+.mode-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: var(--gap-md);
+    padding: 0.75rem 1rem;
+    border: 2px solid var(--color-border);
+    background: var(--color-bg-card);
+    border-radius: var(--radius-xl);
+    cursor: pointer;
+    transition: all var(--transition-base);
+}
+
+.mode-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.mode-btn .material-icons {
+    font-size: var(--font-size-7xl);
+    opacity: 0.6;
+}
+
+.mode-btn-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.mode-btn-title {
+    font-weight: 600;
+    font-size: var(--font-size-md);
+    color: var(--color-text-secondary);
+}
+
+.mode-btn-desc {
+    font-size: var(--font-size-xs);
+    color: var(--color-text-lighter);
+}
+
+/* Mode button active states */
+.mode-btn.active.mode-self-consumption {
+    border-color: var(--color-success);
+    background: var(--color-success-bg);
+}
+.mode-btn.active.mode-self-consumption .material-icons {
+    color: var(--color-success);
+    opacity: 1;
+}
+
+.mode-btn.active.mode-peak-valley {
+    border-color: var(--color-primary);
+    background: var(--color-primary-light);
+}
+.mode-btn.active.mode-peak-valley .material-icons {
+    color: var(--color-primary);
+    opacity: 1;
+}
+
+.mode-btn.active.mode-peak-shaving {
+    border-color: var(--color-warning);
+    background: var(--color-warning-bg);
+}
+.mode-btn.active.mode-peak-shaving .material-icons {
+    color: var(--color-warning);
+    opacity: 1;
+}
+
+/* ============================================
+   Batch Dispatch Button
+   ============================================ */
+.batch-toolbar-footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.batch-dispatch-btn {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    padding: 0.75rem 2rem;
+    background: var(--gradient-primary);
+    color: white;
+    border: none;
+    border-radius: var(--radius-lg);
+    font-size: var(--font-size-xl);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-base);
+}
+
+.batch-dispatch-btn:hover:not(:disabled) {
+    background: var(--gradient-primary-hover);
+    box-shadow: var(--shadow-primary-lg);
+    transform: translateY(-1px);
+}
+
+.batch-dispatch-btn:disabled {
+    background: var(--color-border-muted);
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.batch-dispatch-btn .material-icons {
+    font-size: 1.2rem;
+}
+
+/* ============================================
+   Batch Confirm Modal
+   ============================================ */
+.modal-batch-confirm {
+    max-width: 580px;
+}
+
+.modal-batch-progress {
+    max-width: 580px;
+}
+
+.batch-change-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-sm);
+    margin: var(--gap-lg) 0;
+}
+
+.batch-change-item {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    padding: 0.5rem 0.75rem;
+    background: var(--color-bg-subtle);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-md);
+}
+
+.batch-change-item .material-icons {
+    font-size: var(--font-size-xl);
+    color: var(--color-primary);
+}
+
+.batch-change-arrow {
+    color: var(--color-primary);
+    font-size: var(--font-size-xl);
+}
+
+.batch-impact-box {
+    padding: 0.75rem 1rem;
+    background: var(--color-warning-bg);
+    border: 1px solid var(--color-warning-border);
+    border-radius: var(--radius-lg);
+    font-size: var(--font-size-base);
+    color: var(--color-warning-dark);
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+}
+
+.batch-impact-box .material-icons {
+    font-size: var(--font-size-2xl);
+}
+
+/* ============================================
+   Batch Progress Modal
+   ============================================ */
+.overall-progress {
+    margin-bottom: 1.25rem;
+    font-size: var(--font-size-md);
+    color: var(--color-text-muted);
+}
+
+.overall-progress-bar {
+    margin-top: var(--gap-sm);
+    height: 10px;
+}
+
+.overall-progress-fill {
+    transition: width var(--transition-slow);
+}
+
+.dispatch-progress-list {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-md);
+}
+
+.dispatch-progress-item {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-md);
+    padding: var(--gap-md);
+    background: var(--color-bg-subtle);
+    border-radius: var(--radius-lg);
+    transition: background var(--transition-base);
+}
+
+.dispatch-progress-item.success { background: var(--color-success-bg); }
+.dispatch-progress-item.failed { background: var(--color-danger-bg); }
+
+.progress-status-icon {
+    font-size: var(--font-size-7xl);
+    flex-shrink: 0;
+}
+
+.progress-status-icon.spinning {
+    animation: spin 1s linear infinite;
+    color: var(--color-primary);
+}
+
+.progress-status-icon.status-success { color: var(--color-success); }
+.progress-status-icon.status-failed { color: var(--color-danger); }
+.progress-status-icon.status-waiting { color: var(--color-text-lighter); }
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.dispatch-item-info {
+    flex: 1;
+}
+
+.dispatch-item-name {
+    font-weight: 600;
+    font-size: var(--font-size-md);
+    color: var(--color-text-primary);
+}
+
+.dispatch-item-detail {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
+}
+
+.dispatch-item-progress {
+    width: 80px;
+}
+
+.dispatch-item-progress .progress-bar {
+    height: 6px;
+}
+
+.progress-status-text {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Dispatch result summary */
+.dispatch-result-summary {
+    display: flex;
+    gap: var(--gap-2xl);
+    margin-bottom: var(--gap-lg);
+    padding: 0.75rem 1rem;
+    background: var(--color-bg-subtle);
+    border-radius: var(--radius-lg);
+    font-size: var(--font-size-lg);
+    font-weight: 600;
+}
+
+.result-success-count {
+    color: var(--color-success);
+}
+
+.result-failed-count {
+    color: var(--color-danger);
+}

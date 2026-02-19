@@ -1,0 +1,915 @@
+/* ============================================
+   SOLFACIL - Component Styles
+   Cards, Buttons, Badges, Tables, Modals, KPI, ROI
+   ============================================ */
+
+/* ============================================
+   Cards
+   ============================================ */
+.card {
+    background: var(--color-bg-card);
+    border-radius: var(--radius-2xl);
+    padding: var(--card-padding);
+    box-shadow: var(--shadow-sm);
+    margin-bottom: var(--gap-2xl);
+}
+
+.card h3 {
+    font-size: var(--font-size-xl);
+    margin-bottom: var(--gap-lg);
+    color: var(--color-text-secondary);
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+}
+
+.card h3 .material-icons {
+    font-size: 1.2rem;
+    color: var(--color-primary);
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--gap-lg);
+}
+
+.card-header h3 {
+    margin-bottom: 0;
+}
+
+/* ============================================
+   KPI Cards
+   ============================================ */
+.kpi-card {
+    background: var(--color-bg-card);
+    border-radius: var(--radius-2xl);
+    padding: 1.25rem;
+    box-shadow: var(--shadow-sm);
+    display: flex;
+    align-items: center;
+    gap: var(--gap-lg);
+    border-left: 4px solid transparent;
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast);
+}
+
+.kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: var(--shadow-md);
+}
+
+.kpi-profit { border-left-color: var(--color-success); }
+.kpi-cost { border-left-color: var(--color-danger); }
+.kpi-net { border-left-color: var(--color-primary); }
+.kpi-arb { border-left-color: var(--color-warning); }
+
+.kpi-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: var(--radius-2xl);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.kpi-profit .kpi-icon { background: var(--color-success-bg); color: var(--color-success); }
+.kpi-cost .kpi-icon { background: var(--color-danger-bg); color: var(--color-danger); }
+.kpi-net .kpi-icon { background: var(--color-primary-light); color: var(--color-primary); }
+.kpi-arb .kpi-icon { background: var(--color-warning-bg); color: var(--color-warning); }
+
+.kpi-icon .material-icons {
+    font-size: var(--font-size-7xl);
+}
+
+.kpi-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.kpi-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 0.15rem;
+}
+
+.kpi-value {
+    font-size: var(--font-size-6xl);
+    font-weight: 700;
+    color: var(--color-text-primary);
+    line-height: 1.2;
+}
+
+.kpi-delta {
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    margin-top: 0.2rem;
+}
+
+.kpi-delta.positive { color: var(--color-success); }
+.kpi-delta.negative { color: var(--color-danger); }
+
+/* ============================================
+   Chart Legend
+   ============================================ */
+.chart-legend {
+    display: flex;
+    gap: var(--gap-lg);
+    font-size: var(--font-size-base);
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: var(--color-text-light);
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.legend-revenue .legend-dot { background: var(--color-success); }
+.legend-cost .legend-dot { background: var(--color-danger); }
+.legend-profit .legend-dot { background: var(--color-primary); }
+
+/* ============================================
+   Market Info
+   ============================================ */
+.market-info .market-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.65rem 0;
+    border-bottom: 1px solid var(--color-border-light);
+}
+
+.market-info .market-row:last-of-type {
+    border-bottom: none;
+}
+
+.market-info .label {
+    font-size: var(--font-size-md);
+    color: var(--color-text-light);
+}
+
+.market-info .value {
+    font-weight: 600;
+    font-size: var(--font-size-lg);
+}
+
+.profit-highlight {
+    color: var(--color-success) !important;
+    font-weight: 700 !important;
+    font-size: var(--font-size-2xl) !important;
+}
+
+/* ============================================
+   Badges
+   ============================================ */
+.badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
+.badge-peak { background: var(--color-danger-bg); color: var(--color-danger); }
+.badge-offpeak { background: var(--color-success-bg); color: var(--color-success); }
+.badge-mid { background: var(--color-warning-bg); color: var(--color-warning); }
+
+.tariff-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
+.tariff-ponta { background: var(--color-danger-bg); color: var(--color-danger); }
+.tariff-fora-ponta { background: var(--color-success-bg); color: var(--color-success); }
+.tariff-intermediaria { background: var(--color-warning-bg); color: var(--color-warning); }
+
+.op-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius-sm);
+    font-size: var(--font-size-sm);
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+.op-buy { background: var(--color-info-bg); color: var(--color-info-dark); }
+.op-sell { background: var(--color-danger-bg); color: var(--color-danger); }
+.op-hold { background: var(--color-bg-muted); color: var(--color-text-light); }
+
+.trade-status {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: var(--radius-2xl);
+    font-size: var(--font-size-sm);
+    font-weight: 500;
+}
+
+.status-done { background: var(--color-success-bg-alt); color: var(--color-success-darker); }
+.status-active { background: var(--color-warning-bg-alt); color: var(--color-warning-dark); animation: pulse 2s infinite; }
+.status-pending { background: var(--color-bg-muted); color: var(--color-text-light); }
+
+.profit-text { color: var(--color-success); font-weight: 600; }
+.cost-text { color: var(--color-danger); font-weight: 600; }
+
+/* ============================================
+   Market Signal
+   ============================================ */
+.market-signal {
+    margin-top: var(--gap-md);
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-lg);
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+    font-weight: 600;
+    font-size: var(--font-size-base);
+    background: var(--color-success-bg);
+    color: var(--color-success);
+}
+
+.market-signal .material-icons {
+    font-size: 1.2rem;
+}
+
+.signal-sell {
+    background: linear-gradient(135deg, var(--color-danger-bg), var(--color-danger-bg-alt));
+    color: var(--color-danger);
+    animation: signal-glow 2s infinite;
+}
+
+.signal-buy {
+    background: linear-gradient(135deg, var(--color-success-bg), var(--color-success-bg-alt));
+    color: var(--color-success);
+}
+
+.signal-wait {
+    background: linear-gradient(135deg, var(--color-warning-bg), var(--color-warning-bg-alt));
+    color: var(--color-warning);
+}
+
+@keyframes signal-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+    50% { box-shadow: 0 0 12px 2px rgba(220, 38, 38, 0.15); }
+}
+
+/* ============================================
+   Action Buttons
+   ============================================ */
+.actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.action-btn {
+    padding: 0.7rem 1.25rem;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-card);
+    color: var(--color-text-muted);
+    font-weight: 500;
+    font-size: var(--font-size-md);
+    border-radius: var(--radius-lg);
+    cursor: pointer;
+    transition: all var(--transition-base);
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+}
+
+.action-btn .material-icons {
+    font-size: var(--font-size-2xl);
+}
+
+.action-btn:hover {
+    background: var(--color-bg-subtle);
+    border-color: var(--color-border-muted);
+    transform: translateX(4px);
+}
+
+.action-btn.primary {
+    background: var(--gradient-primary);
+    color: white;
+    border-color: transparent;
+}
+
+.action-btn.primary:hover {
+    background: var(--gradient-primary-hover);
+    box-shadow: var(--shadow-primary);
+    transform: translateX(4px);
+}
+
+/* ============================================
+   Tables
+   ============================================ */
+.schedule-table {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th {
+    background: var(--color-bg-subtle);
+    padding: 0.85rem 1.25rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: var(--font-size-base);
+    color: var(--color-text-muted);
+    border-bottom: 2px solid var(--color-border);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+td {
+    padding: 0.85rem 1.25rem;
+    border-bottom: 1px solid var(--color-border-light);
+    font-size: var(--font-size-md);
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+tr:hover {
+    background: #fafbfc;
+}
+
+/* ============================================
+   Trade Summary
+   ============================================ */
+.trade-summary-card {
+    display: flex;
+    align-items: center;
+    gap: var(--gap-lg);
+    margin-bottom: 0;
+}
+
+.summary-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: var(--radius-2xl);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.summary-icon .material-icons {
+    font-size: var(--font-size-7xl);
+    color: white;
+}
+
+.summary-icon.buy { background: linear-gradient(135deg, var(--color-info), var(--color-info-dark)); }
+.summary-icon.sell { background: linear-gradient(135deg, #f97316, #ea580c); }
+.summary-icon.profit { background: var(--gradient-success); }
+
+.summary-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.summary-value {
+    display: block;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: var(--color-text-primary);
+}
+
+.summary-cost {
+    display: block;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-lighter);
+    margin-top: 0.15rem;
+}
+
+/* ============================================
+   Portfolio Stats
+   ============================================ */
+.portfolio-stat {
+    text-align: center;
+    padding: 1.25rem;
+    margin-bottom: 0;
+}
+
+.portfolio-stat-icon {
+    font-size: var(--font-size-10xl);
+    color: var(--color-primary);
+    display: block;
+    margin-bottom: var(--gap-sm);
+}
+
+.portfolio-stat-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 0.25rem;
+}
+
+.portfolio-stat-value {
+    display: block;
+    font-size: var(--font-size-6xl);
+    font-weight: 700;
+    color: var(--color-text-primary);
+}
+
+/* ============================================
+   Asset / Site Cards
+   ============================================ */
+.site-card {
+    background: var(--color-bg-card);
+    border-radius: var(--radius-2xl);
+    padding: var(--card-padding);
+    box-shadow: var(--shadow-sm);
+    transition: transform var(--transition-fast), box-shadow var(--transition-fast), border-color var(--transition-fast);
+    cursor: pointer;
+    border: 2px solid transparent;
+}
+
+.site-card:hover {
+    transform: translateY(-3px);
+    box-shadow: var(--shadow-lg);
+}
+
+.site-card.selected {
+    border: 2px solid var(--color-primary);
+    background: #fafaff;
+}
+
+.site-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: var(--gap-lg);
+}
+
+.site-name {
+    font-weight: 600;
+    font-size: var(--font-size-xl);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.asset-region-icon {
+    font-size: var(--font-size-2xl);
+    color: var(--color-primary);
+}
+
+.site-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: var(--radius-full);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+}
+
+.tiny-icon {
+    font-size: 0.9rem !important;
+    vertical-align: middle;
+}
+
+.status-online { background: var(--color-success-bg-alt); color: var(--color-success-darker); }
+.status-charging { background: var(--color-info-bg); color: var(--color-info-dark); }
+.status-offline { background: var(--color-danger-bg-alt); color: var(--color-danger-dark); }
+
+.site-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: var(--gap-md);
+}
+
+.metric {
+    padding: 0.65rem;
+    background: var(--color-bg-subtle);
+    border-radius: var(--radius-lg);
+}
+
+.metric-label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.78rem;
+    color: var(--color-text-light);
+    margin-bottom: 0.2rem;
+}
+
+.metric-value {
+    font-size: var(--font-size-3xl);
+    font-weight: 700;
+}
+
+/* Asset Footer - Progress Bar */
+.asset-footer {
+    margin-top: var(--gap-lg);
+    padding-top: var(--gap-lg);
+    border-top: 1px solid var(--color-border-light);
+}
+
+.asset-progress-label {
+    display: block;
+    font-size: 0.78rem;
+    color: var(--color-text-light);
+    margin-bottom: 0.4rem;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: var(--color-border);
+    border-radius: var(--radius-sm);
+    overflow: hidden;
+    margin-bottom: 0.3rem;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, var(--color-primary), var(--color-success));
+    border-radius: var(--radius-sm);
+    transition: width var(--transition-slow);
+}
+
+.asset-progress-text {
+    font-size: 0.78rem;
+    color: var(--color-text-lighter);
+}
+
+/* Asset Mode Badge */
+.asset-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-sm);
+    font-weight: 600;
+    margin-bottom: var(--gap-md);
+}
+
+.asset-mode-badge .material-icons {
+    font-size: var(--font-size-md);
+}
+
+/* Asset Checkbox */
+.asset-checkbox-wrapper {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    margin-right: 0.25rem;
+}
+
+.asset-checkbox {
+    display: none;
+}
+
+.asset-checkmark {
+    width: 20px;
+    height: 20px;
+    border: 2px solid var(--color-border-muted);
+    border-radius: var(--radius-sm);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all var(--transition-fast);
+    flex-shrink: 0;
+}
+
+.asset-checkbox:checked + .asset-checkmark {
+    background: var(--color-primary);
+    border-color: var(--color-primary);
+}
+
+.asset-checkbox:checked + .asset-checkmark::after {
+    content: '\2713';
+    color: white;
+    font-size: var(--font-size-xs);
+    font-weight: 700;
+}
+
+/* ============================================
+   Period Selector
+   ============================================ */
+.period-selector {
+    display: flex;
+    gap: var(--gap-sm);
+}
+
+.period-btn {
+    padding: 0.4rem 1rem;
+    border: 1px solid var(--color-border);
+    background: var(--color-bg-card);
+    border-radius: var(--radius-md);
+    font-size: var(--font-size-base);
+    font-weight: 500;
+    color: var(--color-text-light);
+    cursor: pointer;
+    transition: all var(--transition-fast);
+}
+
+.period-btn:hover {
+    border-color: var(--color-primary);
+    color: var(--color-primary);
+}
+
+.period-btn.active {
+    background: var(--color-primary);
+    color: white;
+    border-color: var(--color-primary);
+}
+
+/* ============================================
+   Breakdown Items
+   ============================================ */
+.breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: var(--gap-md);
+}
+
+.breakdown-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: var(--gap-md);
+    background: var(--color-bg-subtle);
+    border-radius: var(--radius-lg);
+}
+
+.breakdown-item .label {
+    color: var(--color-text-light);
+    font-size: var(--font-size-md);
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.breakdown-item .value {
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.breakdown-item.total {
+    background: linear-gradient(135deg, var(--color-primary-light), var(--color-primary-lighter));
+    border: 1px solid var(--color-primary-border);
+}
+
+.breakdown-item.total .label {
+    color: var(--color-primary);
+    font-weight: 600;
+}
+
+.breakdown-item.total .value {
+    color: var(--color-primary);
+    font-size: var(--font-size-3xl);
+}
+
+.small-icon {
+    font-size: var(--font-size-xl) !important;
+    vertical-align: middle;
+}
+
+/* ============================================
+   ROI Metrics (Circular Charts)
+   ============================================ */
+.roi-metrics {
+    display: flex;
+    justify-content: space-around;
+    padding: 1rem 0;
+}
+
+.roi-item {
+    text-align: center;
+}
+
+.roi-circle {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 0.75rem;
+}
+
+.roi-circle svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.roi-bg {
+    fill: none;
+    stroke: var(--color-border);
+    stroke-width: 3;
+}
+
+.roi-fill {
+    fill: none;
+    stroke: var(--color-primary);
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dasharray 1s ease;
+}
+
+.roi-fill-alt {
+    stroke: var(--color-warning);
+}
+
+.roi-fill-green {
+    stroke: var(--color-success);
+}
+
+.roi-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: var(--font-size-2xl);
+    font-weight: 700;
+    color: var(--color-text-primary);
+}
+
+.roi-label {
+    font-size: var(--font-size-sm);
+    color: var(--color-text-light);
+    font-weight: 500;
+}
+
+/* ============================================
+   Modal
+   ============================================ */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+.modal.show {
+    display: flex;
+}
+
+.modal-content {
+    background: var(--color-bg-card);
+    border-radius: var(--radius-3xl);
+    padding: 2rem;
+    max-width: 520px;
+    width: 90%;
+    box-shadow: var(--shadow-xl);
+    animation: modalIn 0.3s ease;
+}
+
+@keyframes modalIn {
+    from { opacity: 0; transform: scale(0.95) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-content h2 {
+    margin-bottom: 1.25rem;
+    color: var(--color-text-primary);
+    font-size: var(--font-size-6xl);
+    display: flex;
+    align-items: center;
+    gap: var(--gap-sm);
+}
+
+.modal-icon {
+    color: var(--color-warning);
+    font-size: var(--font-size-7xl);
+}
+
+.modal-body p {
+    margin-bottom: 0.65rem;
+    line-height: 1.6;
+    color: var(--color-text-muted);
+}
+
+.modal-profit-box {
+    margin-top: var(--gap-lg);
+    padding: var(--gap-lg);
+    background: linear-gradient(135deg, var(--color-success-bg), var(--color-success-bg-alt));
+    border-radius: var(--radius-xl);
+    display: flex;
+    align-items: center;
+    gap: var(--gap-md);
+    border: 1px solid var(--color-success-border);
+}
+
+.modal-profit-box .material-icons {
+    font-size: var(--font-size-10xl);
+    color: var(--color-success);
+}
+
+.modal-profit-label {
+    display: block;
+    font-size: var(--font-size-sm);
+    color: var(--color-success-darker);
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.modal-profit-value {
+    display: block;
+    font-size: var(--font-size-7xl);
+    font-weight: 700;
+    color: var(--color-success);
+}
+
+.modal-actions {
+    display: flex;
+    gap: var(--gap-md);
+    margin-top: var(--gap-2xl);
+}
+
+.modal-actions button {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border-radius: var(--radius-lg);
+    font-weight: 600;
+    cursor: pointer;
+    transition: all var(--transition-base);
+    border: none;
+    font-size: var(--font-size-md);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+}
+
+.modal-actions button .material-icons {
+    font-size: var(--font-size-2xl);
+}
+
+.btn-accept {
+    background: var(--gradient-success);
+    color: white;
+}
+
+.btn-accept:hover {
+    background: linear-gradient(135deg, var(--color-success-dark), var(--color-success-darker));
+    box-shadow: var(--shadow-success);
+}
+
+.btn-view {
+    background: var(--color-bg-gray);
+    color: #374151;
+}
+
+.btn-view:hover {
+    background: var(--color-bg-gray-hover);
+}
+
+.btn-reject {
+    background: var(--color-danger-bg-alt);
+    color: var(--color-danger-dark);
+}
+
+.btn-reject:hover {
+    background: var(--color-danger-bg-light);
+}
+
+/* ============================================
+   Info Modal (replaces alert())
+   ============================================ */
+.modal-info {
+    max-width: 480px;
+}
+
+.modal-info .modal-body {
+    white-space: pre-line;
+    line-height: 1.8;
+}
+
+.modal-info .info-icon {
+    color: var(--color-primary);
+}
+
+.modal-info .success-icon {
+    color: var(--color-success);
+}

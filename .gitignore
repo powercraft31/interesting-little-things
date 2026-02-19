@@ -1,0 +1,30 @@
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# Editor files
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# Dependencies
+node_modules/
+
+# Logs
+*.log
+
+# Temporary files
+*.tmp
+*.temp
+
+# Backup files
+backup/
+
+# Local configuration
+.env
+config.local.js
+
+# Claude AI files
+.claude/

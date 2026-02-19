@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>SOLFACIL - Multi-language Demo</title>
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            max-width: 800px;
+            margin: 50px auto;
+            padding: 20px;
+            background: #f5f7fa;
+        }
+        .demo-card {
+            background: white;
+            border-radius: 12px;
+            padding: 30px;
+            box-shadow: 0 2px 8px rgba(0,0,0,0.08);
+        }
+        h1 {
+            color: #3730a3;
+            text-align: center;
+            margin-bottom: 30px;
+        }
+        .lang-switcher {
+            text-align: center;
+            margin-bottom: 40px;
+        }
+        .lang-btn {
+            padding: 10px 20px;
+            margin: 0 5px;
+            border: 2px solid #3730a3;
+            background: white;
+            color: #3730a3;
+            border-radius: 8px;
+            font-size: 16px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: all 0.3s ease;
+        }
+        .lang-btn:hover {
+            background: #f0f2f5;
+        }
+        .lang-btn.active {
+            background: #3730a3;
+            color: white;
+        }
+        .demo-section {
+            margin-bottom: 30px;
+            padding: 20px;
+            background: #f9fafb;
+            border-radius: 8px;
+        }
+        .demo-label {
+            font-weight: 600;
+            color: #4a5568;
+            margin-bottom: 10px;
+        }
+        .demo-text {
+            font-size: 18px;
+            color: #1a202c;
+        }
+        .feature-list {
+            list-style: none;
+            padding: 0;
+        }
+        .feature-list li {
+            padding: 10px 0;
+            border-bottom: 1px solid #e2e8f0;
+        }
+        .feature-list li:last-child {
+            border-bottom: none;
+        }
+    </style>
+</head>
+<body>
+    <div class="demo-card">
+        <h1>SOLFACIL 多语言功能演示 🌐</h1>
+        
+        <div class="lang-switcher">
+            <button class="lang-btn active" onclick="setLang('zh')">中文</button>
+            <button class="lang-btn" onclick="setLang('en')">English</button>
+            <button class="lang-btn" onclick="setLang('pt')">Português</button>
+        </div>
+        
+        <div class="demo-section">
+            <div class="demo-label">当前选择的语言 / Current Language / Idioma Atual:</div>
+            <div class="demo-text" id="current-lang">中文 (Chinese)</div>
+        </div>
+        
+        <div class="demo-section">
+            <div class="demo-label">功能特性 / Features / Características:</div>
+            <ul class="feature-list">
+                <li>✅ <span id="feat1">导航菜单已完全翻译</span></li>
+                <li>✅ <span id="feat2">KPI 卡片标题支持三语切换</span></li>
+                <li>✅ <span id="feat3">图表标题和标签动态更新</span></li>
+                <li>✅ <span id="feat4">语言偏好保存在 localStorage</span></li>
+                <li>✅ <span id="feat5">界面即时切换，无需刷新</span></li>
+            </ul>
+        </div>
+        
+        <div class="demo-section">
+            <div class="demo-label">主要页面 / Main Pages / Páginas Principais:</div>
+            <ul class="feature-list">
+                <li>📊 <span id="page1">资产组合 - 财务概览和KPI</span></li>
+                <li>💱 <span id="page2">套利交易 - 电价套利执行</span></li>
+                <li>🔋 <span id="page3">资产管理 - 投资组合表现</span></li>
+                <li>📈 <span id="page4">财务报告 - 收入和ROI分析</span></li>
+            </ul>
+        </div>
+        
+        <div style="text-align: center; margin-top: 40px;">
+            <a href="index.html" style="display: inline-block; padding: 12px 30px; background: #3730a3; color: white; text-decoration: none; border-radius: 8px; font-weight: 600;">
+                <span id="view-demo">查看完整 Demo →</span>
+            </a>
+        </div>
+    </div>
+    
+    <script>
+        const translations = {
+            'zh': {
+                'current': '中文 (Chinese)',
+                'feat1': '导航菜单已完全翻译',
+                'feat2': 'KPI 卡片标题支持三语切换',
+                'feat3': '图表标题和标签动态更新',
+                'feat4': '语言偏好保存在 localStorage',
+                'feat5': '界面即时切换，无需刷新',
+                'page1': '资产组合 - 财务概览和KPI',
+                'page2': '套利交易 - 电价套利执行',
+                'page3': '资产管理 - 投资组合表现',
+                'page4': '财务报告 - 收入和ROI分析',
+                'view-demo': '查看完整 Demo →'
+            },
+            'en': {
+                'current': 'English',
+                'feat1': 'Navigation menu fully translated',
+                'feat2': 'KPI card titles support trilingual switching',
+                'feat3': 'Chart titles and labels update dynamically',
+                'feat4': 'Language preference saved in localStorage',
+                'feat5': 'Instant interface switching, no refresh needed',
+                'page1': 'Portfolio - Financial overview and KPIs',
+                'page2': 'Arbitrage - Electricity price arbitrage execution',
+                'page3': 'Assets - Investment portfolio performance',
+                'page4': 'Reports - Revenue and ROI analysis',
+                'view-demo': 'View Full Demo →'
+            },
+            'pt': {
+                'current': 'Português',
+                'feat1': 'Menu de navegação totalmente traduzido',
+                'feat2': 'Títulos de cartões KPI suportam três idiomas',
+                'feat3': 'Títulos e rótulos de gráficos atualizam dinamicamente',
+                'feat4': 'Preferência de idioma salva no localStorage',
+                'feat5': 'Troca instantânea de interface, sem recarregar',
+                'page1': 'Portfólio - Visão financeira e KPIs',
+                'page2': 'Arbitragem - Execução de arbitragem tarifária',
+                'page3': 'Ativos - Performance do portfólio de investimento',
+                'page4': 'Relatórios - Análise de receita e ROI',
+                'view-demo': 'Ver Demo Completa →'
+            }
+        };
+        
+        let currentLang = 'zh';
+        
+        function setLang(lang) {
+            currentLang = lang;
+            
+            // Update button states
+            document.querySelectorAll('.lang-btn').forEach(btn => {
+                btn.classList.toggle('active', btn.textContent.toLowerCase().includes(lang) || 
+                    (lang === 'zh' && btn.textContent === '中文') ||
+                    (lang === 'en' && btn.textContent === 'English') ||
+                    (lang === 'pt' && btn.textContent === 'Português'));
+            });
+            
+            // Update texts
+            const t = translations[lang];
+            for (const [id, text] of Object.entries(t)) {
+                const elem = document.getElementById(id);
+                if (elem) elem.textContent = text;
+            }
+        }
+        
+        // Initialize
+        setLang('zh');
+    </script>
+</body>
+</html>

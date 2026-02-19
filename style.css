@@ -1,0 +1,1768 @@
+/* ============================================
+   SOLFACIL - Gestão de Ativos de Energia
+   Design System: Financial Dashboard
+   ============================================ */
+
+/* Global Styles */
+* {
+    margin: 0;
+    padding: 0;
+    box-sizing: border-box;
+}
+
+body {
+    font-family: 'Inter', sans-serif;
+    background-color: #f0f2f5;
+    color: #2d3748;
+    line-height: 1.6;
+}
+
+/* ============================================
+   Header
+   ============================================ */
+.header {
+    background: linear-gradient(135deg, #1e3a8a 0%, #3730a3 50%, #4c1d95 100%);
+    color: white;
+    padding: 1.25rem 0;
+    box-shadow: 0 4px 20px rgba(0, 0, 0, 0.15);
+}
+
+.header-container {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    flex-wrap: wrap;
+    gap: 1rem;
+}
+
+.logo h1 {
+    font-size: 1.8rem;
+    font-weight: 700;
+    margin-bottom: 0.15rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.logo-icon {
+    font-size: 1.6rem;
+    opacity: 0.9;
+}
+
+.subtitle {
+    font-size: 0.85rem;
+    opacity: 0.7;
+    letter-spacing: 0.5px;
+}
+
+.header-stats {
+    display: flex;
+    gap: 1.75rem;
+}
+
+.stat-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.5rem 1rem;
+    background: rgba(255, 255, 255, 0.08);
+    border-radius: 10px;
+    backdrop-filter: blur(10px);
+}
+
+.stat-icon {
+    font-size: 1.5rem;
+    opacity: 0.7;
+}
+
+.stat-label {
+    display: block;
+    font-size: 0.75rem;
+    opacity: 0.7;
+    margin-bottom: 0.1rem;
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+}
+
+.stat-value {
+    display: block;
+    font-size: 1.35rem;
+    font-weight: 700;
+}
+
+.stat-item.highlight {
+    background: rgba(52, 211, 153, 0.15);
+    border: 1px solid rgba(52, 211, 153, 0.3);
+}
+
+.stat-item.highlight .stat-value {
+    color: #34d399;
+}
+
+/* Language Switcher */
+.language-switcher {
+    display: flex;
+    gap: 0.5rem;
+    margin-left: 2rem;
+}
+
+.lang-btn {
+    padding: 0.4rem 0.8rem;
+    border: 1px solid rgba(255, 255, 255, 0.3);
+    background: rgba(255, 255, 255, 0.1);
+    color: rgba(255, 255, 255, 0.8);
+    border-radius: 6px;
+    font-size: 0.875rem;
+    font-weight: 500;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    backdrop-filter: blur(10px);
+}
+
+.lang-btn:hover {
+    background: rgba(255, 255, 255, 0.2);
+    color: white;
+    transform: translateY(-1px);
+}
+
+.lang-btn.active {
+    background: rgba(255, 255, 255, 0.25);
+    color: white;
+    border-color: rgba(255, 255, 255, 0.5);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.stat-item.highlight .stat-icon {
+    color: #34d399;
+    opacity: 1;
+}
+
+/* ============================================
+   Navigation
+   ============================================ */
+.nav {
+    background: white;
+    border-bottom: 1px solid #e2e8f0;
+    display: flex;
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 0 2rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.05);
+}
+
+.nav-item {
+    padding: 0.9rem 1.75rem;
+    color: #64748b;
+    text-decoration: none;
+    font-weight: 500;
+    font-size: 0.95rem;
+    transition: all 0.3s ease;
+    position: relative;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.nav-item .material-icons {
+    font-size: 1.2rem;
+}
+
+.nav-item:hover {
+    color: #3730a3;
+    background: #f8fafc;
+}
+
+.nav-item.active {
+    color: #3730a3;
+}
+
+.nav-item.active::after {
+    content: '';
+    position: absolute;
+    bottom: 0;
+    left: 0;
+    right: 0;
+    height: 3px;
+    background: linear-gradient(90deg, #3730a3, #4c1d95);
+    border-radius: 3px 3px 0 0;
+}
+
+/* ============================================
+   Main Content
+   ============================================ */
+.main {
+    max-width: 1400px;
+    margin: 0 auto;
+    padding: 1.5rem 2rem;
+}
+
+.section {
+    display: none;
+}
+
+.section.active {
+    display: block;
+}
+
+.section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1.5rem;
+}
+
+.section-header h2 {
+    font-size: 1.6rem;
+    color: #1e293b;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.section-header h2 .material-icons {
+    color: #3730a3;
+    font-size: 1.5rem;
+}
+
+.date-badge {
+    background: #f1f5f9;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    color: #64748b;
+    font-weight: 500;
+}
+
+.live-badge {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    background: #fef2f2;
+    color: #dc2626;
+    padding: 0.4rem 1rem;
+    border-radius: 20px;
+    font-size: 0.85rem;
+    font-weight: 600;
+}
+
+.live-dot {
+    width: 8px;
+    height: 8px;
+    background: #dc2626;
+    border-radius: 50%;
+    animation: pulse 1.5s infinite;
+}
+
+@keyframes pulse {
+    0%, 100% { opacity: 1; transform: scale(1); }
+    50% { opacity: 0.5; transform: scale(1.3); }
+}
+
+.asset-count {
+    background: #f1f5f9;
+    padding: 0.5rem 1rem;
+    border-radius: 8px;
+    font-size: 0.9rem;
+    color: #3730a3;
+    font-weight: 600;
+}
+
+/* ============================================
+   KPI Cards
+   ============================================ */
+.kpi-row {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.kpi-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.25rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    border-left: 4px solid transparent;
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.kpi-card:hover {
+    transform: translateY(-2px);
+    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+}
+
+.kpi-profit { border-left-color: #059669; }
+.kpi-cost { border-left-color: #dc2626; }
+.kpi-net { border-left-color: #3730a3; }
+.kpi-arb { border-left-color: #d97706; }
+
+.kpi-icon {
+    width: 48px;
+    height: 48px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.kpi-profit .kpi-icon { background: #ecfdf5; color: #059669; }
+.kpi-cost .kpi-icon { background: #fef2f2; color: #dc2626; }
+.kpi-net .kpi-icon { background: #eef2ff; color: #3730a3; }
+.kpi-arb .kpi-icon { background: #fffbeb; color: #d97706; }
+
+.kpi-icon .material-icons {
+    font-size: 1.5rem;
+}
+
+.kpi-content {
+    display: flex;
+    flex-direction: column;
+}
+
+.kpi-label {
+    font-size: 0.8rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 0.15rem;
+}
+
+.kpi-value {
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #1e293b;
+    line-height: 1.2;
+}
+
+.kpi-delta {
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-top: 0.2rem;
+}
+
+.kpi-delta.positive { color: #059669; }
+.kpi-delta.negative { color: #dc2626; }
+
+/* ============================================
+   Cards
+   ============================================ */
+.card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    margin-bottom: 1.5rem;
+}
+
+.card h3 {
+    font-size: 1rem;
+    margin-bottom: 1rem;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.card h3 .material-icons {
+    font-size: 1.2rem;
+    color: #3730a3;
+}
+
+.card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.card-header h3 {
+    margin-bottom: 0;
+}
+
+/* Chart Legend */
+.chart-legend {
+    display: flex;
+    gap: 1rem;
+    font-size: 0.85rem;
+}
+
+.legend-item {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    color: #64748b;
+}
+
+.legend-dot {
+    width: 10px;
+    height: 10px;
+    border-radius: 50%;
+    display: inline-block;
+}
+
+.legend-revenue .legend-dot { background: #059669; }
+.legend-cost .legend-dot { background: #dc2626; }
+.legend-profit .legend-dot { background: #3730a3; }
+
+/* ============================================
+   Dashboard Grid
+   ============================================ */
+.dashboard-grid {
+    display: grid;
+    grid-template-columns: 2fr 1fr;
+    gap: 1.5rem;
+}
+
+.chart-card {
+    grid-column: 1;
+    grid-row: 1 / 3;
+}
+
+.chart-card-full {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    margin-bottom: 1.5rem;
+}
+
+.chart-card-full .card-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.chart-card-full h3 {
+    font-size: 1rem;
+    color: #334155;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.chart-card-full h3 .material-icons {
+    font-size: 1.2rem;
+    color: #3730a3;
+}
+
+.chart-card-wide {
+    grid-column: 1 / -1;
+}
+
+/* ============================================
+   Market Info
+   ============================================ */
+.market-info .market-row {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.65rem 0;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.market-info .market-row:last-of-type {
+    border-bottom: none;
+}
+
+.market-info .label {
+    font-size: 0.9rem;
+    color: #64748b;
+}
+
+.market-info .value {
+    font-weight: 600;
+    font-size: 0.95rem;
+}
+
+.profit-highlight {
+    color: #059669 !important;
+    font-weight: 700 !important;
+    font-size: 1.1rem !important;
+}
+
+.badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.badge-peak { background: #fef2f2; color: #dc2626; }
+.badge-offpeak { background: #ecfdf5; color: #059669; }
+.badge-mid { background: #fffbeb; color: #d97706; }
+
+.market-signal {
+    margin-top: 0.75rem;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 600;
+    font-size: 0.85rem;
+    background: #ecfdf5;
+    color: #059669;
+}
+
+.market-signal .material-icons {
+    font-size: 1.2rem;
+}
+
+.signal-sell {
+    background: linear-gradient(135deg, #fef2f2, #fee2e2);
+    color: #dc2626;
+    animation: signal-glow 2s infinite;
+}
+
+.signal-buy {
+    background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+    color: #059669;
+}
+
+.signal-wait {
+    background: linear-gradient(135deg, #fffbeb, #fef3c7);
+    color: #d97706;
+}
+
+@keyframes signal-glow {
+    0%, 100% { box-shadow: 0 0 0 0 rgba(220, 38, 38, 0); }
+    50% { box-shadow: 0 0 12px 2px rgba(220, 38, 38, 0.15); }
+}
+
+/* ============================================
+   Actions
+   ============================================ */
+.actions {
+    display: flex;
+    flex-direction: column;
+    gap: 0.65rem;
+}
+
+.action-btn {
+    padding: 0.7rem 1.25rem;
+    border: 1px solid #e2e8f0;
+    background: white;
+    color: #475569;
+    font-weight: 500;
+    font-size: 0.9rem;
+    border-radius: 8px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.action-btn .material-icons {
+    font-size: 1.1rem;
+}
+
+.action-btn:hover {
+    background: #f8fafc;
+    border-color: #cbd5e1;
+    transform: translateX(4px);
+}
+
+.action-btn.primary {
+    background: linear-gradient(135deg, #3730a3, #4c1d95);
+    color: white;
+    border-color: transparent;
+}
+
+.action-btn.primary:hover {
+    background: linear-gradient(135deg, #4338ca, #5b21b6);
+    box-shadow: 0 4px 12px rgba(55, 48, 163, 0.3);
+    transform: translateX(4px);
+}
+
+/* ============================================
+   Trade Table & Badges
+   ============================================ */
+.schedule-table {
+    overflow-x: auto;
+}
+
+table {
+    width: 100%;
+    border-collapse: collapse;
+}
+
+th {
+    background: #f8fafc;
+    padding: 0.85rem 1.25rem;
+    text-align: left;
+    font-weight: 600;
+    font-size: 0.85rem;
+    color: #475569;
+    border-bottom: 2px solid #e2e8f0;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+td {
+    padding: 0.85rem 1.25rem;
+    border-bottom: 1px solid #f1f5f9;
+    font-size: 0.9rem;
+}
+
+tr:last-child td {
+    border-bottom: none;
+}
+
+tr:hover {
+    background: #fafbfc;
+}
+
+.tariff-badge {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.tariff-ponta { background: #fef2f2; color: #dc2626; }
+.tariff-fora-ponta { background: #ecfdf5; color: #059669; }
+.tariff-intermediaria { background: #fffbeb; color: #d97706; }
+
+.op-badge {
+    display: inline-block;
+    padding: 0.25rem 0.75rem;
+    border-radius: 4px;
+    font-size: 0.8rem;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+}
+
+.op-buy { background: #dbeafe; color: #1d4ed8; }
+.op-sell { background: #fef2f2; color: #dc2626; }
+.op-hold { background: #f1f5f9; color: #64748b; }
+
+.trade-status {
+    display: inline-block;
+    padding: 0.2rem 0.6rem;
+    border-radius: 12px;
+    font-size: 0.8rem;
+    font-weight: 500;
+}
+
+.status-done { background: #d1fae5; color: #065f46; }
+.status-active { background: #fef3c7; color: #92400e; animation: pulse 2s infinite; }
+.status-pending { background: #f1f5f9; color: #64748b; }
+
+.profit-text { color: #059669; font-weight: 600; }
+.cost-text { color: #dc2626; font-weight: 600; }
+
+/* ============================================
+   Trade Summary Row
+   ============================================ */
+.trade-summary-row {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 1.25rem;
+}
+
+.trade-summary-card {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 0;
+}
+
+.summary-icon {
+    width: 52px;
+    height: 52px;
+    border-radius: 12px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+}
+
+.summary-icon .material-icons {
+    font-size: 1.5rem;
+    color: white;
+}
+
+.summary-icon.buy { background: linear-gradient(135deg, #3b82f6, #1d4ed8); }
+.summary-icon.sell { background: linear-gradient(135deg, #f97316, #ea580c); }
+.summary-icon.profit { background: linear-gradient(135deg, #059669, #047857); }
+
+.summary-label {
+    display: block;
+    font-size: 0.8rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.summary-value {
+    display: block;
+    font-size: 1.3rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.summary-cost {
+    display: block;
+    font-size: 0.8rem;
+    color: #94a3b8;
+    margin-top: 0.15rem;
+}
+
+/* ============================================
+   Portfolio Overview (Ativos)
+   ============================================ */
+.portfolio-overview {
+    display: grid;
+    grid-template-columns: repeat(4, 1fr);
+    gap: 1rem;
+    margin-bottom: 1.5rem;
+}
+
+.portfolio-stat {
+    text-align: center;
+    padding: 1.25rem;
+    margin-bottom: 0;
+}
+
+.portfolio-stat-icon {
+    font-size: 2rem;
+    color: #3730a3;
+    display: block;
+    margin-bottom: 0.5rem;
+}
+
+.portfolio-stat-label {
+    display: block;
+    font-size: 0.8rem;
+    color: #64748b;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+    margin-bottom: 0.25rem;
+}
+
+.portfolio-stat-value {
+    display: block;
+    font-size: 1.4rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+/* ============================================
+   Asset / Site Cards
+   ============================================ */
+.sites-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(380px, 1fr));
+    gap: 1.25rem;
+}
+
+.site-card {
+    background: white;
+    border-radius: 12px;
+    padding: 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    transition: transform 0.2s ease, box-shadow 0.2s ease;
+}
+
+.site-card:hover {
+    transform: translateY(-3px);
+    box-shadow: 0 8px 24px rgba(0, 0, 0, 0.1);
+}
+
+.site-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+}
+
+.site-name {
+    font-weight: 600;
+    font-size: 1rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.asset-region-icon {
+    font-size: 1.1rem;
+    color: #3730a3;
+}
+
+.site-status {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.25rem;
+    padding: 0.25rem 0.75rem;
+    border-radius: 20px;
+    font-size: 0.8rem;
+    font-weight: 600;
+}
+
+.tiny-icon {
+    font-size: 0.9rem !important;
+    vertical-align: middle;
+}
+
+.status-online {
+    background: #d1fae5;
+    color: #065f46;
+}
+
+.status-charging {
+    background: #dbeafe;
+    color: #1d4ed8;
+}
+
+.status-offline {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.site-metrics {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 0.75rem;
+}
+
+.metric {
+    padding: 0.65rem;
+    background: #f8fafc;
+    border-radius: 8px;
+}
+
+.metric-label {
+    display: flex;
+    align-items: center;
+    gap: 0.25rem;
+    font-size: 0.78rem;
+    color: #64748b;
+    margin-bottom: 0.2rem;
+}
+
+.metric-value {
+    font-size: 1.15rem;
+    font-weight: 700;
+}
+
+/* Asset Footer - Progress Bar */
+.asset-footer {
+    margin-top: 1rem;
+    padding-top: 1rem;
+    border-top: 1px solid #f1f5f9;
+}
+
+.asset-progress-label {
+    display: block;
+    font-size: 0.78rem;
+    color: #64748b;
+    margin-bottom: 0.4rem;
+}
+
+.progress-bar {
+    width: 100%;
+    height: 8px;
+    background: #e2e8f0;
+    border-radius: 4px;
+    overflow: hidden;
+    margin-bottom: 0.3rem;
+}
+
+.progress-fill {
+    height: 100%;
+    background: linear-gradient(90deg, #3730a3, #059669);
+    border-radius: 4px;
+    transition: width 0.5s ease;
+}
+
+.asset-progress-text {
+    font-size: 0.78rem;
+    color: #94a3b8;
+}
+
+/* ============================================
+   Reports Grid
+   ============================================ */
+.reports-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 1.25rem;
+}
+
+.period-selector {
+    display: flex;
+    gap: 0.5rem;
+}
+
+.period-btn {
+    padding: 0.4rem 1rem;
+    border: 1px solid #e2e8f0;
+    background: white;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    font-weight: 500;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.period-btn:hover {
+    border-color: #3730a3;
+    color: #3730a3;
+}
+
+.period-btn.active {
+    background: #3730a3;
+    color: white;
+    border-color: #3730a3;
+}
+
+/* ============================================
+   Breakdown Items
+   ============================================ */
+.breakdown {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.breakdown-item {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 0.75rem;
+    background: #f8fafc;
+    border-radius: 8px;
+}
+
+.breakdown-item .label {
+    color: #64748b;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+}
+
+.breakdown-item .value {
+    font-weight: 700;
+    font-size: 1.05rem;
+}
+
+.breakdown-item.total {
+    background: linear-gradient(135deg, #eef2ff, #e0e7ff);
+    border: 1px solid #c7d2fe;
+}
+
+.breakdown-item.total .label {
+    color: #3730a3;
+    font-weight: 600;
+}
+
+.breakdown-item.total .value {
+    color: #3730a3;
+    font-size: 1.15rem;
+}
+
+.small-icon {
+    font-size: 1rem !important;
+    vertical-align: middle;
+}
+
+/* ============================================
+   ROI Metrics (Circular Charts)
+   ============================================ */
+.roi-metrics {
+    display: flex;
+    justify-content: space-around;
+    padding: 1rem 0;
+}
+
+.roi-item {
+    text-align: center;
+}
+
+.roi-circle {
+    position: relative;
+    width: 100px;
+    height: 100px;
+    margin: 0 auto 0.75rem;
+}
+
+.roi-circle svg {
+    width: 100%;
+    height: 100%;
+    transform: rotate(-90deg);
+}
+
+.roi-bg {
+    fill: none;
+    stroke: #e2e8f0;
+    stroke-width: 3;
+}
+
+.roi-fill {
+    fill: none;
+    stroke: #3730a3;
+    stroke-width: 3;
+    stroke-linecap: round;
+    transition: stroke-dasharray 1s ease;
+}
+
+.roi-fill-alt {
+    stroke: #d97706;
+}
+
+.roi-fill-green {
+    stroke: #059669;
+}
+
+.roi-text {
+    position: absolute;
+    top: 50%;
+    left: 50%;
+    transform: translate(-50%, -50%);
+    font-size: 1.1rem;
+    font-weight: 700;
+    color: #1e293b;
+}
+
+.roi-label {
+    font-size: 0.8rem;
+    color: #64748b;
+    font-weight: 500;
+}
+
+/* ============================================
+   Modal
+   ============================================ */
+.modal {
+    display: none;
+    position: fixed;
+    top: 0;
+    left: 0;
+    width: 100%;
+    height: 100%;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 1000;
+    align-items: center;
+    justify-content: center;
+    backdrop-filter: blur(4px);
+}
+
+.modal.show {
+    display: flex;
+}
+
+.modal-content {
+    background: white;
+    border-radius: 16px;
+    padding: 2rem;
+    max-width: 520px;
+    width: 90%;
+    box-shadow: 0 20px 60px rgba(0, 0, 0, 0.2);
+    animation: modalIn 0.3s ease;
+}
+
+@keyframes modalIn {
+    from { opacity: 0; transform: scale(0.95) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+}
+
+.modal-content h2 {
+    margin-bottom: 1.25rem;
+    color: #1e293b;
+    font-size: 1.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.modal-icon {
+    color: #d97706;
+    font-size: 1.5rem;
+}
+
+.modal-body p {
+    margin-bottom: 0.65rem;
+    line-height: 1.6;
+    color: #475569;
+}
+
+.modal-profit-box {
+    margin-top: 1rem;
+    padding: 1rem;
+    background: linear-gradient(135deg, #ecfdf5, #d1fae5);
+    border-radius: 10px;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    border: 1px solid #a7f3d0;
+}
+
+.modal-profit-box .material-icons {
+    font-size: 2rem;
+    color: #059669;
+}
+
+.modal-profit-label {
+    display: block;
+    font-size: 0.8rem;
+    color: #065f46;
+    text-transform: uppercase;
+    letter-spacing: 0.3px;
+}
+
+.modal-profit-value {
+    display: block;
+    font-size: 1.5rem;
+    font-weight: 700;
+    color: #059669;
+}
+
+.modal-actions {
+    display: flex;
+    gap: 0.75rem;
+    margin-top: 1.5rem;
+}
+
+.modal-actions button {
+    flex: 1;
+    padding: 0.75rem 1rem;
+    border-radius: 8px;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+    border: none;
+    font-size: 0.9rem;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 0.35rem;
+}
+
+.modal-actions button .material-icons {
+    font-size: 1.1rem;
+}
+
+.btn-accept {
+    background: linear-gradient(135deg, #059669, #047857);
+    color: white;
+}
+
+.btn-accept:hover {
+    background: linear-gradient(135deg, #047857, #065f46);
+    box-shadow: 0 4px 12px rgba(5, 150, 105, 0.3);
+}
+
+.btn-view {
+    background: #f3f4f6;
+    color: #374151;
+}
+
+.btn-view:hover {
+    background: #e5e7eb;
+}
+
+.btn-reject {
+    background: #fee2e2;
+    color: #991b1b;
+}
+
+.btn-reject:hover {
+    background: #fecaca;
+}
+
+/* ============================================
+   Chart Canvas
+   ============================================ */
+canvas {
+    max-height: 320px;
+}
+
+.chart-card-full canvas {
+    max-height: 350px;
+}
+
+/* ============================================
+   Responsive
+   ============================================ */
+@media (max-width: 1024px) {
+    .kpi-row {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .portfolio-overview {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .trade-summary-row {
+        grid-template-columns: 1fr;
+    }
+
+    .reports-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-card-wide {
+        grid-column: 1;
+    }
+}
+
+@media (max-width: 768px) {
+    .header-container {
+        flex-direction: column;
+        text-align: center;
+    }
+
+    .header-stats {
+        margin-top: 1rem;
+        gap: 0.75rem;
+        flex-wrap: wrap;
+        justify-content: center;
+    }
+
+    .stat-item {
+        padding: 0.4rem 0.75rem;
+    }
+
+    .dashboard-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .chart-card {
+        grid-column: 1;
+        grid-row: auto;
+    }
+
+    .kpi-row {
+        grid-template-columns: 1fr;
+    }
+
+    .portfolio-overview {
+        grid-template-columns: 1fr 1fr;
+    }
+
+    .sites-grid {
+        grid-template-columns: 1fr;
+    }
+
+    .nav {
+        overflow-x: auto;
+        white-space: nowrap;
+    }
+
+    .nav-item {
+        padding: 0.75rem 1.25rem;
+        font-size: 0.85rem;
+    }
+
+    .section-header {
+        flex-direction: column;
+        gap: 0.75rem;
+        align-items: flex-start;
+    }
+
+    .modal-actions {
+        flex-direction: column;
+    }
+
+    .batch-toolbar-body {
+        flex-direction: column;
+        align-items: flex-start;
+    }
+
+    .mode-btn-group {
+        flex-direction: column;
+        width: 100%;
+    }
+}
+
+/* ============================================
+   Batch Operations Toolbar
+   ============================================ */
+.batch-toolbar {
+    background: white;
+    border-radius: 12px;
+    padding: 1.25rem 1.5rem;
+    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    margin-bottom: 1.5rem;
+    border: 2px solid #e2e8f0;
+    transition: border-color 0.3s ease, box-shadow 0.3s ease;
+}
+
+.batch-toolbar.has-selection {
+    border-color: #3730a3;
+    box-shadow: 0 2px 8px rgba(55, 48, 163, 0.1);
+}
+
+.batch-toolbar-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 1rem;
+    padding-bottom: 0.75rem;
+    border-bottom: 1px solid #f1f5f9;
+}
+
+.batch-toolbar-left {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+}
+
+.batch-checkbox-wrapper {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+}
+
+.batch-checkbox-wrapper input[type="checkbox"] {
+    display: none;
+}
+
+.batch-checkmark {
+    width: 22px;
+    height: 22px;
+    border: 2px solid #cbd5e1;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.batch-checkbox-wrapper input[type="checkbox"]:checked + .batch-checkmark {
+    background: #3730a3;
+    border-color: #3730a3;
+}
+
+.batch-checkbox-wrapper input[type="checkbox"]:checked + .batch-checkmark::after {
+    content: '\2713';
+    color: white;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.batch-checkmark.indeterminate {
+    background: #3730a3;
+    border-color: #3730a3;
+}
+
+.batch-checkmark.indeterminate::after {
+    content: '\2014';
+    color: white;
+    font-size: 0.8rem;
+    font-weight: 700;
+}
+
+.batch-label {
+    font-size: 0.9rem;
+    font-weight: 600;
+    color: #475569;
+    cursor: pointer;
+}
+
+.batch-count {
+    font-size: 0.9rem;
+    color: #64748b;
+}
+
+.batch-count strong {
+    color: #3730a3;
+    font-size: 1.1rem;
+}
+
+.batch-divider {
+    color: #e2e8f0;
+    font-size: 1.2rem;
+}
+
+.batch-reset-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.4rem 0.8rem;
+    border: 1px solid #e2e8f0;
+    background: white;
+    border-radius: 6px;
+    font-size: 0.85rem;
+    color: #64748b;
+    cursor: pointer;
+    transition: all 0.2s ease;
+}
+
+.batch-reset-btn:hover:not(:disabled) {
+    border-color: #dc2626;
+    color: #dc2626;
+}
+
+.batch-reset-btn:disabled {
+    opacity: 0.4;
+    cursor: not-allowed;
+}
+
+.batch-reset-btn .material-icons {
+    font-size: 1rem;
+}
+
+/* Mode Button Group */
+.batch-toolbar-body {
+    display: flex;
+    align-items: center;
+    gap: 1rem;
+    margin-bottom: 1rem;
+}
+
+.mode-label {
+    font-size: 0.85rem;
+    font-weight: 600;
+    color: #475569;
+    white-space: nowrap;
+}
+
+.mode-btn-group {
+    display: flex;
+    gap: 0.75rem;
+    flex: 1;
+}
+
+.mode-btn {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem 1rem;
+    border: 2px solid #e2e8f0;
+    background: white;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.mode-btn:hover {
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.08);
+}
+
+.mode-btn .material-icons {
+    font-size: 1.5rem;
+    opacity: 0.6;
+}
+
+.mode-btn-text {
+    display: flex;
+    flex-direction: column;
+}
+
+.mode-btn-title {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #334155;
+}
+
+.mode-btn-desc {
+    font-size: 0.75rem;
+    color: #94a3b8;
+}
+
+/* Mode button active states */
+.mode-btn.active.mode-self-consumption {
+    border-color: #059669;
+    background: #ecfdf5;
+}
+.mode-btn.active.mode-self-consumption .material-icons {
+    color: #059669;
+    opacity: 1;
+}
+
+.mode-btn.active.mode-peak-valley {
+    border-color: #3730a3;
+    background: #eef2ff;
+}
+.mode-btn.active.mode-peak-valley .material-icons {
+    color: #3730a3;
+    opacity: 1;
+}
+
+.mode-btn.active.mode-peak-shaving {
+    border-color: #d97706;
+    background: #fffbeb;
+}
+.mode-btn.active.mode-peak-shaving .material-icons {
+    color: #d97706;
+    opacity: 1;
+}
+
+/* Batch Dispatch Button */
+.batch-toolbar-footer {
+    display: flex;
+    justify-content: flex-end;
+}
+
+.batch-dispatch-btn {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.75rem 2rem;
+    background: linear-gradient(135deg, #3730a3, #4c1d95);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 1rem;
+    font-weight: 600;
+    cursor: pointer;
+    transition: all 0.3s ease;
+}
+
+.batch-dispatch-btn:hover:not(:disabled) {
+    background: linear-gradient(135deg, #4338ca, #5b21b6);
+    box-shadow: 0 4px 16px rgba(55, 48, 163, 0.35);
+    transform: translateY(-1px);
+}
+
+.batch-dispatch-btn:disabled {
+    background: #cbd5e1;
+    cursor: not-allowed;
+    transform: none;
+    box-shadow: none;
+}
+
+.batch-dispatch-btn .material-icons {
+    font-size: 1.2rem;
+}
+
+/* ============================================
+   Asset Card Checkbox & Mode Badge
+   ============================================ */
+.asset-checkbox-wrapper {
+    display: inline-flex;
+    align-items: center;
+    cursor: pointer;
+    margin-right: 0.25rem;
+}
+
+.asset-checkbox {
+    display: none;
+}
+
+.asset-checkmark {
+    width: 20px;
+    height: 20px;
+    border: 2px solid #cbd5e1;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    transition: all 0.2s ease;
+    flex-shrink: 0;
+}
+
+.asset-checkbox:checked + .asset-checkmark {
+    background: #3730a3;
+    border-color: #3730a3;
+}
+
+.asset-checkbox:checked + .asset-checkmark::after {
+    content: '\2713';
+    color: white;
+    font-size: 0.75rem;
+    font-weight: 700;
+}
+
+.site-card {
+    cursor: pointer;
+    border: 2px solid transparent;
+    transition: transform 0.2s ease, box-shadow 0.2s ease, border-color 0.2s ease;
+}
+
+.site-card.selected {
+    border: 2px solid #3730a3;
+    background: #fafaff;
+}
+
+/* Asset Mode Badge */
+.asset-mode-badge {
+    display: inline-flex;
+    align-items: center;
+    gap: 0.35rem;
+    padding: 0.3rem 0.75rem;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    margin-bottom: 0.75rem;
+}
+
+.asset-mode-badge .material-icons {
+    font-size: 0.9rem;
+}
+
+/* ============================================
+   Batch Confirm Modal
+   ============================================ */
+.modal-batch-confirm {
+    max-width: 580px;
+}
+
+.modal-batch-progress {
+    max-width: 580px;
+}
+
+.batch-change-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.5rem;
+    margin: 1rem 0;
+}
+
+.batch-change-item {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    padding: 0.5rem 0.75rem;
+    background: #f8fafc;
+    border-radius: 6px;
+    font-size: 0.9rem;
+}
+
+.batch-change-item .material-icons {
+    font-size: 1rem;
+    color: #3730a3;
+}
+
+.batch-change-arrow {
+    color: #3730a3;
+    font-size: 1rem;
+}
+
+.batch-impact-box {
+    padding: 0.75rem 1rem;
+    background: #fffbeb;
+    border: 1px solid #fde68a;
+    border-radius: 8px;
+    font-size: 0.85rem;
+    color: #92400e;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+}
+
+.batch-impact-box .material-icons {
+    font-size: 1.1rem;
+}
+
+/* ============================================
+   Batch Progress Modal
+   ============================================ */
+.overall-progress {
+    margin-bottom: 1.25rem;
+    font-size: 0.9rem;
+    color: #475569;
+}
+
+.overall-progress-bar {
+    margin-top: 0.5rem;
+    height: 10px;
+}
+
+.overall-progress-fill {
+    transition: width 0.5s ease;
+}
+
+.dispatch-progress-list {
+    display: flex;
+    flex-direction: column;
+    gap: 0.75rem;
+}
+
+.dispatch-progress-item {
+    display: flex;
+    align-items: center;
+    gap: 0.75rem;
+    padding: 0.75rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    transition: background 0.3s ease;
+}
+
+.dispatch-progress-item.success { background: #ecfdf5; }
+.dispatch-progress-item.failed { background: #fef2f2; }
+
+.progress-status-icon {
+    font-size: 1.5rem;
+    flex-shrink: 0;
+}
+
+.progress-status-icon.spinning {
+    animation: spin 1s linear infinite;
+    color: #3730a3;
+}
+
+.progress-status-icon.status-success { color: #059669; }
+.progress-status-icon.status-failed { color: #dc2626; }
+.progress-status-icon.status-waiting { color: #94a3b8; }
+
+@keyframes spin {
+    from { transform: rotate(0deg); }
+    to { transform: rotate(360deg); }
+}
+
+.dispatch-item-info {
+    flex: 1;
+}
+
+.dispatch-item-name {
+    font-weight: 600;
+    font-size: 0.9rem;
+    color: #1e293b;
+}
+
+.dispatch-item-detail {
+    font-size: 0.8rem;
+    color: #64748b;
+}
+
+.dispatch-item-progress {
+    width: 80px;
+}
+
+.dispatch-item-progress .progress-bar {
+    height: 6px;
+}
+
+.progress-status-text {
+    font-size: 0.8rem;
+    font-weight: 600;
+    white-space: nowrap;
+}
+
+/* Dispatch result summary */
+.dispatch-result-summary {
+    display: flex;
+    gap: 1.5rem;
+    margin-bottom: 1rem;
+    padding: 0.75rem 1rem;
+    background: #f8fafc;
+    border-radius: 8px;
+    font-size: 0.95rem;
+    font-weight: 600;
+}
+
+.result-success-count {
+    color: #059669;
+}
+
+.result-failed-count {
+    color: #dc2626;
+}
