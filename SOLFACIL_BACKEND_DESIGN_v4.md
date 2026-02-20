@@ -16,7 +16,8 @@
 | **v1.0** | 2026-02-15 | Initial 5-module backend design: IoT Hub, Optimization Engine, DR Dispatcher, Market & Billing, BFF. EventBridge-based async communication. AWS CDK TypeScript as IaC. |
 | **v1.1** | 2026-02-20 | Added Device Shadow sync flow (ScheduleGenerated → Module 1), SQS Delay Queue timeout mechanism for DR Dispatcher, edge-case event payloads, expanded cost estimation. |
 | **v2.0 (Auth)** | 2026-02-20 | Separate document: Multi-tenancy via Cognito (hybrid custom attributes + groups), RBAC (4 roles), RLS, org_id across all data stores, enterprise SSO (SAML/OIDC), mandatory TOTP MFA, M2M OAuth 2.0 Client Credentials, WAF, event-driven webhooks with HMAC-SHA256 signing. |
-| **v4.0** | 2026-02-20 | **Unified fusion.** Expanded from 5 to 7 bounded contexts (added M6: Identity & Tenant IAM, M7: Open API & Integration). org_id as first-class citizen in every data store. Merged CDK deployment into 7 coherent phases. Updated cost estimation with auth/webhook line items. Single Source of Truth. |
+| **v3.0** | 2026-02-20 | **Unified fusion.** Expanded from 5 to 7 bounded contexts (added M6: Identity & Tenant IAM, M7: Open API & Integration). org_id as first-class citizen in every data store. Merged CDK deployment into 7 coherent phases. Updated cost estimation with auth/webhook line items. Single Source of Truth. |
+| **v4.0** | 2026-02-20 | **DDD Architecture Upgrade.** Added §19 Data Strategy & Anti-Corruption Layer: (1) M4 Extensible Metadata — PostgreSQL JSONB `metadata` column + GIN index on assets/organizations, enabling zero-migration business attribute expansion; (2) M1 Dual Ingestion & ACL — `StandardTelemetry` canonical contract, `TelemetryAdapter` interface, `HuaweiAdapter` (devSn→deviceId, W÷1000→kW) + `NativeAdapter`, `AdapterRegistry` priority chain; M2 Algorithm Engine is permanently isolated from vendor-specific formats. |
 
 ---
 
