@@ -20,9 +20,10 @@ export async function handler(
     return apiError(e.statusCode ?? 500, e.message ?? 'Error');
   }
 
-  const assets = [
+  const ALL_ASSETS = [
     {
       id: 'ASSET_SP_001',
+      orgId: 'ORG_ENERGIA_001',
       name: 'São Paulo - Casa Verde',
       region: 'SP',
       status: 'operando',
@@ -40,6 +41,7 @@ export async function handler(
     },
     {
       id: 'ASSET_RJ_002',
+      orgId: 'ORG_ENERGIA_001',
       name: 'Rio de Janeiro - Copacabana',
       region: 'RJ',
       status: 'operando',
@@ -57,6 +59,7 @@ export async function handler(
     },
     {
       id: 'ASSET_MG_003',
+      orgId: 'ORG_SOLARBR_002',
       name: 'Belo Horizonte - Pampulha',
       region: 'MG',
       status: 'operando',
@@ -74,6 +77,7 @@ export async function handler(
     },
     {
       id: 'ASSET_PR_004',
+      orgId: 'ORG_SOLARBR_002',
       name: 'Curitiba - Batel',
       region: 'PR',
       status: 'carregando',
@@ -90,6 +94,11 @@ export async function handler(
       operationMode: 'peak_shaving',
     },
   ];
+
+  // Data isolation: SOLFACIL_ADMIN sees all orgs; others filtered by their orgId
+  const assets = ctx.role === Role.SOLFACIL_ADMIN
+    ? ALL_ASSETS
+    : ALL_ASSETS.filter(a => a.orgId === ctx.orgId);
 
   const body = ok({ assets, _tenant: { orgId: ctx.orgId, role: ctx.role } });
 
