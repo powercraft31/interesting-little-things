@@ -8,6 +8,6 @@
 
 // eslint-disable-next-line no-unused-vars
 const CONFIG = {
-  BFF_API_URL: "http://localhost:3001",
-  USE_MOCK: true,
+  BFF_API_URL: "http://localhost:3000",  // local-server.ts port
+  USE_MOCK: false,  // false = fetch from API; true = use hardcoded mock data
 };
