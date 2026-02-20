@@ -4,6 +4,8 @@
 // Supports BFF fetch (CONFIG.USE_MOCK=false) or local mock fallback
 // ============================================
 
+import { getToken } from "./auth.js";
+
 // ============================================
 // Mock Data (used when CONFIG.USE_MOCK=true or BFF unavailable)
 // ============================================
@@ -186,8 +188,19 @@ function deepCopy(obj) {
 // ============================================
 async function fetchBff(path) {
   const baseUrl =
-    typeof CONFIG !== "undefined" ? CONFIG.BFF_API_URL : "http://localhost:3001";
-  const response = await fetch(`${baseUrl}${path}`);
+    typeof CONFIG !== "undefined"
+      ? CONFIG.BFF_API_URL
+      : "http://localhost:3001";
+
+  const token = getToken();
+  const headers = token ? { Authorization: JSON.stringify(token) } : {};
+
+  const response = await fetch(`${baseUrl}${path}`, { headers });
+  if (response.status === 401) {
+    const authError = new Error("Unauthorized");
+    authError.status = 401;
+    throw authError;
+  }
   if (!response.ok) {
     throw new Error(`BFF ${path} returned ${response.status}`);
   }
@@ -202,8 +215,7 @@ async function fetchBff(path) {
 // Data Initialization (call before UI rendering)
 // ============================================
 export async function initData() {
-  const useMock =
-    typeof CONFIG === "undefined" || CONFIG.USE_MOCK;
+  const useMock = typeof CONFIG === "undefined" || CONFIG.USE_MOCK;
 
   if (!useMock) {
     try {
@@ -220,7 +232,13 @@ export async function initData() {
       console.log("[SOLFACIL] Data loaded from BFF");
       return;
     } catch (err) {
-      console.warn("[SOLFACIL] BFF fetch failed, falling back to mock data:", err.message);
+      if (err.status === 401) {
+        throw err; // Let app.js handle 401 (show login modal)
+      }
+      console.warn(
+        "[SOLFACIL] BFF fetch failed, falling back to mock data:",
+        err.message,
+      );
     }
   }
 

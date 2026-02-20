@@ -3,6 +3,11 @@
 // Orchestrates all modules
 // ============================================
 
+// Auth & tenant modules
+import { isLoggedIn, getCurrentUser, clearToken } from "./modules/auth.js";
+import { showLoginModal } from "./modules/login-modal.js";
+import { initTenantIndicator } from "./modules/tenant-indicator.js";
+
 import {
   loadTranslations,
   setLanguage,
@@ -139,11 +144,67 @@ function startRealTimeUpdates() {
 }
 
 // ============================================
+// Role-Based UI Restrictions
+// ============================================
+function applyRoleRestrictions() {
+  const user = getCurrentUser();
+  if (!user || user.role !== "ORG_VIEWER") return;
+
+  // Add read-only banner after nav
+  const nav = document.querySelector(".nav");
+  if (nav) {
+    const banner = document.createElement("div");
+    banner.className = "readonly-banner";
+    banner.innerHTML = `
+      <span class="material-icons">lock</span>
+      Somente Leitura &mdash; Modo Auditor
+    `;
+    nav.insertAdjacentElement("afterend", banner);
+  }
+
+  // Disable DR test button
+  const drBtn = document.querySelector(".dr-test-btn");
+  if (drBtn) drBtn.classList.add("role-disabled");
+
+  // Disable batch dispatch button
+  const dispatchBtn = document.querySelector(".batch-dispatch-btn");
+  if (dispatchBtn) dispatchBtn.classList.add("role-disabled");
+
+  // Disable mode buttons
+  document.querySelectorAll(".mode-btn").forEach((btn) => {
+    btn.classList.add("role-disabled");
+  });
+
+  // Disable quick action buttons
+  document.querySelectorAll(".action-btn").forEach((btn) => {
+    btn.classList.add("role-disabled");
+  });
+}
+
+// ============================================
 // Application Initialization
 // ============================================
 async function init() {
+  // Auth gate: if not logged in, show login modal and stop
+  if (!isLoggedIn()) {
+    showLoginModal();
+    return;
+  }
+
+  // Show tenant info in header
+  initTenantIndicator();
+
   // Load data from BFF (or mock fallback)
-  await initData();
+  try {
+    await initData();
+  } catch (err) {
+    if (err.status === 401) {
+      clearToken();
+      showLoginModal();
+      return;
+    }
+    throw err;
+  }
 
   // Load translations first
   await loadTranslations();
@@ -168,6 +229,9 @@ async function init() {
   document
     .querySelector(".modal-drilldown-backdrop")
     ?.addEventListener("click", closeDrilldown);
+
+  // Apply role-based restrictions (after all UI is built)
+  applyRoleRestrictions();
 
   // Start real-time updates
   startRealTimeUpdates();
