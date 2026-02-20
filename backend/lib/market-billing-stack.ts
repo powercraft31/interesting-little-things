@@ -66,6 +66,26 @@ export class MarketBillingStack extends cdk.Stack {
       "Allow Lambda to access PostgreSQL",
     );
 
+    // ── VPC Endpoint: Secrets Manager (fixes Lambda→SecretsManager in isolated subnet) ──
+    // Without this, Lambda in PRIVATE_ISOLATED cannot reach Secrets Manager (public endpoint).
+    // Interface Endpoint creates a private ENI inside the VPC — no NAT, no internet needed.
+    const endpointSg = new ec2.SecurityGroup(this, "EndpointSG", {
+      vpc,
+      allowAllOutbound: false,
+      description: "Allow HTTPS from Lambda to Secrets Manager VPC Endpoint",
+    });
+    endpointSg.addIngressRule(
+      lambdaSg,
+      ec2.Port.tcp(443),
+      "Allow Lambda to call Secrets Manager via VPC Endpoint",
+    );
+
+    vpc.addInterfaceEndpoint("SecretsManagerEndpoint", {
+      service: ec2.InterfaceVpcEndpointAwsService.SECRETS_MANAGER,
+      securityGroups: [endpointSg],
+      subnets: { subnetType: ec2.SubnetType.PRIVATE_ISOLATED },
+    });
+
     // ── 3. RDS PostgreSQL 15 ─────────────────────────────────────────
     const db = new rds.DatabaseInstance(this, "DB", {
       engine: rds.DatabaseInstanceEngine.postgres({
