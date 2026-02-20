@@ -74,3 +74,11 @@ CREATE POLICY tenant_isolation ON tariff_schedules
 CREATE INDEX idx_tariff_schedules_org_id ON tariff_schedules (org_id);
 CREATE INDEX idx_tariff_schedules_effective_from ON tariff_schedules (effective_from DESC);
 CREATE INDEX idx_tariff_schedules_org_effective ON tariff_schedules (org_id, effective_from DESC);
+
+-- ── 4. JSONB metadata extension slots ─────────────────────────────────────
+ALTER TABLE assets         ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+ALTER TABLE organizations  ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFAULT '{}'::jsonb;
+
+-- GIN indexes for JSONB queries
+CREATE INDEX IF NOT EXISTS idx_assets_metadata        ON assets        USING GIN(metadata);
+CREATE INDEX IF NOT EXISTS idx_organizations_metadata  ON organizations USING GIN(metadata);

@@ -4,6 +4,7 @@ import {
   WriteRecordsCommand,
 } from '@aws-sdk/client-timestream-write';
 import { handler, type TelemetryEvent } from '../../src/iot-hub/handlers/ingest-telemetry';
+import { resolveAdapter } from '../../src/iot-hub/parsers/AdapterRegistry';
 
 // ---------------------------------------------------------------------------
 // Shared fixtures
@@ -173,4 +174,72 @@ describe('ingest-telemetry handler', () => {
       );
     });
   });
+
+  // ---- ACL: Anti-Corruption Layer -----------------------------------------
+  describe('ACL normalization', () => {
+    it('normalizes Huawei FusionSolar payload (W → kW)', async () => {
+      const huaweiEvent = {
+        orgId: 'ORG_ENERGIA_001',
+        devSn: 'INVERTER_HW_001',
+        collectTime: new Date('2026-02-20T14:30:00.000Z').getTime(),
+        dataItemMap: { active_power: 100000, battery_soc: 85 },
+      };
+
+      await handler(huaweiEvent);
+
+      const calls = tsMock.commandCalls(WriteRecordsCommand);
+      expect(calls).toHaveLength(1);
+
+      const record = calls[0].args[0].input.Records![0];
+
+      // deviceId mapped from devSn
+      expect(record.Dimensions).toEqual(
+        expect.arrayContaining([
+          { Name: 'deviceId', Value: 'INVERTER_HW_001' },
+          { Name: 'orgId', Value: 'ORG_ENERGIA_001' },
+        ]),
+      );
+
+      // power: 100000 W → 100 kW
+      expect(record.MeasureValues).toEqual(
+        expect.arrayContaining([
+          { Name: 'power', Value: '100', Type: 'DOUBLE' },
+          { Name: 'soc', Value: '85', Type: 'DOUBLE' },
+        ]),
+      );
+
+      // timestamp: Unix ms → ISO → back to ms string
+      const expectedMs = String(new Date('2026-02-20T14:30:00.000Z').getTime());
+      expect(record.Time).toBe(expectedMs);
+    });
+
+    it('normalizes native MQTT flat payload (power passthrough)', async () => {
+      const mqttEvent = {
+        orgId: 'ORG_ENERGIA_001',
+        deviceId: 'ASSET_SP_001',
+        power: 5.0,
+        voltage: 220,
+      };
+
+      await handler(mqttEvent);
+
+      const calls = tsMock.commandCalls(WriteRecordsCommand);
+      expect(calls).toHaveLength(1);
+
+      const measureValues = calls[0].args[0].input.Records![0].MeasureValues;
+      expect(measureValues).toEqual(
+        expect.arrayContaining([
+          { Name: 'power', Value: '5', Type: 'DOUBLE' },
+          { Name: 'voltage', Value: '220', Type: 'DOUBLE' },
+        ]),
+      );
+    });
+
+    it('resolveAdapter throws for unrecognized payload format', () => {
+      expect(() => resolveAdapter({ foo: 'bar' })).toThrow(
+        'No adapter found for telemetry payload',
+      );
+    });
+  });
 });
+// Total: 14 tests

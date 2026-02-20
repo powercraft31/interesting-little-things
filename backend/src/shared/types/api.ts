@@ -1,3 +1,32 @@
+// ---------------------------------------------------------------------------
+// Domain entities
+// ---------------------------------------------------------------------------
+
+export interface Organization {
+  readonly orgId: string;
+  readonly name: string;
+  readonly planTier: string;
+  readonly metadata?: Record<string, unknown>; // JSONB flexible extension slot
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+export interface Asset {
+  readonly assetId: string;
+  readonly orgId: string;
+  readonly deviceType: string;
+  readonly ratedPowerKw: number;
+  readonly location: string | null;
+  readonly status: string;
+  readonly metadata?: Record<string, unknown>; // JSONB flexible extension slot
+  readonly createdAt: string;
+  readonly updatedAt: string;
+}
+
+// ---------------------------------------------------------------------------
+// API response envelope
+// ---------------------------------------------------------------------------
+
 /**
  * Shared API response envelope.
  * All BFF handlers return this shape.
