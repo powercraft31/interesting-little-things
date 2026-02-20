@@ -40,7 +40,11 @@ import {
   startDRTest,
   setDrilldownCallback,
 } from "./modules/batch-ops.js";
-import { generateSiteAnalyticsData, getAssetById } from "./modules/data.js";
+import {
+  initData,
+  generateSiteAnalyticsData,
+  getAssetById,
+} from "./modules/data.js";
 import { setPeriod } from "./modules/reports.js";
 
 // ============================================
@@ -138,6 +142,9 @@ function startRealTimeUpdates() {
 // Application Initialization
 // ============================================
 async function init() {
+  // Load data from BFF (or mock fallback)
+  await initData();
+
   // Load translations first
   await loadTranslations();
 

@@ -1,169 +1,235 @@
 // ============================================
 // SOLFACIL - Data Store Module
 // Immutable data management with deep copy
+// Supports BFF fetch (CONFIG.USE_MOCK=false) or local mock fallback
 // ============================================
 
-const INITIAL_DATA = Object.freeze({
-  assets: Object.freeze([
-    Object.freeze({
-      id: "ASSET_SP_001",
-      name: "São Paulo - Casa Verde",
-      region: "SP",
-      status: "operando",
-      investimento: 4200000,
-      capacidade: 5.2,
-      unidades: 948,
-      socMedio: 65,
-      receitaHoje: 18650,
-      receitaMes: 412300,
-      roi: 19.2,
-      custoHoje: 4250,
-      lucroHoje: 14400,
-      payback: "3,8",
-      operationMode: "peak_valley_arbitrage",
-    }),
-    Object.freeze({
-      id: "ASSET_RJ_002",
-      name: "Rio de Janeiro - Copacabana",
-      region: "RJ",
-      status: "operando",
-      investimento: 3800000,
-      capacidade: 4.8,
-      unidades: 872,
-      socMedio: 72,
-      receitaHoje: 16420,
-      receitaMes: 378500,
-      roi: 17.8,
-      custoHoje: 3890,
-      lucroHoje: 12530,
-      payback: "4,1",
-      operationMode: "self_consumption",
-    }),
-    Object.freeze({
-      id: "ASSET_MG_003",
-      name: "Belo Horizonte - Pampulha",
-      region: "MG",
-      status: "operando",
-      investimento: 2900000,
-      capacidade: 3.6,
-      unidades: 654,
-      socMedio: 58,
-      receitaHoje: 11280,
-      receitaMes: 298400,
-      roi: 16.4,
-      custoHoje: 2680,
-      lucroHoje: 8600,
-      payback: "4,5",
-      operationMode: "peak_valley_arbitrage",
-    }),
-    Object.freeze({
-      id: "ASSET_PR_004",
-      name: "Curitiba - Batel",
-      region: "PR",
-      status: "carregando",
-      investimento: 1500000,
-      capacidade: 2.0,
-      unidades: 373,
-      socMedio: 34,
-      receitaHoje: 6100,
-      receitaMes: 145800,
-      roi: 15.1,
-      custoHoje: 1895,
-      lucroHoje: 4205,
-      payback: "4,8",
-      operationMode: "peak_shaving",
-    }),
-  ]),
-  trades: Object.freeze([
-    Object.freeze({
-      time: "00:00 - 06:00",
-      tarifa: "off_peak",
-      operacao: "buy",
-      preco: "R$ 0,25/kWh",
-      volume: "15,6",
-      resultado: "-R$ 3.900",
-      status: "executed",
-    }),
-    Object.freeze({
-      time: "06:00 - 09:00",
-      tarifa: "intermediate",
-      operacao: "hold",
-      preco: "R$ 0,45/kWh",
-      volume: "—",
-      resultado: "R$ 0",
-      status: "executed",
-    }),
-    Object.freeze({
-      time: "09:00 - 12:00",
-      tarifa: "intermediate",
-      operacao: "partial_sell",
-      preco: "R$ 0,52/kWh",
-      volume: "8,2",
-      resultado: "+R$ 4.264",
-      status: "executed",
-    }),
-    Object.freeze({
-      time: "12:00 - 15:00",
-      tarifa: "intermediate",
-      operacao: "hold",
-      preco: "R$ 0,48/kWh",
-      volume: "—",
-      resultado: "R$ 0",
-      status: "executed",
-    }),
-    Object.freeze({
-      time: "15:00 - 17:00",
-      tarifa: "intermediate",
-      operacao: "partial_sell",
-      preco: "R$ 0,55/kWh",
-      volume: "6,8",
-      resultado: "+R$ 3.740",
-      status: "executed",
-    }),
-    Object.freeze({
-      time: "17:00 - 20:00",
-      tarifa: "peak",
-      operacao: "total_sell",
-      preco: "R$ 0,82/kWh",
-      volume: "23,6",
-      resultado: "+R$ 19.352",
-      status: "executing",
-    }),
-    Object.freeze({
-      time: "20:00 - 22:00",
-      tarifa: "intermediate",
-      operacao: "buy",
-      preco: "R$ 0,42/kWh",
-      volume: "10,8",
-      resultado: "-R$ 4.536",
-      status: "scheduled",
-    }),
-    Object.freeze({
-      time: "22:00 - 00:00",
-      tarifa: "off_peak",
-      operacao: "buy",
-      preco: "R$ 0,25/kWh",
-      volume: "20,8",
-      resultado: "-R$ 5.200",
-      status: "scheduled",
-    }),
-  ]),
-  revenueTrend: Object.freeze({
-    receita: Object.freeze([42150, 38900, 45200, 48235, 51000, 39800, 41500]),
-    custo: Object.freeze([9800, 8700, 10200, 10850, 11500, 9200, 9600]),
-    lucro: Object.freeze([32350, 30200, 35000, 37385, 39500, 30600, 31900]),
-  }),
-  revenueBreakdown: Object.freeze({
-    values: Object.freeze([32450, 12385, 3400]),
-    colors: Object.freeze(["#3730a3", "#059669", "#d97706"]),
-  }),
-});
+// ============================================
+// Mock Data (used when CONFIG.USE_MOCK=true or BFF unavailable)
+// ============================================
+const MOCK_ASSETS = [
+  {
+    id: "ASSET_SP_001",
+    name: "São Paulo - Casa Verde",
+    region: "SP",
+    status: "operando",
+    investimento: 4200000,
+    capacidade: 5.2,
+    unidades: 948,
+    socMedio: 65,
+    receitaHoje: 18650,
+    receitaMes: 412300,
+    roi: 19.2,
+    custoHoje: 4250,
+    lucroHoje: 14400,
+    payback: "3,8",
+    operationMode: "peak_valley_arbitrage",
+  },
+  {
+    id: "ASSET_RJ_002",
+    name: "Rio de Janeiro - Copacabana",
+    region: "RJ",
+    status: "operando",
+    investimento: 3800000,
+    capacidade: 4.8,
+    unidades: 872,
+    socMedio: 72,
+    receitaHoje: 16420,
+    receitaMes: 378500,
+    roi: 17.8,
+    custoHoje: 3890,
+    lucroHoje: 12530,
+    payback: "4,1",
+    operationMode: "self_consumption",
+  },
+  {
+    id: "ASSET_MG_003",
+    name: "Belo Horizonte - Pampulha",
+    region: "MG",
+    status: "operando",
+    investimento: 2900000,
+    capacidade: 3.6,
+    unidades: 654,
+    socMedio: 58,
+    receitaHoje: 11280,
+    receitaMes: 298400,
+    roi: 16.4,
+    custoHoje: 2680,
+    lucroHoje: 8600,
+    payback: "4,5",
+    operationMode: "peak_valley_arbitrage",
+  },
+  {
+    id: "ASSET_PR_004",
+    name: "Curitiba - Batel",
+    region: "PR",
+    status: "carregando",
+    investimento: 1500000,
+    capacidade: 2.0,
+    unidades: 373,
+    socMedio: 34,
+    receitaHoje: 6100,
+    receitaMes: 145800,
+    roi: 15.1,
+    custoHoje: 1895,
+    lucroHoje: 4205,
+    payback: "4,8",
+    operationMode: "peak_shaving",
+  },
+];
 
-// Mutable working copy of assets (for mode changes during batch dispatch)
-let workingAssets = deepCopy(INITIAL_DATA.assets);
+const MOCK_TRADES = [
+  {
+    time: "00:00 - 06:00",
+    tarifa: "off_peak",
+    operacao: "buy",
+    preco: "R$ 0,25/kWh",
+    volume: "15,6",
+    resultado: "-R$ 3.900",
+    status: "executed",
+  },
+  {
+    time: "06:00 - 09:00",
+    tarifa: "intermediate",
+    operacao: "hold",
+    preco: "R$ 0,45/kWh",
+    volume: "\u2014",
+    resultado: "R$ 0",
+    status: "executed",
+  },
+  {
+    time: "09:00 - 12:00",
+    tarifa: "intermediate",
+    operacao: "partial_sell",
+    preco: "R$ 0,52/kWh",
+    volume: "8,2",
+    resultado: "+R$ 4.264",
+    status: "executed",
+  },
+  {
+    time: "12:00 - 15:00",
+    tarifa: "intermediate",
+    operacao: "hold",
+    preco: "R$ 0,48/kWh",
+    volume: "\u2014",
+    resultado: "R$ 0",
+    status: "executed",
+  },
+  {
+    time: "15:00 - 17:00",
+    tarifa: "intermediate",
+    operacao: "partial_sell",
+    preco: "R$ 0,55/kWh",
+    volume: "6,8",
+    resultado: "+R$ 3.740",
+    status: "executed",
+  },
+  {
+    time: "17:00 - 20:00",
+    tarifa: "peak",
+    operacao: "total_sell",
+    preco: "R$ 0,82/kWh",
+    volume: "23,6",
+    resultado: "+R$ 19.352",
+    status: "executing",
+  },
+  {
+    time: "20:00 - 22:00",
+    tarifa: "intermediate",
+    operacao: "buy",
+    preco: "R$ 0,42/kWh",
+    volume: "10,8",
+    resultado: "-R$ 4.536",
+    status: "scheduled",
+  },
+  {
+    time: "22:00 - 00:00",
+    tarifa: "off_peak",
+    operacao: "buy",
+    preco: "R$ 0,25/kWh",
+    volume: "20,8",
+    resultado: "-R$ 5.200",
+    status: "scheduled",
+  },
+];
+
+const MOCK_REVENUE_TREND = {
+  receita: [42150, 38900, 45200, 48235, 51000, 39800, 41500],
+  custo: [9800, 8700, 10200, 10850, 11500, 9200, 9600],
+  lucro: [32350, 30200, 35000, 37385, 39500, 30600, 31900],
+};
+
+const MOCK_DASHBOARD = {
+  alpha: { value: "76.3", delta: "0.0" },
+  mape: { value: "18.5", delta: "0.0" },
+  selfConsumption: { value: "98.2", delta: "0.0" },
+  revenueBreakdown: {
+    values: [32450, 12385, 3400],
+    colors: ["#3730a3", "#059669", "#d97706"],
+  },
+};
+
+// ============================================
+// Module-level data stores (populated by initData)
+// ============================================
+let workingAssets = [];
+let tradesData = [];
+let revenueTrendData = {};
+let dashboardData = {};
 
 function deepCopy(obj) {
   return JSON.parse(JSON.stringify(obj));
+}
+
+// ============================================
+// BFF Fetch Helper
+// ============================================
+async function fetchBff(path) {
+  const baseUrl =
+    typeof CONFIG !== "undefined" ? CONFIG.BFF_API_URL : "http://localhost:3001";
+  const response = await fetch(`${baseUrl}${path}`);
+  if (!response.ok) {
+    throw new Error(`BFF ${path} returned ${response.status}`);
+  }
+  const envelope = await response.json();
+  if (!envelope.success) {
+    throw new Error(envelope.error || `BFF ${path} failed`);
+  }
+  return envelope.data;
+}
+
+// ============================================
+// Data Initialization (call before UI rendering)
+// ============================================
+export async function initData() {
+  const useMock =
+    typeof CONFIG === "undefined" || CONFIG.USE_MOCK;
+
+  if (!useMock) {
+    try {
+      const [dashboard, assets, revenueTrend, trades] = await Promise.all([
+        fetchBff("/dashboard"),
+        fetchBff("/assets"),
+        fetchBff("/revenue-trend"),
+        fetchBff("/trades"),
+      ]);
+      dashboardData = dashboard;
+      workingAssets = deepCopy(assets);
+      revenueTrendData = revenueTrend;
+      tradesData = trades;
+      console.log("[SOLFACIL] Data loaded from BFF");
+      return;
+    } catch (err) {
+      console.warn("[SOLFACIL] BFF fetch failed, falling back to mock data:", err.message);
+    }
+  }
+
+  // Mock fallback
+  dashboardData = deepCopy(MOCK_DASHBOARD);
+  workingAssets = deepCopy(MOCK_ASSETS);
+  revenueTrendData = deepCopy(MOCK_REVENUE_TREND);
+  tradesData = deepCopy(MOCK_TRADES);
+  console.log("[SOLFACIL] Data loaded from local mock");
 }
 
 // ============================================
@@ -194,7 +260,7 @@ export const OPERATION_MODES = Object.freeze({
 });
 
 // ============================================
-// Public API
+// Public API (synchronous getters — data must be initialized first)
 // ============================================
 
 export function getAssets() {
@@ -207,15 +273,15 @@ export function getAssetById(id) {
 }
 
 export function getTrades() {
-  return deepCopy(INITIAL_DATA.trades);
+  return deepCopy(tradesData);
 }
 
 export function getRevenueTrend() {
-  return deepCopy(INITIAL_DATA.revenueTrend);
+  return deepCopy(revenueTrendData);
 }
 
 export function getRevenueBreakdown() {
-  return deepCopy(INITIAL_DATA.revenueBreakdown);
+  return deepCopy(dashboardData.revenueBreakdown);
 }
 
 export function getAssetCount() {
@@ -277,19 +343,19 @@ export function getAssetsToChange(selectedIds, targetMode) {
 // ============================================
 
 export function getOptimizationAlpha() {
-  const base = 76.3;
+  const base = parseFloat(dashboardData.alpha?.value ?? "76.3");
   const delta = (Math.random() - 0.5) * 2;
   return { value: (base + delta).toFixed(1), delta: delta.toFixed(1) };
 }
 
 export function getForecastMAPE() {
-  const base = 18.5;
+  const base = parseFloat(dashboardData.mape?.value ?? "18.5");
   const delta = (Math.random() - 0.5) * 1;
   return { value: (base + delta).toFixed(1), delta: (-delta).toFixed(1) };
 }
 
 export function getSelfConsumptionRate() {
-  const base = 98.2;
+  const base = parseFloat(dashboardData.selfConsumption?.value ?? "98.2");
   const delta = (Math.random() - 0.5) * 0.5;
   return { value: (base + delta).toFixed(1), delta: delta.toFixed(1) };
 }

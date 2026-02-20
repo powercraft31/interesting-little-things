@@ -1,0 +1,90 @@
+import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
+import { ok } from '../../shared/types/api';
+
+/**
+ * GET /assets
+ * Returns VPP asset portfolio with mode & financial metrics.
+ * Field names match the frontend INITIAL_DATA.assets shape exactly.
+ */
+export async function handler(
+  _event: APIGatewayProxyEventV2,
+): Promise<APIGatewayProxyResultV2> {
+  const assets = [
+    {
+      id: 'ASSET_SP_001',
+      name: 'São Paulo - Casa Verde',
+      region: 'SP',
+      status: 'operando',
+      investimento: 4200000,
+      capacidade: 5.2,
+      unidades: 948,
+      socMedio: 65,
+      receitaHoje: 18650,
+      receitaMes: 412300,
+      roi: 19.2,
+      custoHoje: 4250,
+      lucroHoje: 14400,
+      payback: '3,8',
+      operationMode: 'peak_valley_arbitrage',
+    },
+    {
+      id: 'ASSET_RJ_002',
+      name: 'Rio de Janeiro - Copacabana',
+      region: 'RJ',
+      status: 'operando',
+      investimento: 3800000,
+      capacidade: 4.8,
+      unidades: 872,
+      socMedio: 72,
+      receitaHoje: 16420,
+      receitaMes: 378500,
+      roi: 17.8,
+      custoHoje: 3890,
+      lucroHoje: 12530,
+      payback: '4,1',
+      operationMode: 'self_consumption',
+    },
+    {
+      id: 'ASSET_MG_003',
+      name: 'Belo Horizonte - Pampulha',
+      region: 'MG',
+      status: 'operando',
+      investimento: 2900000,
+      capacidade: 3.6,
+      unidades: 654,
+      socMedio: 58,
+      receitaHoje: 11280,
+      receitaMes: 298400,
+      roi: 16.4,
+      custoHoje: 2680,
+      lucroHoje: 8600,
+      payback: '4,5',
+      operationMode: 'peak_valley_arbitrage',
+    },
+    {
+      id: 'ASSET_PR_004',
+      name: 'Curitiba - Batel',
+      region: 'PR',
+      status: 'carregando',
+      investimento: 1500000,
+      capacidade: 2.0,
+      unidades: 373,
+      socMedio: 34,
+      receitaHoje: 6100,
+      receitaMes: 145800,
+      roi: 15.1,
+      custoHoje: 1895,
+      lucroHoje: 4205,
+      payback: '4,8',
+      operationMode: 'peak_shaving',
+    },
+  ];
+
+  const body = ok(assets);
+
+  return {
+    statusCode: 200,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(body),
+  };
+}
