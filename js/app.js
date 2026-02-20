@@ -59,6 +59,8 @@ window.retryFailedItems = retryFailedItems;
 window.closeInfoModal = closeInfoModal;
 window.setPeriod = setPeriod;
 window.startDRTest = startDRTest;
+window.openDrilldown = openDrilldown;
+window.closeDrilldown = closeDrilldown;
 
 // ============================================
 // Language Change Handler

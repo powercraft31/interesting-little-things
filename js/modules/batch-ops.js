@@ -129,10 +129,10 @@ export function populateAssets() {
       if (!e.target.closest(".asset-checkbox-wrapper")) {
         if (
           batchState.selectedAssets.size === 0 &&
-          batchState.targetMode === null &&
-          drilldownCallback
+          (drilldownCallback || window.openDrilldown)
         ) {
-          drilldownCallback(asset.id);
+          const fn = drilldownCallback || window.openDrilldown;
+          fn(asset.id);
         } else {
           toggleAssetSelection(asset.id);
         }
