@@ -228,6 +228,8 @@
 .batch-toolbar-footer {
     display: flex;
     justify-content: flex-end;
+    gap: var(--gap-md);
+    align-items: center;
 }
 
 .batch-dispatch-btn {
@@ -419,4 +421,52 @@
 
 .result-failed-count {
     color: var(--color-danger);
+}
+
+/* ============================================
+   DR Test Button & Metrics
+   ============================================ */
+.dr-test-btn {
+    background: linear-gradient(135deg, #f59e0b, #d97706);
+    color: white;
+    border: none;
+    padding: 0.5rem 1rem;
+    border-radius: 0.5rem;
+    cursor: pointer;
+    font-weight: 600;
+    transition: opacity 0.2s;
+}
+
+.dr-test-btn:hover {
+    opacity: 0.85;
+}
+
+.dispatch-dr-metrics {
+    display: grid;
+    grid-template-columns: repeat(3, 1fr);
+    gap: 0.5rem;
+    margin-top: 0.5rem;
+    padding: 0.5rem;
+    background: rgba(255, 255, 255, 0.05);
+    border-radius: 0.375rem;
+}
+
+.dr-metric {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    font-size: 0.75rem;
+}
+
+.dr-metric strong {
+    font-size: 0.875rem;
+    margin-top: 0.25rem;
+}
+
+.dr-aggregate-summary {
+    margin-top: 1rem;
+    padding: 0.75rem;
+    background: rgba(245, 158, 11, 0.1);
+    border: 1px solid rgba(245, 158, 11, 0.3);
+    border-radius: 0.5rem;
 }

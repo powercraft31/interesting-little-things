@@ -195,5 +195,18 @@
     "forecast_mape_unit": "%",
     "self_consumption_rate": "Taxa de Autoconsumo",
     "self_consumption_rate_desc": "Taxa de autoconsumo da bateria",
-    "self_consumption_rate_unit": "%"
+    "self_consumption_rate_unit": "%",
+    "dr_test": "Teste DR",
+    "response_latency": "Latência de Resposta",
+    "requested_power": "Potência Solicitada",
+    "actual_power": "Potência Real",
+    "accuracy": "Precisão",
+    "avg_latency": "Lat. Média",
+    "avg_accuracy": "Precisão Média",
+    "total_power": "Potência Total",
+    "dr_test_complete": "Teste DR Concluído",
+    "dr_test_summary": "Resumo do Teste DR",
+    "assets_tested": "Ativos Testados",
+    "response_time": "Tempo de Resposta",
+    "dispatch_accuracy": "Precisão do Despacho"
 }

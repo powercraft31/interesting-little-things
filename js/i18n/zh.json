@@ -195,5 +195,18 @@
     "forecast_mape_unit": "%",
     "self_consumption_rate": "自消纳率",
     "self_consumption_rate_desc": "电池电量自消纳比例",
-    "self_consumption_rate_unit": "%"
+    "self_consumption_rate_unit": "%",
+    "dr_test": "需量响应测试",
+    "response_latency": "响应延迟",
+    "requested_power": "请求功率",
+    "actual_power": "实际功率",
+    "accuracy": "准确率",
+    "avg_latency": "平均延迟",
+    "avg_accuracy": "平均准确率",
+    "total_power": "总功率",
+    "dr_test_complete": "DR 测试完成",
+    "dr_test_summary": "DR 测试汇总",
+    "assets_tested": "已测资产",
+    "response_time": "响应时间",
+    "dispatch_accuracy": "调度准确率"
 }
