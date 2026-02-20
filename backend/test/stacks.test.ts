@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
 import { BffStack } from "../lib/bff-stack";
+import { IdentityStack } from "../lib/identity-stack";
 import { MarketBillingStack } from "../lib/market-billing-stack";
 import { VppEventBus } from "../lib/shared/event-bus";
 import { DEFAULT_STAGE } from "../lib/shared/constants";
@@ -82,5 +83,66 @@ describe("CDK Stacks", () => {
         }
       }
     });
+  });
+});
+
+describe("IdentityStack — IAM compliance", () => {
+  let app: cdk.App;
+
+  beforeEach(() => {
+    app = new cdk.App();
+  });
+
+  test("selfSignUpEnabled = false (B2B: admin creates accounts only)", () => {
+    const stack = new IdentityStack(app, "TestIdentity");
+    const template = Template.fromStack(stack);
+
+    template.hasResourceProperties("AWS::Cognito::UserPool", {
+      AdminCreateUserConfig: {
+        AllowAdminCreateUserOnly: true,
+      },
+    });
+  });
+
+  test("custom:orgId and custom:role attributes exist in schema", () => {
+    const stack = new IdentityStack(app, "TestIdentity2");
+    const template = Template.fromStack(stack);
+
+    const pools = template.findResources("AWS::Cognito::UserPool");
+    const poolProps = Object.values(pools)[0].Properties;
+    const schemaNames = (poolProps.Schema ?? []).map(
+      (s: { Name: string }) => s.Name,
+    );
+
+    expect(schemaNames).toContain("orgId");
+    expect(schemaNames).toContain("role");
+  });
+
+  test("WebClient has no client secret (SPA cannot store secrets)", () => {
+    const stack = new IdentityStack(app, "TestIdentity3");
+    const template = Template.fromStack(stack);
+
+    // GenerateSecret must be absent or false
+    const clients = template.findResources("AWS::Cognito::UserPoolClient");
+    for (const client of Object.values(clients)) {
+      const props = (client as { Properties?: { GenerateSecret?: boolean } })
+        .Properties;
+      expect(props?.GenerateSecret).not.toBe(true);
+    }
+  });
+
+  test("3 user groups created: SOLFACIL_ADMIN, ORG_MANAGER, ORG_VIEWER", () => {
+    const stack = new IdentityStack(app, "TestIdentity4");
+    const template = Template.fromStack(stack);
+
+    template.resourceCountIs("AWS::Cognito::UserPoolGroup", 3);
+
+    const groups = template.findResources("AWS::Cognito::UserPoolGroup");
+    const names = Object.values(groups).map(
+      (g: { Properties?: { GroupName?: string } }) => g.Properties?.GroupName,
+    );
+    expect(names).toContain("SOLFACIL_ADMIN");
+    expect(names).toContain("ORG_MANAGER");
+    expect(names).toContain("ORG_VIEWER");
   });
 });
