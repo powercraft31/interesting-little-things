@@ -1,5 +1,7 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { ok } from '../../shared/types/api';
+import { Role } from '../../shared/types/auth';
+import { extractTenantContext, requireRole, apiError } from '../middleware/tenant-context';
 
 /**
  * GET /trades
@@ -7,8 +9,17 @@ import { ok } from '../../shared/types/api';
  * Field names match the frontend INITIAL_DATA.trades shape exactly.
  */
 export async function handler(
-  _event: APIGatewayProxyEventV2,
+  event: APIGatewayProxyEventV2,
 ): Promise<APIGatewayProxyResultV2> {
+  let ctx;
+  try {
+    ctx = extractTenantContext(event);
+    requireRole(ctx, [Role.SOLFACIL_ADMIN, Role.ORG_MANAGER, Role.ORG_OPERATOR, Role.ORG_VIEWER]);
+  } catch (err: unknown) {
+    const e = err as { statusCode?: number; message?: string };
+    return apiError(e.statusCode ?? 500, e.message ?? 'Error');
+  }
+
   const trades = [
     {
       time: '00:00 - 06:00',
@@ -84,7 +95,7 @@ export async function handler(
     },
   ];
 
-  const body = ok(trades);
+  const body = ok({ trades, _tenant: { orgId: ctx.orgId, role: ctx.role } });
 
   return {
     statusCode: 200,

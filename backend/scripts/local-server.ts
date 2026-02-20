@@ -11,13 +11,16 @@ type LambdaHandler = (event: APIGatewayProxyEventV2) => Promise<APIGatewayProxyR
 
 const PORT = 3000;
 
-function makeStubEvent(method: string, path: string): APIGatewayProxyEventV2 {
+function makeStubEvent(req: express.Request, method: string, path: string): APIGatewayProxyEventV2 {
   return {
     version: '2.0',
     routeKey: `${method} ${path}`,
     rawPath: path,
     rawQueryString: '',
-    headers: {},
+    headers: {
+      authorization: (req.headers.authorization as string) ?? '',
+      'content-type': (req.headers['content-type'] as string) ?? '',
+    },
     requestContext: {
       accountId: 'local',
       apiId: 'local',
@@ -41,8 +44,8 @@ function makeStubEvent(method: string, path: string): APIGatewayProxyEventV2 {
 }
 
 function wrapHandler(handler: LambdaHandler, method: string, path: string) {
-  return async (_req: express.Request, res: express.Response): Promise<void> => {
-    const event = makeStubEvent(method, path);
+  return async (req: express.Request, res: express.Response): Promise<void> => {
+    const event = makeStubEvent(req, method, path);
     const result = await handler(event);
 
     const statusCode = typeof result === 'string' ? 200 : result.statusCode ?? 200;
@@ -83,4 +86,7 @@ app.listen(PORT, () => {
   console.log('  GET /assets');
   console.log('  GET /revenue-trend');
   console.log('  GET /trades');
+  console.log('');
+  console.log('Auth: pass Authorization header as raw JSON, e.g.:');
+  console.log('  curl -H \'Authorization: {"userId":"u1","orgId":"ORG_ENERGIA_001","role":"ORG_MANAGER"}\' http://localhost:3000/dashboard');
 });
