@@ -8,22 +8,24 @@
 
 /** Event source identifiers by module */
 export const EVENT_SOURCE = {
-  IOT_HUB: 'solfacil.vpp.iot-hub',
-  OPTIMIZATION: 'solfacil.vpp.optimization',
-  DR_DISPATCHER: 'solfacil.vpp.dr-dispatcher',
-  MARKET_BILLING: 'solfacil.vpp.market-billing',
-  BFF: 'solfacil.vpp.bff',
+  IOT_HUB: "solfacil.vpp.iot-hub",
+  OPTIMIZATION: "solfacil.vpp.optimization",
+  DR_DISPATCHER: "solfacil.vpp.dr-dispatcher",
+  MARKET_BILLING: "solfacil.vpp.market-billing",
+  BFF: "solfacil.vpp.bff",
 } as const;
 
 /** Event detail types */
 export const EVENT_DETAIL_TYPE = {
-  ASSET_MODE_CHANGED: 'AssetModeChanged',
-  SCHEDULE_GENERATED: 'ScheduleGenerated',
-  PROFIT_CALCULATED: 'ProfitCalculated',
-  INVOICE_GENERATED: 'InvoiceGenerated',
-  DR_COMMAND_SENT: 'DrCommandSent',
-  DR_RESPONSE_RECEIVED: 'DrResponseReceived',
-  TELEMETRY_RECEIVED: 'TelemetryReceived',
+  ASSET_MODE_CHANGED: "AssetModeChanged",
+  SCHEDULE_GENERATED: "ScheduleGenerated",
+  PROFIT_CALCULATED: "ProfitCalculated",
+  INVOICE_GENERATED: "InvoiceGenerated",
+  DR_COMMAND_ISSUED: "DRCommandIssued",
+  DR_COMMAND_SENT: "DrCommandSent",
+  DR_DISPATCH_COMPLETED: "DRDispatchCompleted",
+  DR_RESPONSE_RECEIVED: "DrResponseReceived",
+  TELEMETRY_RECEIVED: "TelemetryReceived",
 } as const;
 
 /** Base event envelope */

@@ -2,6 +2,7 @@
 import "source-map-support/register";
 import * as cdk from "aws-cdk-lib";
 import { BffStack } from "../lib/bff-stack";
+import { DrDispatcherStack } from "../lib/dr-dispatcher-stack";
 import { IotHubStack } from "../lib/iot-hub-stack";
 import { MarketBillingStack } from "../lib/market-billing-stack";
 import { VppEventBus } from "../lib/shared/event-bus";
@@ -23,6 +24,18 @@ const iotHubStack = new IotHubStack(app, `SolfacilVpp-${stage}-IotHub`, {
   description: "Module 1: IoT telemetry ingestion & device shadow sync",
 });
 iotHubStack.addDependency(sharedStack);
+
+// ── Module 3: DR Dispatcher ────────────────────────────────────────
+const drDispatcherStack = new DrDispatcherStack(
+  app,
+  `SolfacilVpp-${stage}-DrDispatcher`,
+  {
+    eventBus: eventBus.bus,
+    description:
+      "Module 3: DR command dispatch, device state tracking & timeout queue",
+  },
+);
+drDispatcherStack.addDependency(sharedStack);
 
 // ── Module 4: Market & Billing ─────────────────────────────────────
 new MarketBillingStack(app, `SolfacilVpp-${stage}-MarketBilling`, {
