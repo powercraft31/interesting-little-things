@@ -32,6 +32,7 @@
     "@aws-sdk/client-eventbridge": "^3.994.0",
     "@aws-sdk/client-iot-data-plane": "^3.994.0",
     "@aws-sdk/client-sqs": "^3.994.0",
+    "@aws-sdk/client-timestream-write": "^3.994.0",
     "@aws-sdk/lib-dynamodb": "^3.994.0",
     "aws-cdk-lib": "^2.175.0",
     "constructs": "^10.4.2",
