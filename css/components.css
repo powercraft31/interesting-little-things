@@ -138,6 +138,7 @@
 .legend-revenue .legend-dot { background: var(--color-success); }
 .legend-cost .legend-dot { background: var(--color-danger); }
 .legend-profit .legend-dot { background: var(--color-primary); }
+.legend-baseline .legend-dot { background: transparent; border: 2px dashed #9ca3af; }
 
 /* ============================================
    Market Info

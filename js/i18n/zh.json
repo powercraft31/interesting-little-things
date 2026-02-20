@@ -184,5 +184,7 @@
     "solfacil": "SOLFACIL",
     "average": "平均",
     "daily_target": "日目标",
-    "soc": "充电状态"
+    "soc": "充电状态",
+    "shadow_benchmark": "基准线（无VPP）",
+    "vpp_savings": "VPP节省"
 }
