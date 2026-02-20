@@ -79,6 +79,14 @@
 .kpi-net .kpi-icon { background: var(--color-primary-light); color: var(--color-primary); }
 .kpi-arb .kpi-icon { background: var(--color-warning-bg); color: var(--color-warning); }
 
+.kpi-alpha .kpi-icon { background: rgba(6, 182, 212, 0.15); color: #06b6d4; }
+.kpi-mape .kpi-icon { background: rgba(59, 130, 246, 0.15); color: #3b82f6; }
+.kpi-selfcon .kpi-icon { background: rgba(20, 184, 166, 0.15); color: #14b8a6; }
+
+.kpi-alpha { border-left-color: #06b6d4; }
+.kpi-mape { border-left-color: #3b82f6; }
+.kpi-selfcon { border-left-color: #14b8a6; }
+
 .kpi-icon .material-icons {
     font-size: var(--font-size-7xl);
 }

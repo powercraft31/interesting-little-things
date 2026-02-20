@@ -326,6 +326,11 @@ body {
     margin-bottom: var(--gap-2xl);
 }
 
+.kpi-row-algo {
+    grid-template-columns: repeat(3, 1fr);
+    margin-top: 0.75rem;
+}
+
 /* ============================================
    Portfolio Overview
    ============================================ */

@@ -186,5 +186,14 @@
     "daily_target": "meta diária",
     "soc": "SoC",
     "shadow_benchmark": "Benchmark (sem VPP)",
-    "vpp_savings": "Economia VPP"
+    "vpp_savings": "Economia VPP",
+    "optimization_alpha": "Alpha de Otimização",
+    "optimization_alpha_desc": "Coeficiente de otimização do algoritmo",
+    "optimization_alpha_unit": "%",
+    "forecast_mape": "MAPE de Previsão",
+    "forecast_mape_desc": "Erro Percentual Absoluto Médio",
+    "forecast_mape_unit": "%",
+    "self_consumption_rate": "Taxa de Autoconsumo",
+    "self_consumption_rate_desc": "Taxa de autoconsumo da bateria",
+    "self_consumption_rate_unit": "%"
 }

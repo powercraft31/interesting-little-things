@@ -7,6 +7,10 @@
         grid-template-columns: repeat(2, 1fr);
     }
 
+    .kpi-row-algo {
+        grid-template-columns: repeat(3, 1fr);
+    }
+
     .portfolio-overview {
         grid-template-columns: repeat(2, 1fr);
     }
@@ -51,6 +55,10 @@
     }
 
     .kpi-row {
+        grid-template-columns: 1fr;
+    }
+
+    .kpi-row-algo {
         grid-template-columns: 1fr;
     }
 

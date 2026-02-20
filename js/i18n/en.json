@@ -186,5 +186,14 @@
     "daily_target": "daily target",
     "soc": "SoC",
     "shadow_benchmark": "Benchmark (no VPP)",
-    "vpp_savings": "VPP Savings"
+    "vpp_savings": "VPP Savings",
+    "optimization_alpha": "Optimization Alpha",
+    "optimization_alpha_desc": "Algorithm optimization coefficient",
+    "optimization_alpha_unit": "%",
+    "forecast_mape": "Forecast MAPE",
+    "forecast_mape_desc": "Mean Absolute Percentage Error",
+    "forecast_mape_unit": "%",
+    "self_consumption_rate": "Self-consumption Rate",
+    "self_consumption_rate_desc": "Battery self-consumption ratio",
+    "self_consumption_rate_unit": "%"
 }

@@ -271,3 +271,25 @@ export function getAssetsToChange(selectedIds, targetMode) {
     )
     .map((asset) => deepCopy(asset));
 }
+
+// ============================================
+// Algorithm KPI Data Functions
+// ============================================
+
+export function getOptimizationAlpha() {
+  const base = 76.3;
+  const delta = (Math.random() - 0.5) * 2;
+  return { value: (base + delta).toFixed(1), delta: delta.toFixed(1) };
+}
+
+export function getForecastMAPE() {
+  const base = 18.5;
+  const delta = (Math.random() - 0.5) * 1;
+  return { value: (base + delta).toFixed(1), delta: (-delta).toFixed(1) };
+}
+
+export function getSelfConsumptionRate() {
+  const base = 98.2;
+  const delta = (Math.random() - 0.5) * 0.5;
+  return { value: (base + delta).toFixed(1), delta: delta.toFixed(1) };
+}

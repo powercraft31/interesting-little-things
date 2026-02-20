@@ -186,5 +186,14 @@
     "daily_target": "日目标",
     "soc": "充电状态",
     "shadow_benchmark": "基准线（无VPP）",
-    "vpp_savings": "VPP节省"
+    "vpp_savings": "VPP节省",
+    "optimization_alpha": "优化Alpha",
+    "optimization_alpha_desc": "算法优化系数",
+    "optimization_alpha_unit": "%",
+    "forecast_mape": "预测MAPE",
+    "forecast_mape_desc": "预测平均绝对百分比误差",
+    "forecast_mape_unit": "%",
+    "self_consumption_rate": "自消纳率",
+    "self_consumption_rate_desc": "电池电量自消纳比例",
+    "self_consumption_rate_unit": "%"
 }
