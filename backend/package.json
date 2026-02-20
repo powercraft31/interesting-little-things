@@ -18,6 +18,7 @@
     "@types/express": "^5.0.6",
     "@types/jest": "^29.5.14",
     "@types/node": "^22.10.0",
+    "@types/pg": "^8.16.0",
     "aws-cdk": "^2.175.0",
     "aws-sdk-client-mock": "^4.1.0",
     "esbuild": "^0.24.0",
@@ -36,6 +37,7 @@
     "constructs": "^10.4.2",
     "cors": "^2.8.6",
     "express": "^5.2.1",
+    "pg": "^8.18.0",
     "source-map-support": "^0.5.21"
   }
 }
