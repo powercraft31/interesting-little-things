@@ -394,6 +394,95 @@ export function updateChartLabels() {
  * Update revenue trend chart with data for different periods
  * @param {number} days - 7, 30, or 90
  */
+// ============================================
+// Drilldown Chart (Site Analytics)
+// ============================================
+let drilldownChartInstance = null;
+
+export function initDrilldownChart(data, labels) {
+  const canvas = document.getElementById("drilldownChart");
+  if (!canvas) return;
+
+  if (drilldownChartInstance) {
+    drilldownChartInstance.destroy();
+    drilldownChartInstance = null;
+  }
+
+  drilldownChartInstance = new Chart(canvas, {
+    type: "line",
+    data: {
+      labels: data.labels,
+      datasets: [
+        {
+          label: labels.pvGeneration || "PV Generation",
+          data: data.pvGeneration,
+          borderColor: "#f59e0b",
+          backgroundColor: "rgba(245, 158, 11, 0.1)",
+          borderWidth: 2,
+          pointRadius: 2,
+          tension: 0.4,
+          fill: false,
+        },
+        {
+          label: labels.householdLoad || "Household Load",
+          data: data.householdLoad,
+          borderColor: "#ef4444",
+          backgroundColor: "rgba(239, 68, 68, 0.1)",
+          borderWidth: 2,
+          pointRadius: 2,
+          tension: 0.4,
+          fill: false,
+        },
+        {
+          label: labels.batteryPower || "Battery Power",
+          data: data.batteryPower,
+          borderColor: "#3b82f6",
+          backgroundColor: "rgba(59, 130, 246, 0.1)",
+          borderWidth: 2,
+          pointRadius: 2,
+          tension: 0.3,
+          fill: false,
+          segment: {
+            borderColor: (ctx) => (ctx.p1.parsed.y < 0 ? "#06b6d4" : "#3b82f6"),
+          },
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: {
+          position: "top",
+          labels: { color: "#e2e8f0", font: { size: 11 } },
+        },
+        tooltip: { mode: "index", intersect: false },
+      },
+      scales: {
+        x: {
+          ticks: { color: "#94a3b8", maxTicksLimit: 12 },
+          grid: { color: "rgba(148,163,184,0.1)" },
+        },
+        y: {
+          ticks: {
+            color: "#94a3b8",
+            callback: (v) => v + " kW",
+          },
+          grid: { color: "rgba(148,163,184,0.1)" },
+          title: { display: true, text: "kW", color: "#94a3b8" },
+        },
+      },
+    },
+  });
+}
+
+export function destroyDrilldownChart() {
+  if (drilldownChartInstance) {
+    drilldownChartInstance.destroy();
+    drilldownChartInstance = null;
+  }
+}
+
 export function updateRevenueTrendPeriod(days) {
   if (!revenueTrendChart) return;
 

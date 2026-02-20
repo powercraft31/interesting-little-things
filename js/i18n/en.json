@@ -208,5 +208,15 @@
     "dr_test_summary": "DR Test Summary",
     "assets_tested": "Assets Tested",
     "response_time": "Response Time",
-    "dispatch_accuracy": "Dispatch Accuracy"
+    "dispatch_accuracy": "Dispatch Accuracy",
+    "site_analytics": "Site Analytics",
+    "pv_generation": "PV Generation",
+    "household_load": "Household Load",
+    "battery_power": "Battery Power",
+    "peak_discharge_kw": "Peak Discharge",
+    "daily_pv_kwh": "Daily PV Output",
+    "self_sufficiency": "Self-sufficiency",
+    "battery_cycles": "Battery Cycles",
+    "charging_negative": "Charging (negative)",
+    "discharging_positive": "Discharging (positive)"
 }

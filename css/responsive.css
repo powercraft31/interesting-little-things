@@ -103,4 +103,17 @@
     .language-switcher {
         margin-left: 0;
     }
+
+    .modal-drilldown-container {
+        width: 95vw;
+        padding: 1rem;
+    }
+
+    .drilldown-metrics {
+        grid-template-columns: repeat(2, 1fr);
+    }
+
+    .drilldown-chart-container {
+        height: 220px;
+    }
 }

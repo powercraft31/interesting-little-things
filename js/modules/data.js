@@ -293,3 +293,77 @@ export function getSelfConsumptionRate() {
   const delta = (Math.random() - 0.5) * 0.5;
   return { value: (base + delta).toFixed(1), delta: delta.toFixed(1) };
 }
+
+// ============================================
+// Site Analytics Data (Drilldown Modal)
+// ============================================
+
+export function generateSiteAnalyticsData(assetId) {
+  const hours = Array.from({ length: 24 }, (_, i) => i);
+  const seed = assetId.charCodeAt(0) + assetId.length;
+
+  // PV generation: bell curve peaking at noon (6-18h active)
+  const pvGeneration = hours.map((h) => {
+    if (h < 6 || h > 18) return 0;
+    const peak = 8 + (seed % 5); // 8-12 kW peak
+    const x = (h - 12) / 3;
+    return parseFloat(
+      (peak * Math.exp(-0.5 * x * x) * (0.9 + Math.random() * 0.2)).toFixed(2),
+    );
+  });
+
+  // Household load: higher in morning (7-9h) and evening (18-22h)
+  const householdLoad = hours.map((h) => {
+    let base = 1.5 + (seed % 3) * 0.5;
+    if (h >= 7 && h <= 9) base += 2 + Math.random();
+    else if (h >= 18 && h <= 22) base += 3 + Math.random() * 1.5;
+    else if (h >= 0 && h <= 5) base *= 0.5;
+    return parseFloat((base * (0.9 + Math.random() * 0.2)).toFixed(2));
+  });
+
+  // Battery power: charging=NEGATIVE (off-peak absorb), discharging=POSITIVE (peak inject)
+  const batteryPower = hours.map((h) => {
+    if (h >= 0 && h <= 5) {
+      // Off-peak: charging (negative)
+      return parseFloat((-3 - Math.random() * 2).toFixed(2));
+    } else if (h >= 6 && h <= 9) {
+      // Morning: use PV to charge (slightly negative or zero)
+      return parseFloat((-1 - Math.random()).toFixed(2));
+    } else if (h >= 17 && h <= 20) {
+      // Peak hours: discharge to grid (positive)
+      return parseFloat((4 + Math.random() * 3).toFixed(2));
+    } else if (h >= 22) {
+      // Late night: charge (negative)
+      return parseFloat((-2 - Math.random()).toFixed(2));
+    }
+    return parseFloat(((Math.random() - 0.5) * 1.5).toFixed(2));
+  });
+
+  // Calculate summary metrics
+  const peakDischarge = Math.max(...batteryPower);
+  const dailyPV = pvGeneration.reduce((a, b) => a + b, 0);
+  const totalLoad = householdLoad.reduce((a, b) => a + b, 0);
+  const selfSufficiency = Math.min(
+    100,
+    parseFloat(((dailyPV / totalLoad) * 100).toFixed(1)),
+  );
+  const cycles = parseFloat(
+    (
+      batteryPower.filter((p) => p < 0).reduce((a, b) => a + Math.abs(b), 0) /
+      20
+    ).toFixed(2),
+  );
+
+  return {
+    labels: hours.map((h) => h.toString().padStart(2, "0") + ":00"),
+    pvGeneration,
+    householdLoad,
+    batteryPower,
+    metrics: {
+      peakDischarge,
+      dailyPV: parseFloat(dailyPV.toFixed(1)),
+      selfSufficiency,
+      cycles,
+    },
+  };
+}

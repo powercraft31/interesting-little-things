@@ -208,5 +208,15 @@
     "dr_test_summary": "DR 测试汇总",
     "assets_tested": "已测资产",
     "response_time": "响应时间",
-    "dispatch_accuracy": "调度准确率"
+    "dispatch_accuracy": "调度准确率",
+    "site_analytics": "站点分析",
+    "pv_generation": "光伏发电",
+    "household_load": "家庭负荷",
+    "battery_power": "电池功率",
+    "peak_discharge_kw": "峰值放电",
+    "daily_pv_kwh": "日光伏发电量",
+    "self_sufficiency": "能源自给率",
+    "battery_cycles": "电池循环",
+    "charging_negative": "充电中（负值）",
+    "discharging_positive": "放电中（正值）"
 }

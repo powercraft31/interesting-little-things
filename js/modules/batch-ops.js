@@ -24,6 +24,13 @@ const batchState = {
   dispatchResults: [],
 };
 
+// Drilldown callback (set by app.js)
+let drilldownCallback = null;
+
+export function setDrilldownCallback(fn) {
+  drilldownCallback = fn;
+}
+
 // ============================================
 // Populate Asset Cards
 // ============================================
@@ -117,10 +124,18 @@ export function populateAssets() {
       toggleAssetSelection(asset.id);
     });
 
-    // Card click toggles selection (except when clicking checkbox directly)
+    // Card click: drilldown when no batch selection active, otherwise toggle selection
     card.addEventListener("click", (e) => {
       if (!e.target.closest(".asset-checkbox-wrapper")) {
-        toggleAssetSelection(asset.id);
+        if (
+          batchState.selectedAssets.size === 0 &&
+          batchState.targetMode === null &&
+          drilldownCallback
+        ) {
+          drilldownCallback(asset.id);
+        } else {
+          toggleAssetSelection(asset.id);
+        }
       }
     });
 

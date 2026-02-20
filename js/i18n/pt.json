@@ -208,5 +208,15 @@
     "dr_test_summary": "Resumo do Teste DR",
     "assets_tested": "Ativos Testados",
     "response_time": "Tempo de Resposta",
-    "dispatch_accuracy": "Precisão do Despacho"
+    "dispatch_accuracy": "Precisão do Despacho",
+    "site_analytics": "Análise do Site",
+    "pv_generation": "Geração FV",
+    "household_load": "Carga Residencial",
+    "battery_power": "Potência da Bateria",
+    "peak_discharge_kw": "Pico de Descarga",
+    "daily_pv_kwh": "FV Diária",
+    "self_sufficiency": "Autossuficiência",
+    "battery_cycles": "Ciclos da Bateria",
+    "charging_negative": "Carregando (negativo)",
+    "discharging_positive": "Descarregando (positivo)"
 }
