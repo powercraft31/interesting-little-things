@@ -1,0 +1,224 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<coverage generated="1771586310711" clover="3.2.0">
+  <project timestamp="1771586310711" name="All files">
+    <metrics statements="164" coveredstatements="162" conditionals="39" coveredconditionals="29" methods="19" coveredmethods="19" elements="222" coveredelements="210" complexity="0" loc="164" ncloc="164" packages="7" files="11" classes="11"/>
+    <package name="lib">
+      <metrics statements="37" coveredstatements="37" conditionals="2" coveredconditionals="1" methods="5" coveredmethods="5"/>
+      <file name="bff-stack.ts" path="/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend/lib/bff-stack.ts">
+        <metrics statements="25" coveredstatements="25" conditionals="2" coveredconditionals="1" methods="3" coveredmethods="3"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="3" count="1" type="stmt"/>
+        <line num="4" count="1" type="stmt"/>
+        <line num="5" count="1" type="stmt"/>
+        <line num="8" count="1" type="stmt"/>
+        <line num="9" count="1" type="stmt"/>
+        <line num="23" count="1" type="stmt"/>
+        <line num="28" count="1" type="stmt"/>
+        <line num="30" count="1" type="stmt"/>
+        <line num="33" count="1" type="stmt"/>
+        <line num="47" count="1" type="stmt"/>
+        <line num="49" count="1" type="stmt"/>
+        <line num="55" count="1" type="stmt"/>
+        <line num="61" count="1" type="stmt"/>
+        <line num="67" count="1" type="stmt"/>
+        <line num="75" count="1" type="stmt"/>
+        <line num="76" count="1" type="stmt"/>
+        <line num="77" count="1" type="stmt"/>
+        <line num="78" count="1" type="stmt"/>
+        <line num="81" count="1" type="stmt"/>
+        <line num="94" count="4" type="stmt"/>
+        <line num="95" count="4" type="stmt"/>
+        <line num="120" count="4" type="cond" truecount="1" falsecount="1"/>
+        <line num="124" count="4" type="stmt"/>
+      </file>
+      <file name="market-billing-stack.ts" path="/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend/lib/market-billing-stack.ts">
+        <metrics statements="12" coveredstatements="12" conditionals="0" coveredconditionals="0" methods="2" coveredmethods="2"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="3" count="1" type="stmt"/>
+        <line num="6" count="1" type="stmt"/>
+        <line num="23" count="1" type="stmt"/>
+        <line num="25" count="1" type="stmt"/>
+        <line num="27" count="1" type="stmt"/>
+        <line num="28" count="1" type="stmt"/>
+        <line num="37" count="1" type="stmt"/>
+        <line num="43" count="1" type="stmt"/>
+        <line num="62" count="2" type="stmt"/>
+        <line num="63" count="2" type="stmt"/>
+      </file>
+    </package>
+    <package name="lib.shared">
+      <metrics statements="13" coveredstatements="13" conditionals="0" coveredconditionals="0" methods="2" coveredmethods="2"/>
+      <file name="constants.ts" path="/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend/lib/shared/constants.ts">
+        <metrics statements="5" coveredstatements="5" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
+        <line num="6" count="1" type="stmt"/>
+        <line num="8" count="1" type="stmt"/>
+        <line num="17" count="1" type="stmt"/>
+        <line num="20" count="1" type="stmt"/>
+        <line num="21" count="5" type="stmt"/>
+      </file>
+      <file name="event-bus.ts" path="/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend/lib/shared/event-bus.ts">
+        <metrics statements="8" coveredstatements="8" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
+        <line num="1" count="1" type="stmt"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="3" count="1" type="stmt"/>
+        <line num="4" count="1" type="stmt"/>
+        <line num="10" count="1" type="stmt"/>
+        <line num="14" count="2" type="stmt"/>
+        <line num="16" count="2" type="stmt"/>
+        <line num="21" count="2" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.bff.handlers">
+      <metrics statements="14" coveredstatements="14" conditionals="6" coveredconditionals="4" methods="2" coveredmethods="2"/>
+      <file name="get-assets.ts" path="/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend/src/bff/handlers/get-assets.ts">
+        <metrics statements="14" coveredstatements="14" conditionals="6" coveredconditionals="4" methods="2" coveredmethods="2"/>
+        <line num="2" count="1" type="stmt"/>
+        <line num="3" count="1" type="stmt"/>
+        <line num="4" count="1" type="stmt"/>
+        <line num="11" count="1" type="stmt"/>
+        <line num="15" count="5" type="stmt"/>
+        <line num="16" count="5" type="stmt"/>
+        <line num="17" count="3" type="stmt"/>
+        <line num="19" count="2" type="stmt"/>
+        <line num="20" count="2" type="cond" truecount="2" falsecount="2"/>
+        <line num="23" count="3" type="stmt"/>
+        <line num="99" count="3" type="cond" truecount="2" falsecount="0"/>
+        <line num="101" count="8" type="stmt"/>
+        <line num="103" count="3" type="stmt"/>
+        <line num="105" count="3" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.bff.middleware">
+      <metrics statements="26" coveredstatements="25" conditionals="14" coveredconditionals="13" methods="3" coveredmethods="3"/>
+      <file name="tenant-context.ts" path="/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend/src/bff/middleware/tenant-context.ts">
+        <metrics statements="26" coveredstatements="25" conditionals="14" coveredconditionals="13" methods="3" coveredmethods="3"/>
+        <line num="2" count="2" type="stmt"/>
+        <line num="3" count="2" type="stmt"/>
+        <line num="5" count="2" type="stmt"/>
+        <line num="17" count="2" type="stmt"/>
+        <line num="18" count="13" type="cond" truecount="3" falsecount="0"/>
+        <line num="20" count="13" type="cond" truecount="1" falsecount="0"/>
+        <line num="21" count="4" type="stmt"/>
+        <line num="26" count="9" type="stmt"/>
+        <line num="27" count="9" type="cond" truecount="2" falsecount="0"/>
+        <line num="29" count="7" type="stmt"/>
+        <line num="32" count="2" type="stmt"/>
+        <line num="33" count="2" type="cond" truecount="0" falsecount="1"/>
+        <line num="34" count="0" type="stmt"/>
+        <line num="36" count="2" type="stmt"/>
+        <line num="37" count="2" type="stmt"/>
+        <line num="40" count="1" type="stmt"/>
+        <line num="43" count="8" type="stmt"/>
+        <line num="45" count="8" type="cond" truecount="5" falsecount="0"/>
+        <line num="46" count="2" type="stmt"/>
+        <line num="49" count="6" type="stmt"/>
+        <line num="57" count="2" type="stmt"/>
+        <line num="58" count="6" type="cond" truecount="1" falsecount="0"/>
+        <line num="59" count="4" type="cond" truecount="1" falsecount="0"/>
+        <line num="60" count="1" type="stmt"/>
+        <line num="65" count="2" type="stmt"/>
+        <line num="66" count="2" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.dr-dispatcher.handlers">
+      <metrics statements="63" coveredstatements="62" conditionals="15" coveredconditionals="9" methods="3" coveredmethods="3"/>
+      <file name="collect-response.ts" path="/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend/src/dr-dispatcher/handlers/collect-response.ts">
+        <metrics statements="26" coveredstatements="26" conditionals="7" coveredconditionals="5" methods="1" coveredmethods="1"/>
+        <line num="11" count="1" type="stmt"/>
+        <line num="12" count="1" type="stmt"/>
+        <line num="13" count="1" type="stmt"/>
+        <line num="36" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="37" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="43" count="1" type="stmt"/>
+        <line num="44" count="1" type="stmt"/>
+        <line num="50" count="1" type="stmt"/>
+        <line num="51" count="5" type="stmt"/>
+        <line num="52" count="5" type="stmt"/>
+        <line num="54" count="5" type="stmt"/>
+        <line num="63" count="5" type="stmt"/>
+        <line num="64" count="5" type="stmt"/>
+        <line num="78" count="3" type="stmt"/>
+        <line num="85" count="2" type="stmt"/>
+        <line num="86" count="2" type="cond" truecount="1" falsecount="0"/>
+        <line num="87" count="1" type="stmt"/>
+        <line num="91" count="1" type="stmt"/>
+        <line num="93" count="1" type="stmt"/>
+        <line num="97" count="1" type="stmt"/>
+        <line num="101" count="3" type="stmt"/>
+        <line num="102" count="3" type="stmt"/>
+        <line num="119" count="2" type="stmt"/>
+        <line num="124" count="1" type="stmt"/>
+        <line num="128" count="1" type="stmt"/>
+        <line num="131" count="2" type="stmt"/>
+      </file>
+      <file name="dispatch-command.ts" path="/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend/src/dr-dispatcher/handlers/dispatch-command.ts">
+        <metrics statements="37" coveredstatements="36" conditionals="8" coveredconditionals="4" methods="2" coveredmethods="2"/>
+        <line num="10" count="1" type="stmt"/>
+        <line num="11" count="1" type="stmt"/>
+        <line num="12" count="1" type="stmt"/>
+        <line num="13" count="1" type="stmt"/>
+        <line num="35" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="36" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="37" count="1" type="cond" truecount="1" falsecount="1"/>
+        <line num="43" count="1" type="stmt"/>
+        <line num="45" count="1" type="stmt"/>
+        <line num="49" count="1" type="stmt"/>
+        <line num="55" count="1" type="stmt"/>
+        <line num="56" count="4" type="stmt"/>
+        <line num="57" count="4" type="stmt"/>
+        <line num="59" count="4" type="stmt"/>
+        <line num="67" count="4" type="stmt"/>
+        <line num="68" count="4" type="stmt"/>
+        <line num="82" count="3" type="stmt"/>
+        <line num="84" count="1" type="stmt"/>
+        <line num="88" count="1" type="stmt"/>
+        <line num="92" count="3" type="stmt"/>
+        <line num="93" count="3" type="stmt"/>
+        <line num="94" count="3" type="stmt"/>
+        <line num="96" count="3" type="stmt"/>
+        <line num="103" count="2" type="stmt"/>
+        <line num="108" count="1" type="stmt"/>
+        <line num="114" count="1" type="stmt"/>
+        <line num="115" count="1" type="stmt"/>
+        <line num="119" count="2" type="stmt"/>
+        <line num="120" count="2" type="stmt"/>
+        <line num="126" count="1" type="stmt"/>
+        <line num="128" count="1" type="stmt"/>
+        <line num="132" count="1" type="stmt"/>
+        <line num="135" count="1" type="stmt"/>
+        <line num="143" count="1" type="stmt"/>
+        <line num="144" count="1" type="stmt"/>
+        <line num="156" count="1" type="stmt"/>
+        <line num="158" count="0" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.iot-hub.handlers">
+      <metrics statements="2" coveredstatements="2" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
+      <file name="ingest-telemetry.ts" path="/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend/src/iot-hub/handlers/ingest-telemetry.ts">
+        <metrics statements="2" coveredstatements="2" conditionals="0" coveredconditionals="0" methods="1" coveredmethods="1"/>
+        <line num="7" count="1" type="stmt"/>
+        <line num="8" count="5" type="stmt"/>
+      </file>
+    </package>
+    <package name="src.shared.types">
+      <metrics statements="9" coveredstatements="9" conditionals="2" coveredconditionals="2" methods="3" coveredmethods="3"/>
+      <file name="api.ts" path="/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend/src/shared/types/api.ts">
+        <metrics statements="4" coveredstatements="4" conditionals="0" coveredconditionals="0" methods="2" coveredmethods="2"/>
+        <line num="13" count="2" type="stmt"/>
+        <line num="14" count="3" type="stmt"/>
+        <line num="23" count="2" type="stmt"/>
+        <line num="24" count="2" type="stmt"/>
+      </file>
+      <file name="auth.ts" path="/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend/src/shared/types/auth.ts">
+        <metrics statements="5" coveredstatements="5" conditionals="2" coveredconditionals="2" methods="1" coveredmethods="1"/>
+        <line num="1" count="2" type="cond" truecount="2" falsecount="0"/>
+        <line num="2" count="2" type="stmt"/>
+        <line num="3" count="2" type="stmt"/>
+        <line num="4" count="2" type="stmt"/>
+        <line num="5" count="2" type="stmt"/>
+      </file>
+    </package>
+  </project>
+</coverage>
