@@ -66,6 +66,12 @@ describe("GET /assets handler", () => {
         "ASSET_PR_004",
       ]),
     );
+
+    // Deep assert: _tenant envelope reflects the caller's identity
+    expect(body.data._tenant).toEqual({
+      orgId: "SOLFACIL",
+      role: "SOLFACIL_ADMIN",
+    });
   });
 
   it("ORG_ENERGIA_001 only receives its own assets", async () => {
@@ -78,15 +84,26 @@ describe("GET /assets handler", () => {
     expect(body.success).toBe(true);
     expect(body.data.assets).toHaveLength(2);
 
-    // All returned assets belong to ORG_ENERGIA_001
-    for (const asset of body.data.assets) {
-      expect(asset.orgId).toBe("ORG_ENERGIA_001");
-    }
+    // Deep assert: every asset belongs to this org (no cross-tenant leak)
+    expect(
+      body.data.assets.every(
+        (a: { orgId: string }) => a.orgId === "ORG_ENERGIA_001",
+      ),
+    ).toBe(true);
 
+    // Cross-contamination guard: ORG_SOLARBR_002 assets must be absent
     const ids = body.data.assets.map((a: { id: string }) => a.id);
     expect(ids).toEqual(
       expect.arrayContaining(["ASSET_SP_001", "ASSET_RJ_002"]),
     );
+    expect(ids).not.toContain("ASSET_MG_003");
+    expect(ids).not.toContain("ASSET_PR_004");
+
+    // Deep assert: _tenant envelope matches caller's orgId and role
+    expect(body.data._tenant).toEqual({
+      orgId: "ORG_ENERGIA_001",
+      role: "ORG_MANAGER",
+    });
   });
 
   it("ORG_SOLARBR_002 only receives its own assets", async () => {
@@ -99,14 +116,26 @@ describe("GET /assets handler", () => {
     expect(body.success).toBe(true);
     expect(body.data.assets).toHaveLength(2);
 
-    for (const asset of body.data.assets) {
-      expect(asset.orgId).toBe("ORG_SOLARBR_002");
-    }
+    // Deep assert: every asset belongs to this org (no cross-tenant leak)
+    expect(
+      body.data.assets.every(
+        (a: { orgId: string }) => a.orgId === "ORG_SOLARBR_002",
+      ),
+    ).toBe(true);
 
+    // Cross-contamination guard: ORG_ENERGIA_001 assets must be absent
     const ids = body.data.assets.map((a: { id: string }) => a.id);
     expect(ids).toEqual(
       expect.arrayContaining(["ASSET_MG_003", "ASSET_PR_004"]),
     );
+    expect(ids).not.toContain("ASSET_SP_001");
+    expect(ids).not.toContain("ASSET_RJ_002");
+
+    // Deep assert: _tenant envelope matches caller's orgId and role
+    expect(body.data._tenant).toEqual({
+      orgId: "ORG_SOLARBR_002",
+      role: "ORG_OPERATOR",
+    });
   });
 
   it("returns 401 when no Authorization token is provided", async () => {
