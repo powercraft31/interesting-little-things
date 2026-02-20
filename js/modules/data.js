@@ -226,9 +226,10 @@ export async function initData() {
         fetchBff("/trades"),
       ]);
       dashboardData = dashboard;
-      workingAssets = deepCopy(assets);
+      // BFF /assets returns { assets: [...], _tenant: {...} } after RBAC upgrade
+      workingAssets = deepCopy(Array.isArray(assets) ? assets : assets.assets);
       revenueTrendData = revenueTrend;
-      tradesData = trades;
+      tradesData = Array.isArray(trades) ? deepCopy(trades) : deepCopy(trades.trades ?? trades);
       console.log("[SOLFACIL] Data loaded from BFF");
       return;
     } catch (err) {
