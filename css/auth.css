@@ -14,11 +14,13 @@
     background: rgba(10, 10, 30, 0.92);
     backdrop-filter: blur(8px);
     opacity: 0;
+    pointer-events: none;  /* invisible overlay must NOT intercept clicks */
     transition: opacity 0.4s ease;
 }
 
 .login-modal-overlay.login-modal-visible {
     opacity: 1;
+    pointer-events: all;  /* only block clicks when actually visible */
 }
 
 /* ---- Login Card ---- */
