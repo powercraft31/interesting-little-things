@@ -1669,6 +1669,7 @@ html, body {
 .m3-editor,
 .m4-editor,
 .m5-editor,
+.m6-editor,
 .m7-editor {
   display: flex;
   flex-direction: column;
@@ -1914,4 +1915,34 @@ html, body {
   0%   { background: rgba(16, 185, 129, 0.25); }
   50%  { background: rgba(16, 185, 129, 0.10); }
   100% { background: transparent; }
+}
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   PHASE 4.1: M6 Identity & Tenant — RBAC Policies
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── M6 Form Grid (2x2 layout) ─────────────────────────────────── */
+.m6-form-grid {
+  grid-template-columns: repeat(2, 1fr);
+}
+
+/* ─── M6 MFA Toggle Row ─────────────────────────────────────────── */
+.m6-mfa-field {
+  justify-content: center;
+}
+
+.m6-mfa-row {
+  padding: var(--space-3) 0;
+}
+
+/* ─── M6 Input Focus Accent ──────────────────────────────────────── */
+.m6-editor .cp-input:focus {
+  border-color: var(--accent-m6);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
+}
+
+.m6-editor .cp-select:focus {
+  border-color: var(--accent-m6);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }

@@ -89,7 +89,7 @@ var MODULE_REGISTRY = {
     apiPath: "/admin/rbac-policies",
     schemaFile: "rbac-policies.schema.json",
     cacheTTL: "30 min",
-    editable: false,
+    editable: true,
     renderer: "renderM6RbacPolicies",
   },
   m7: {
@@ -635,13 +635,19 @@ function renderModuleContent(mod) {
     return;
   }
 
+  // Route M6 to its dedicated renderer
+  if (mod.id === "m6") {
+    renderM6RbacPolicies(container, mod);
+    return;
+  }
+
   // Route M7 to its dedicated renderer
   if (mod.id === "m7") {
     renderM7ApiQuotas(container, mod);
     return;
   }
 
-  // Default placeholder for other modules (M6 read-only)
+  // Default placeholder for other modules
   renderModulePlaceholder(container, mod);
 }
 
@@ -1534,7 +1540,12 @@ function m4ShowConfirmModal() {
       "<br>確認後立即生效。是否確認？",
     onConfirm: function () {
       showToast("✓ 計費規則已發佈至 AppConfig", "success", 3000);
-      addAuditEntry("M4", "Billing", "DEPLOY", "billing-rules → BAKED");
+      addAuditEntry(
+        "M4",
+        "Market & Billing",
+        "DEPLOY",
+        "billing-rules \u2192 BAKED",
+      );
     },
   });
 }
@@ -1723,7 +1734,206 @@ function m5ShowConfirmModal() {
     onConfirm: function () {
       m5InitOriginal(); // reset original to current
       showToast("✓ Feature Flags 已發佈至 AppConfig", "success", 3000);
-      addAuditEntry("M5", "BFF", "DEPLOY", "feature-flags → BAKED");
+      addAuditEntry(
+        "M5",
+        "Frontend BFF",
+        "DEPLOY",
+        "feature-flags \u2192 BAKED",
+      );
+    },
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SECTION 7b: M6 Identity & Tenant — RBAC Policies
+   ═══════════════════════════════════════════════════════════════════ */
+
+var m6State = {
+  session_timeout_min: 60,
+  max_failed_logins: 5,
+  default_tenant_role: "viewer",
+  mfa_required: false,
+};
+
+function renderM6RbacPolicies(container, mod) {
+  var accent = mod.accent;
+
+  var roleOptions =
+    '<option value="viewer"' +
+    (m6State.default_tenant_role === "viewer" ? " selected" : "") +
+    ">" +
+    "viewer (\u552F\u8B80)" +
+    "</option>" +
+    '<option value="operator"' +
+    (m6State.default_tenant_role === "operator" ? " selected" : "") +
+    ">" +
+    "operator (\u64CD\u4F5C\u54E1)" +
+    "</option>" +
+    '<option value="admin"' +
+    (m6State.default_tenant_role === "admin" ? " selected" : "") +
+    ">" +
+    "admin (\u7BA1\u7406\u54E1)" +
+    "</option>";
+
+  var mfaChecked = m6State.mfa_required ? " checked" : "";
+  var mfaStatusText = m6State.mfa_required
+    ? "\u5DF2\u555F\u7528"
+    : "\u5DF2\u505C\u7528";
+  var mfaStatusClass = m6State.mfa_required
+    ? "cp-toggle-status--on"
+    : "cp-toggle-status--off";
+
+  container.innerHTML =
+    '<div class="fade-in m6-editor">' +
+    // Header
+    '<div class="module-header">' +
+    '  <div class="module-header-title" style="color:' +
+    accent +
+    '">' +
+    '    <i class="material-icons">' +
+    mod.icon +
+    "</i>" +
+    "    Identity &amp; Tenant &mdash; Access Control &amp; RBAC Policies" +
+    "  </div>" +
+    '  <div class="module-header-meta">' +
+    '    <span class="meta-tag">Profile: ' +
+    mod.appConfigProfile +
+    "</span>" +
+    '    <span class="meta-tag">TTL: ' +
+    mod.cacheTTL +
+    "</span>" +
+    '    <span class="meta-tag">Table: ' +
+    mod.m8Table +
+    "</span>" +
+    "  </div>" +
+    "</div>" +
+    // Form Section
+    '<div class="cp-section">' +
+    '  <div class="cp-section-title">' +
+    '    <i class="material-icons" style="color:' +
+    accent +
+    '">security</i>' +
+    "    RBAC \u8A8D\u8B49\u8A2D\u5B9A" +
+    "  </div>" +
+    '  <div class="cp-form-grid m6-form-grid">' +
+    '    <div class="cp-field">' +
+    '      <label class="cp-label" for="m6-session-timeout">\u767B\u5165\u903E\u6642 (Session Timeout, min)</label>' +
+    '      <input type="number" id="m6-session-timeout" class="cp-input" min="5" max="480" step="1" value="' +
+    m6State.session_timeout_min +
+    '">' +
+    '      <div class="cp-hint">Range: 5 \u2013 480</div>' +
+    "    </div>" +
+    '    <div class="cp-field">' +
+    '      <label class="cp-label" for="m6-max-failed-logins">\u6700\u5927\u5931\u6557\u767B\u5165\u6B21\u6578</label>' +
+    '      <input type="number" id="m6-max-failed-logins" class="cp-input" min="3" max="10" step="1" value="' +
+    m6State.max_failed_logins +
+    '">' +
+    '      <div class="cp-hint">Range: 3 \u2013 10</div>' +
+    "    </div>" +
+    '    <div class="cp-field">' +
+    '      <label class="cp-label" for="m6-default-role">\u9810\u8A2D\u79DF\u6236\u89D2\u8272 (Default Tenant Role)</label>' +
+    '      <select class="cp-select" id="m6-default-role">' +
+    roleOptions +
+    "      </select>" +
+    "    </div>" +
+    '    <div class="cp-field m6-mfa-field">' +
+    '      <label class="cp-label">\u5F37\u5236\u96D9\u56E0\u5B50\u9A57\u8B49 (MFA Required)</label>' +
+    '      <div class="cp-flag-controls m6-mfa-row">' +
+    '        <span class="cp-toggle-status ' +
+    mfaStatusClass +
+    '" id="m6-mfa-status">' +
+    mfaStatusText +
+    "</span>" +
+    '        <label class="cp-toggle-switch">' +
+    '          <input type="checkbox" class="cp-toggle-input" id="m6-mfa-toggle"' +
+    mfaChecked +
+    ">" +
+    '          <span class="cp-toggle-slider"></span>' +
+    "        </label>" +
+    "      </div>" +
+    "    </div>" +
+    "  </div>" +
+    "</div>" +
+    // Action Bar
+    '<div class="cp-action-bar">' +
+    '  <button class="btn btn-primary cp-btn-deploy" id="m6-btn-deploy" style="background:' +
+    accent +
+    '">' +
+    '    <i class="material-icons">rocket_launch</i> Deploy RBAC Policies' +
+    "  </button>" +
+    "</div>" +
+    "</div>";
+
+  m6BindEvents();
+}
+
+function m6BindEvents() {
+  var timeoutInput = document.getElementById("m6-session-timeout");
+  var failedInput = document.getElementById("m6-max-failed-logins");
+  var roleSelect = document.getElementById("m6-default-role");
+  var mfaToggle = document.getElementById("m6-mfa-toggle");
+  var btnDeploy = document.getElementById("m6-btn-deploy");
+
+  if (timeoutInput)
+    timeoutInput.addEventListener("input", function () {
+      m6State.session_timeout_min = parseInt(this.value, 10) || 60;
+    });
+  if (failedInput)
+    failedInput.addEventListener("input", function () {
+      m6State.max_failed_logins = parseInt(this.value, 10) || 5;
+    });
+  if (roleSelect)
+    roleSelect.addEventListener("change", function () {
+      m6State.default_tenant_role = this.value;
+    });
+  if (mfaToggle)
+    mfaToggle.addEventListener("change", function () {
+      m6State.mfa_required = this.checked;
+      var statusEl = document.getElementById("m6-mfa-status");
+      if (statusEl) {
+        statusEl.textContent = this.checked
+          ? "\u5DF2\u555F\u7528"
+          : "\u5DF2\u505C\u7528";
+        statusEl.className =
+          "cp-toggle-status " +
+          (this.checked ? "cp-toggle-status--on" : "cp-toggle-status--off");
+      }
+    });
+  if (btnDeploy) btnDeploy.addEventListener("click", m6ShowConfirmModal);
+}
+
+function m6ShowConfirmModal() {
+  showGenericConfirmModal({
+    id: "m6-confirm-modal",
+    accent: "#6366f1",
+    title: "\u78BA\u8A8D\u90E8\u7F72 RBAC Policies",
+    body:
+      "\u5373\u5C07\u66F4\u65B0 rbac-policies \u81F3 AppConfig\u3002" +
+      "<br>Session Timeout: <strong>" +
+      m6State.session_timeout_min +
+      " min</strong>" +
+      " | Max Failed Logins: <strong>" +
+      m6State.max_failed_logins +
+      "</strong>" +
+      " | Default Role: <strong>" +
+      m6State.default_tenant_role +
+      "</strong>" +
+      " | MFA: <strong>" +
+      (m6State.mfa_required ? "ON" : "OFF") +
+      "</strong>" +
+      "<br>\u78BA\u8A8D\u5F8C\u7ACB\u5373\u751F\u6548\u3002\u662F\u5426\u78BA\u8A8D\uFF1F",
+    onConfirm: function () {
+      showToast(
+        "\u2713 RBAC Policies \u5DF2\u767C\u4F48\u81F3 AppConfig",
+        "success",
+        3000,
+      );
+      addAuditEntry(
+        "M6",
+        "Identity & Tenant",
+        "DEPLOY",
+        "rbac-policies \u2192 BAKED",
+      );
     },
   });
 }
@@ -2054,7 +2264,12 @@ function addAuditEntry(moduleId, moduleName, action, detail) {
 var _origM1DeploySuccess = m1DeploySuccess;
 m1DeploySuccess = function () {
   _origM1DeploySuccess();
-  addAuditEntry("M1", "IoT Hub", "DEPLOY", "parser-rules → BAKED");
+  addAuditEntry(
+    "M1",
+    "IoT Hub",
+    "DEPLOY",
+    m1State.selectedVendor + " parser-rules \u2192 BAKED",
+  );
 };
 
 var _origM2DeploySuccess = m2DeploySuccess;
