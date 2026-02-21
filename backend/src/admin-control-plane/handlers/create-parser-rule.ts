@@ -1,8 +1,8 @@
 /**
- * M8 Admin Control Plane — Create Parser Rule
+ * M8 Admin 控制面板 — 创建解析规则
  *
- * Creates a new device parser rule for the caller's organization.
- * Validates input, then inserts with RLS active.
+ * 为调用方所属组织创建新的设备解析规则。
+ * 先做输入验证，再在 RLS 激活状态下插入记录。
  */
 import type {
   APIGatewayProxyEventV2,
@@ -23,13 +23,13 @@ import {
 } from "../../bff/middleware/tenant-context";
 
 // ---------------------------------------------------------------------------
-// DB pool
+// 数据库连接池
 // ---------------------------------------------------------------------------
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // ---------------------------------------------------------------------------
-// Validation
+// 输入验证
 // ---------------------------------------------------------------------------
 
 function validateParserRule(body: CreateDeviceParserRuleRequest): string | null {

@@ -1,18 +1,18 @@
 /**
- * Market & Billing — Calculate Profit
+ * 市场与计费 — 利润计算
  *
- * Pure computation Lambda: calculates revenue/cost/profit per asset per day
- * using Tarifa Branca weighted energy distribution.
+ * 纯计算 Lambda：使用白色电价加权能量分布，
+ * 按资产按天计算收入/成本/利润。
  *
- * Input: ProfitRequest event (direct invocation, not API Gateway).
- * No DB connection required — tariff data is passed in the event.
+ * 输入：ProfitRequest 事件（直接调用，非 API Gateway）。
+ * 无需数据库连接 — 电价数据通过事件传入。
  */
 import type { Handler } from 'aws-lambda';
 import { randomUUID } from 'crypto';
 import { ok, fail } from '../../shared/types/api';
 
 // ---------------------------------------------------------------------------
-// Types
+// 类型定义
 // ---------------------------------------------------------------------------
 
 interface Tariff {
@@ -35,7 +35,7 @@ interface ProfitRequest {
 }
 
 // ---------------------------------------------------------------------------
-// AppConfig — Dynamic Billing Rules
+// AppConfig — 动态计费规则
 // ---------------------------------------------------------------------------
 
 const APPCONFIG_BASE = process.env.APPCONFIG_BASE_URL ?? 'http://localhost:2772';
@@ -70,7 +70,7 @@ async function fetchBillingRules(orgId: string): Promise<typeof DEFAULT_BILLING_
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// 辅助函数
 // ---------------------------------------------------------------------------
 
 const TOTAL_HOURS = 24;
@@ -96,7 +96,7 @@ function isTariffComplete(t: Partial<Tariff> | undefined): t is Tariff {
 // ---------------------------------------------------------------------------
 
 export const handler: Handler = async (event: ProfitRequest) => {
-  // ── Auth gate: orgId required ─────────────────────────────────────────
+  // ── 鉴权门禁：必须提供 orgId ──────────────────────────────────────────
   if (!event.orgId) {
     return {
       statusCode: 401,
@@ -108,7 +108,7 @@ export const handler: Handler = async (event: ProfitRequest) => {
   const { orgId, assetId, date, energyKwh, tariff, operatingCostPerKwh, role } = event;
   const traceId = `vpp-${randomUUID()}`;
 
-  // ── Zero / negative energy → all zeros (not an error) ────────────────
+  // ── 零值或负值能量 → 全部归零（非错误）────────────────────────────────
   if (!energyKwh || energyKwh <= 0) {
     return {
       statusCode: 200,
@@ -130,31 +130,31 @@ export const handler: Handler = async (event: ProfitRequest) => {
     };
   }
 
-  // ── Validate tariff completeness ─────────────────────────────────────
+  // ── 验证电价数据完整性 ─────────────────────────────────────────────────
   if (!isTariffComplete(tariff)) {
     throw new Error('Missing tariff data');
   }
 
-  // ── Validate hours sum to 24 ─────────────────────────────────────────
+  // ── 验证时段小时数之和为 24 ────────────────────────────────────────────
   const hoursSum = tariff.peakHours + tariff.offPeakHours + tariff.intermediateHours;
   if (hoursSum !== TOTAL_HOURS) {
     throw new Error('Invalid tariff hours: must sum to 24');
   }
 
-  // ── Fetch dynamic billing rules from AppConfig ────────────────────────
+  // ── 从 AppConfig 获取动态计费规则 ──────────────────────────────────────
   const billingRules = await fetchBillingRules(orgId);
 
-  // ── Energy distribution (weighted by time-of-use) ────────────────────
+  // ── 能量分配（按分时电价加权）──────────────────────────────────────────
   const peakEnergy = round2(energyKwh * (tariff.peakHours / TOTAL_HOURS));
   const offPeakEnergy = round2(energyKwh * (tariff.offPeakHours / TOTAL_HOURS));
   const intermediateEnergy = round2(energyKwh * (tariff.intermediateHours / TOTAL_HOURS));
 
-  // ── Revenue per period ───────────────────────────────────────────────
+  // ── 各时段收入 ─────────────────────────────────────────────────────────
   const peakRevenue = round2(peakEnergy * tariff.peakRate);
   const offPeakRevenue = round2(offPeakEnergy * tariff.offPeakRate);
   const intermediateRevenue = round2(intermediateEnergy * tariff.intermediateRate);
 
-  // ── Totals ───────────────────────────────────────────────────────────
+  // ── 汇总 ──────────────────────────────────────────────────────────────
   const grossRevenue = round2(peakRevenue + offPeakRevenue + intermediateRevenue);
   const operatingCost = round2(energyKwh * (operatingCostPerKwh ?? 0) * billingRules.tariffPenaltyMultiplier);
   const profit = round2(grossRevenue - operatingCost);

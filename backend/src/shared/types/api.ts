@@ -1,12 +1,12 @@
 // ---------------------------------------------------------------------------
-// Domain entities
+// 领域实体
 // ---------------------------------------------------------------------------
 
 export interface Organization {
   readonly orgId: string;
   readonly name: string;
   readonly planTier: string;
-  readonly metadata?: Record<string, unknown>; // JSONB flexible extension slot
+  readonly metadata?: Record<string, unknown>; // JSONB 灵活扩展字段
   readonly createdAt: string;
   readonly updatedAt: string;
 }
@@ -18,18 +18,18 @@ export interface Asset {
   readonly ratedPowerKw: number;
   readonly location: string | null;
   readonly status: string;
-  readonly metadata?: Record<string, unknown>; // JSONB flexible extension slot
+  readonly metadata?: Record<string, unknown>; // JSONB 灵活扩展字段
   readonly createdAt: string;
   readonly updatedAt: string;
 }
 
 // ---------------------------------------------------------------------------
-// API response envelope
+// API 响应信封
 // ---------------------------------------------------------------------------
 
 /**
- * Shared API response envelope.
- * All BFF handlers return this shape.
+ * 统一 API 响应信封。
+ * 所有 BFF handler 返回此结构。
  */
 export interface ApiResponse<T = unknown> {
   readonly success: boolean;
@@ -38,7 +38,7 @@ export interface ApiResponse<T = unknown> {
   readonly timestamp: string;
 }
 
-/** Convenience factory for success responses */
+/** 成功响应工厂函数 */
 export function ok<T>(data: T): ApiResponse<T> {
   return {
     success: true,
@@ -48,7 +48,7 @@ export function ok<T>(data: T): ApiResponse<T> {
   };
 }
 
-/** Convenience factory for error responses */
+/** 错误响应工厂函数 */
 export function fail(message: string): ApiResponse<null> {
   return {
     success: false,
@@ -59,7 +59,7 @@ export function fail(message: string): ApiResponse<null> {
 }
 
 // ==========================================
-// M8 Admin Control Plane Types
+// M8 Admin 控制面板类型定义
 // ==========================================
 
 export interface DeviceParserRule {
@@ -90,7 +90,7 @@ export interface VppStrategy {
   readonly updatedAt: string;
 }
 
-// Request payloads
+// 请求负载
 export interface CreateDeviceParserRuleRequest {
   readonly manufacturer: string;
   readonly modelVersion?: string;
@@ -125,7 +125,7 @@ export interface CreateVppStrategyRequest {
   readonly isDefault?: boolean;
 }
 
-// Response envelopes (M8 Admin API shape)
+// 响应信封（M8 Admin API 格式）
 export interface AdminListResponse<T> {
   readonly data: T[];
   readonly total: number;

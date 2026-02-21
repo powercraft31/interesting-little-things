@@ -1,12 +1,12 @@
 /**
- * DR Dispatcher — Collect Response Handler
+ * DR 调度器 — 收集设备响应 Handler
  *
- * Triggered by AWS IoT Topic Rule intercepting device mode-change responses
- * on 'solfacil/+/+/response/mode-change'.
+ * 由 AWS IoT Topic Rule 触发，拦截设备在
+ * 'solfacil/+/+/response/mode-change' 主题上的模式切换响应。
  *
- * Responsibilities:
- *   1. Update the dispatch_tracker DynamoDB record from EXECUTING → COMPLETED | ERROR
- *   2. Publish DRDispatchCompleted event to EventBridge for downstream consumers
+ * 职责：
+ *   1. 将 dispatch_tracker DynamoDB 记录从 EXECUTING 更新为 COMPLETED | ERROR
+ *   2. 发布 DRDispatchCompleted 事件到 EventBridge，供下游消费者使用
  */
 import { DynamoDBClient } from "@aws-sdk/client-dynamodb";
 import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb";
@@ -16,7 +16,7 @@ import {
 } from "@aws-sdk/client-eventbridge";
 
 // ---------------------------------------------------------------------------
-// Types
+// 类型定义
 // ---------------------------------------------------------------------------
 
 type DeviceStatus = "COMPLETED" | "ERROR";
@@ -30,14 +30,14 @@ interface DeviceResponseEvent {
 }
 
 // ---------------------------------------------------------------------------
-// Environment
+// 环境变量
 // ---------------------------------------------------------------------------
 
 const TABLE_NAME = process.env.TABLE_NAME ?? "";
 const EVENT_BUS_NAME = process.env.EVENT_BUS_NAME ?? "";
 
 // ---------------------------------------------------------------------------
-// SDK clients (instantiated once per Lambda cold-start)
+// SDK 客户端（每次 Lambda 冷启动实例化一次）
 // ---------------------------------------------------------------------------
 
 const ddbDoc = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -59,7 +59,7 @@ export async function handler(event: DeviceResponseEvent): Promise<void> {
     ...(errorCode ? { errorCode } : {}),
   });
 
-  // ── Step 1: Update dispatch record in DynamoDB ──────────────────────────
+  // ── 步骤 1：更新 DynamoDB 中的调度记录 ─────────────────────────────────
   try {
     await ddbDoc.send(
       new UpdateCommand({
@@ -80,8 +80,8 @@ export async function handler(event: DeviceResponseEvent): Promise<void> {
       status,
     });
   } catch (err) {
-    // ConditionalCheckFailedException means the record is no longer EXECUTING
-    // (already processed or timed out) — log and continue to keep idempotency
+    // ConditionalCheckFailedException 表示记录已不处于 EXECUTING 状态
+    //（已被处理或已超时）— 记录日志并继续，保持幂等性
     const error = err as { name?: string };
     if (error.name === "ConditionalCheckFailedException") {
       console.info(
@@ -100,7 +100,7 @@ export async function handler(event: DeviceResponseEvent): Promise<void> {
     throw err;
   }
 
-  // ── Step 2: Publish DRDispatchCompleted to EventBridge ──────────────────
+  // ── 步骤 2：发布 DRDispatchCompleted 到 EventBridge ────────────────────
   try {
     await eventBridge.send(
       new PutEventsCommand({
@@ -129,7 +129,7 @@ export async function handler(event: DeviceResponseEvent): Promise<void> {
       error: err,
     });
 
-    // Rollback: revert DB status to EXECUTING to prevent permanent data inconsistency
+    // 回滚：将数据库状态恢复为 EXECUTING，防止永久数据不一致
     try {
       await ddbDoc.send(
         new UpdateCommand({

@@ -1,10 +1,9 @@
 /**
- * Market & Billing — Get Tariff Schedule
+ * 市场与计费 — 查询电价时间表
  *
- * Queries tariff_schedules via PostgreSQL with RLS tenant isolation.
- * The RLS "shield" is activated by SET LOCAL app.current_org_id inside
- * an explicit transaction (BEGIN/COMMIT), ensuring a tenant can only
- * see its own rows.
+ * 通过 PostgreSQL 配合 RLS 租户隔离查询 tariff_schedules。
+ * RLS "防护罩"通过显式事务（BEGIN/COMMIT）中的
+ * SET LOCAL app.current_org_id 激活，确保租户只能查看自己的数据行。
  */
 import type {
   APIGatewayProxyEventV2,
@@ -21,7 +20,7 @@ import {
 } from "../../bff/middleware/tenant-context";
 
 // ---------------------------------------------------------------------------
-// DB pool (instantiated once per Lambda cold-start)
+// 数据库连接池（每次 Lambda 冷启动实例化一次）
 // ---------------------------------------------------------------------------
 
 const pool = new Pool({
@@ -29,7 +28,7 @@ const pool = new Pool({
 });
 
 // ---------------------------------------------------------------------------
-// Allowed roles for this endpoint
+// 此端点允许的角色
 // ---------------------------------------------------------------------------
 
 const ALLOWED_ROLES = [
@@ -62,7 +61,7 @@ export async function handler(
   try {
     client = await pool.connect();
 
-    // ── Explicit transaction for SET LOCAL to take effect ────────────
+    // ── 显式事务，使 SET LOCAL 生效 ──────────────────────────────────
     await client.query("BEGIN");
     await client.query("SET LOCAL app.current_org_id = $1", [tenant.orgId]);
 

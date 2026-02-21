@@ -1,18 +1,17 @@
 /**
- * Optimization Engine — Run Optimization Handler
+ * 优化引擎 — 运行优化 Handler
  *
- * Evaluates battery SOC + tariff period to determine optimal charge/discharge
- * mode (energy arbitrage). Publishes the decision to EventBridge so downstream
- * services (DR Dispatcher) can act on it.
+ * 评估电池 SOC 与电价时段，确定最优充放电模式（能量套利）。
+ * 将决策发布到 EventBridge，供下游服务（DR Dispatcher）执行。
  *
- * Arbitrage rules (evaluated in order):
- *   1. Peak + SOC > minSoc  → discharge (sell expensive energy)
- *   2. Off-peak + SOC < maxSoc → charge (buy cheap energy)
- *   3. Otherwise → idle (protect battery / intermediate period)
+ * 套利规则（按顺序评估）：
+ *   1. 峰时 + SOC > minSoc → 放电（卖出高价电力）
+ *   2. 谷时 + SOC < maxSoc → 充电（买入低价电力）
+ *   3. 其他情况 → 待机（保护电池 / 平时段）
  *
- * Thresholds (minSoc, maxSoc) are fetched dynamically from AppConfig
- * via the Lambda Extension Sidecar (http://localhost:2772).
- * Falls back to DEFAULT_STRATEGY when AppConfig is unavailable.
+ * 阈值（minSoc、maxSoc）通过 Lambda Extension Sidecar
+ * （http://localhost:2772）从 AppConfig 动态获取。
+ * AppConfig 不可用时降级使用 DEFAULT_STRATEGY。
  */
 import {
   EventBridgeClient,
@@ -20,7 +19,7 @@ import {
 } from '@aws-sdk/client-eventbridge';
 
 // ---------------------------------------------------------------------------
-// Types
+// 类型定义
 // ---------------------------------------------------------------------------
 
 interface OptimizationEvent {
@@ -57,7 +56,7 @@ interface VppStrategiesConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Environment & Constants
+// 环境变量与常量
 // ---------------------------------------------------------------------------
 
 const EVENT_BUS_NAME  = process.env.EVENT_BUS_NAME      ?? '';
@@ -73,13 +72,13 @@ const DEFAULT_STRATEGY: VppStrategyConfig = {
 };
 
 // ---------------------------------------------------------------------------
-// SDK client (instantiated once per Lambda cold-start)
+// SDK 客户端（每次 Lambda 冷启动实例化一次）
 // ---------------------------------------------------------------------------
 
 const eb = new EventBridgeClient({});
 
 // ---------------------------------------------------------------------------
-// AppConfig fetcher
+// AppConfig 获取器
 // ---------------------------------------------------------------------------
 
 async function fetchVppStrategy(orgId: string): Promise<VppStrategyConfig> {
@@ -102,7 +101,7 @@ export async function handler(event: OptimizationEvent): Promise<OptimizationRes
   const traceId = `vpp-${crypto.randomUUID()}`;
   const { orgId, assetId, soc, currentTariffPeriod } = event;
 
-  // ── Validation ────────────────────────────────────────────────────────
+  // ── 输入验证 ───────────────────────────────────────────────────────────
   if (!orgId || !assetId) {
     throw new Error('Missing required field');
   }
@@ -110,10 +109,10 @@ export async function handler(event: OptimizationEvent): Promise<OptimizationRes
     throw new Error('Invalid SOC value');
   }
 
-  // ── Fetch dynamic strategy from AppConfig ─────────────────────────────
+  // ── 从 AppConfig 获取动态策略 ──────────────────────────────────────────
   const strategy = await fetchVppStrategy(orgId);
 
-  // ── Arbitrage decision ────────────────────────────────────────────────
+  // ── 套利决策 ───────────────────────────────────────────────────────────
   const targetMode = resolveTargetMode(currentTariffPeriod, soc, strategy.minSoc, strategy.maxSoc);
 
   console.info(JSON.stringify({
@@ -128,7 +127,7 @@ export async function handler(event: OptimizationEvent): Promise<OptimizationRes
     tariffPeriod: currentTariffPeriod,
   }));
 
-  // ── Publish to EventBridge ────────────────────────────────────────────
+  // ── 发布到 EventBridge ─────────────────────────────────────────────────
   const dispatchId = crypto.randomUUID();
   const timestamp = new Date().toISOString();
 
@@ -177,7 +176,7 @@ export async function handler(event: OptimizationEvent): Promise<OptimizationRes
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// 辅助函数
 // ---------------------------------------------------------------------------
 
 function resolveTargetMode(

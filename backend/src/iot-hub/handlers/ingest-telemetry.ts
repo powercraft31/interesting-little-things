@@ -1,12 +1,12 @@
 /**
- * IoT Hub — Ingest Telemetry Handler
+ * IoT Hub — 遥测数据采集 Handler
  *
- * Receives IoT Rule events from the MQTT topic `solfacil/+/+/telemetry`.
- * Normalises vendor-specific payloads via:
- *   1. AppConfig dynamic parser rules (fetched from Lambda Extension Sidecar)
- *   2. Anti-Corruption Layer (ACL) static adapters (fallback)
- * Then writes multi-measure records to Amazon Timestream and publishes
- * a TelemetryIngested event to EventBridge with a traceId for distributed tracing.
+ * 接收来自 MQTT 主题 `solfacil/+/+/telemetry` 的 IoT Rule 事件。
+ * 通过以下方式规范化厂商专属负载：
+ *   1. AppConfig 动态解析规则（从 Lambda Extension Sidecar 获取）
+ *   2. 反腐层（ACL）静态适配器（降级方案）
+ * 然后将多指标记录写入 Amazon Timestream，并发布包含 traceId 的
+ * TelemetryIngested 事件到 EventBridge，用于分布式追踪。
  */
 import {
   TimestreamWriteClient,
@@ -28,7 +28,7 @@ export interface TelemetryEvent {
     power: number;    // kW
     voltage: number;  // V
     current: number;  // A
-    soc?: number;     // % optional
+    soc?: number;     // % 可选
   };
 }
 
@@ -39,7 +39,7 @@ interface IngestResult {
 }
 
 // ---------------------------------------------------------------------------
-// AppConfig types
+// AppConfig 类型定义
 // ---------------------------------------------------------------------------
 
 interface ParserRule {
@@ -52,7 +52,7 @@ interface ParserRulesConfig {
 }
 
 // ---------------------------------------------------------------------------
-// Cold-start: clients & constants
+// 冷启动：客户端与常量
 // ---------------------------------------------------------------------------
 
 const tsClient = new TimestreamWriteClient({});
@@ -64,7 +64,7 @@ const APPCONFIG_ENV  = process.env.APPCONFIG_ENV      ?? 'dev';
 const EVENT_BUS_NAME = process.env.EVENT_BUS_NAME     ?? '';
 
 // ---------------------------------------------------------------------------
-// AppConfig fetcher
+// AppConfig 获取器
 // ---------------------------------------------------------------------------
 
 async function fetchParserRules(orgId: string): Promise<Record<string, ParserRule>> {
@@ -80,7 +80,7 @@ async function fetchParserRules(orgId: string): Promise<Record<string, ParserRul
 }
 
 // ---------------------------------------------------------------------------
-// Dynamic mapping engine
+// 动态映射引擎
 // ---------------------------------------------------------------------------
 
 function applyDynamicMapping(
@@ -95,7 +95,7 @@ function applyDynamicMapping(
     }
   }
 
-  // Apply unit conversions (e.g., W → kW: factor = 0.001)
+  // 应用单位转换（例如 W → kW：factor = 0.001）
   if (rule.unitConversions) {
     for (const [destField, conv] of Object.entries(rule.unitConversions)) {
       if (typeof mapped[destField] === 'number') {
@@ -116,12 +116,12 @@ export async function handler(event: unknown): Promise<IngestResult> {
   const raw = event as Record<string, unknown>;
   const orgId = raw.orgId as string | undefined;
 
-  // --- Validation (orgId always at top level, injected by IoT Rule) --------
+  // --- 验证（orgId 始终在顶层，由 IoT Rule 注入）----------------------------
   if (!orgId) {
     throw new Error('Missing required field: orgId');
   }
 
-  // --- ACL: normalize vendor-specific payloads -----------------------------
+  // --- ACL：规范化厂商专属负载 -----------------------------------------------
   let deviceId: string;
   let timestamp: string;
   let power: number;
@@ -129,7 +129,7 @@ export async function handler(event: unknown): Promise<IngestResult> {
   let current: number | undefined;
   let soc: number | undefined;
 
-  // Try AppConfig dynamic parser rules first
+  // 优先尝试 AppConfig 动态解析规则
   const parserRules = await fetchParserRules(orgId);
   const manufacturer = (raw.manufacturer as string | undefined) ?? 'native';
   const rule = parserRules[manufacturer];
@@ -143,7 +143,7 @@ export async function handler(event: unknown): Promise<IngestResult> {
     current   = mapped.current as number | undefined;
     soc       = mapped.soc as number | undefined;
   } else {
-    // Fall back to existing ACL resolveAdapter logic
+    // 降级使用现有 ACL resolveAdapter 逻辑
     try {
       const adapter = resolveAdapter(event);
       const telemetry = adapter.normalize(event, orgId);
@@ -154,7 +154,7 @@ export async function handler(event: unknown): Promise<IngestResult> {
       current   = telemetry.metrics.current;
       soc       = telemetry.metrics.soc;
     } catch {
-      // Fallback: legacy TelemetryEvent shape (structured metrics object)
+      // 降级：使用旧版 TelemetryEvent 格式（结构化 metrics 对象）
       const e = raw as unknown as TelemetryEvent;
       deviceId  = e.deviceId ?? '';
       timestamp = e.timestamp ?? new Date().toISOString();
@@ -169,7 +169,7 @@ export async function handler(event: unknown): Promise<IngestResult> {
     throw new Error('Missing required field: deviceId');
   }
 
-  // --- Build MeasureValues ------------------------------------------------
+  // --- 构建 MeasureValues ---------------------------------------------------
   const measureValues: MeasureValue[] = [
     { Name: 'power', Value: String(power), Type: 'DOUBLE' },
   ];
@@ -190,7 +190,7 @@ export async function handler(event: unknown): Promise<IngestResult> {
     });
   }
 
-  // --- Build Timestream record --------------------------------------------
+  // --- 构建 Timestream 记录 -------------------------------------------------
   const records: _Record[] = [
     {
       Dimensions: [
@@ -205,7 +205,7 @@ export async function handler(event: unknown): Promise<IngestResult> {
     },
   ];
 
-  // --- Write to Timestream ------------------------------------------------
+  // --- 写入 Timestream ------------------------------------------------------
   const command = new WriteRecordsCommand({
     DatabaseName: process.env.TS_DATABASE_NAME,
     TableName: process.env.TS_TABLE_NAME,
@@ -214,7 +214,7 @@ export async function handler(event: unknown): Promise<IngestResult> {
 
   await tsClient.send(command);
 
-  // --- Publish TelemetryIngested event with traceId -----------------------
+  // --- 发布包含 traceId 的 TelemetryIngested 事件 ---------------------------
   if (EVENT_BUS_NAME) {
     await ebClient.send(new PutEventsCommand({
       Entries: [{

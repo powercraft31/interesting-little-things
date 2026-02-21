@@ -1,8 +1,8 @@
 /**
- * M8 Admin Control Plane — Get Parser Rules
+ * M8 Admin 控制面板 — 查询解析规则
  *
- * Lists device parser rules for the caller's organization.
- * RLS is activated via SET LOCAL inside an explicit transaction.
+ * 列出调用方所属组织的设备解析规则。
+ * 通过显式事务中的 SET LOCAL 激活 RLS。
  */
 import type {
   APIGatewayProxyEventV2,
@@ -19,13 +19,13 @@ import {
 } from "../../bff/middleware/tenant-context";
 
 // ---------------------------------------------------------------------------
-// DB pool (instantiated once per Lambda cold-start)
+// 数据库连接池（每次 Lambda 冷启动实例化一次）
 // ---------------------------------------------------------------------------
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // ---------------------------------------------------------------------------
-// Allowed roles: ORG_MANAGER or above
+// 允许的角色：ORG_MANAGER 及以上
 // ---------------------------------------------------------------------------
 
 const ALLOWED_ROLES = [Role.ORG_MANAGER];

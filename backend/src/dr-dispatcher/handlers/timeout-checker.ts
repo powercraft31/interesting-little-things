@@ -1,12 +1,12 @@
 /**
- * DR Dispatcher — Timeout Checker Handler
+ * DR 调度器 — 超时检查 Handler
  *
- * Triggered by SQS delay queue messages after the configured timeout window.
+ * 由 SQS 延迟队列消息在配置的超时窗口后触发。
  *
- * For each message:
- *   1. Read the dispatch record from DynamoDB
- *   2. If still EXECUTING → mark as TIMEOUT and publish DRDispatchCompleted
- *   3. If already COMPLETED / ERROR / FAILED → skip (idempotent)
+ * 对每条消息：
+ *   1. 从 DynamoDB 读取调度记录
+ *   2. 若仍为 EXECUTING → 标记为 TIMEOUT 并发布 DRDispatchCompleted
+ *   3. 若已为 COMPLETED / ERROR / FAILED → 跳过（幂等处理）
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import {
@@ -21,7 +21,7 @@ import {
 import type { SQSEvent } from 'aws-lambda';
 
 // ---------------------------------------------------------------------------
-// Types
+// 类型定义
 // ---------------------------------------------------------------------------
 
 interface TimeoutMessage {
@@ -38,20 +38,20 @@ interface DispatchRecord {
 }
 
 // ---------------------------------------------------------------------------
-// Terminal statuses — no further transitions allowed
+// 终态 — 不允许再进行状态转换
 // ---------------------------------------------------------------------------
 
 const TERMINAL_STATUSES = new Set(['COMPLETED', 'ERROR', 'FAILED', 'TIMEOUT']);
 
 // ---------------------------------------------------------------------------
-// Environment
+// 环境变量
 // ---------------------------------------------------------------------------
 
 const TABLE_NAME = process.env.TABLE_NAME ?? '';
 const EVENT_BUS_NAME = process.env.EVENT_BUS_NAME ?? '';
 
 // ---------------------------------------------------------------------------
-// SDK clients (instantiated once per Lambda cold-start)
+// SDK 客户端（每次 Lambda 冷启动实例化一次）
 // ---------------------------------------------------------------------------
 
 const ddbDoc = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -82,7 +82,7 @@ export async function handler(event: SQSEvent): Promise<void> {
       dispatchId, assetId,
     }));
 
-    // ── Step 1: Read current dispatch record ────────────────────────────
+    // ── 步骤 1：读取当前调度记录 ─────────────────────────────────────────
     let dispatch: DispatchRecord | undefined;
     try {
       const result = await ddbDoc.send(
@@ -115,7 +115,7 @@ export async function handler(event: SQSEvent): Promise<void> {
       continue;
     }
 
-    // ── Step 2: Idempotency — skip if already in terminal state ─────────
+    // ── 步骤 2：幂等处理 — 若已为终态则跳过 ──────────────────────────────
     if (TERMINAL_STATUSES.has(dispatch.status)) {
       console.info(JSON.stringify({
         level: 'INFO',
@@ -128,7 +128,7 @@ export async function handler(event: SQSEvent): Promise<void> {
       continue;
     }
 
-    // ── Step 3: Mark as TIMEOUT ─────────────────────────────────────────
+    // ── 步骤 3：标记为 TIMEOUT ──────────────────────────────────────────
     const now = new Date().toISOString();
     try {
       await ddbDoc.send(
@@ -175,7 +175,7 @@ export async function handler(event: SQSEvent): Promise<void> {
       throw err;
     }
 
-    // ── Step 4: Publish DRDispatchCompleted (TIMEOUT) to EventBridge ────
+    // ── 步骤 4：发布 DRDispatchCompleted（TIMEOUT）到 EventBridge ────────
     try {
       await eventBridge.send(
         new PutEventsCommand({

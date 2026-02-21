@@ -5,9 +5,9 @@ import { extractTenantContext, requireRole, apiError } from '../middleware/tenan
 
 /**
  * GET /dashboard
- * Returns aggregated KPIs for the VPP dashboard:
- * - Algorithm KPIs (alpha, mape, selfConsumption)
- * - Revenue breakdown (doughnut chart data)
+ * 返回 VPP 仪表盘的聚合 KPI：
+ * - 算法 KPI（alpha、mape、selfConsumption）
+ * - 收入分布（环形图数据）
  */
 export async function handler(
   event: APIGatewayProxyEventV2,

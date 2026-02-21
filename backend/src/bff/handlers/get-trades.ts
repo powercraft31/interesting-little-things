@@ -5,8 +5,8 @@ import { extractTenantContext, requireRole, apiError } from '../middleware/tenan
 
 /**
  * GET /trades
- * Returns today's trade schedule.
- * Field names match the frontend INITIAL_DATA.trades shape exactly.
+ * 返回今日交易计划。
+ * 字段名与前端 INITIAL_DATA.trades 结构完全一致。
  */
 export async function handler(
   event: APIGatewayProxyEventV2,

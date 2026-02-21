@@ -1,14 +1,14 @@
 import { StandardTelemetry } from './StandardTelemetry';
 import { TelemetryAdapter } from './TelemetryAdapter';
 
-/** Simulated Huawei FusionSolar payload shape */
+/** 模拟华为 FusionSolar 负载格式 */
 interface HuaweiPayload {
-  devSn: string;            // Huawei: devSn → our: deviceId
-  collectTime: number;      // Huawei: Unix ms → our: ISO 8601
+  devSn: string;            // 华为：devSn → 我方：deviceId
+  collectTime: number;      // 华为：Unix 毫秒 → 我方：ISO 8601
   dataItemMap: {
-    active_power?: number;  // Huawei: W → our: kW (÷1000)
-    battery_soc?: number;   // Huawei: % (0-100) → passthrough
-    mppt_total_cap?: number;// Huawei: kWh — ignored
+    active_power?: number;  // 华为：W → 我方：kW（÷1000）
+    battery_soc?: number;   // 华为：%（0-100）→ 透传
+    mppt_total_cap?: number;// 华为：kWh — 忽略
   };
 }
 

@@ -1,9 +1,9 @@
 /**
- * Combined HTTPS server for VPP demo testing without AWS deployment.
- * Serves:
- *   - API routes at /api/* (wraps Lambda handlers)
- *   - Static frontend files at /
- * Runs on port 8443 with HTTPS using the existing self-signed cert.
+ * VPP 演示测试用的合并 HTTPS 服务器，无需 AWS 部署。
+ * 提供：
+ *   - /api/* 下的 API 路由（封装 Lambda handler）
+ *   - / 下的静态前端文件
+ * 使用现有自签名证书在端口 8443 上运行 HTTPS。
  */
 import https from 'https';
 import fs from 'fs';
@@ -22,9 +22,9 @@ type LambdaHandler = (event: APIGatewayProxyEventV2) => Promise<APIGatewayProxyR
 const PORT = 8443;
 const CERT_PATH = '/tmp/ashe_share/ssl/cert.pem';
 const KEY_PATH  = '/tmp/ashe_share/ssl/key.pem';
-const STATIC_ROOT = path.resolve(__dirname, '../../../');  // project root (frontend)
+const STATIC_ROOT = path.resolve(__dirname, '../../../');  // 项目根目录（前端）
 
-// ── helpers ──────────────────────────────────────────────────────────────────
+// ── 辅助函数 ─────────────────────────────────────────────────────────────────
 
 function makeStubEvent(method: string, rawPath: string): APIGatewayProxyEventV2 {
   return {
@@ -58,26 +58,26 @@ function wrapHandler(handler: LambdaHandler) {
   };
 }
 
-// ── app ───────────────────────────────────────────────────────────────────────
+// ── 应用 ──────────────────────────────────────────────────────────────────────
 
 const app = express();
 
 app.use(cors({ origin: '*' }));
 app.use(express.json());
 
-// API routes
+// API 路由
 app.get('/api/dashboard',     wrapHandler(dashboardHandler));
 app.get('/api/assets',        wrapHandler(assetsHandler));
 app.get('/api/revenue-trend', wrapHandler(revenueTrendHandler));
 app.get('/api/trades',        wrapHandler(tradesHandler));
 
-// Static frontend (served at /2026-02-15_SOLFACIL_VPP_Demo/)
+// 静态前端（服务路径 /2026-02-15_SOLFACIL_VPP_Demo/）
 app.use('/2026-02-15_SOLFACIL_VPP_Demo', express.static(STATIC_ROOT));
 
-// Root redirect
+// 根路径重定向
 app.get('/', (_req, res) => res.redirect('/2026-02-15_SOLFACIL_VPP_Demo/'));
 
-// ── HTTPS server ──────────────────────────────────────────────────────────────
+// ── HTTPS 服务器 ─────────────────────────────────────────────────────────────
 
 const credentials = {
   cert: fs.readFileSync(CERT_PATH),

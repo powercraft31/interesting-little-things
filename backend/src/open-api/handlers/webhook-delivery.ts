@@ -2,7 +2,7 @@ import type { EventBridgeEvent } from 'aws-lambda';
 import { createHmac } from 'crypto';
 
 // ---------------------------------------------------------------------------
-// Types
+// 类型定义
 // ---------------------------------------------------------------------------
 
 export interface WebhookEvent {
@@ -21,7 +21,7 @@ export interface WebhookResult {
 }
 
 // ---------------------------------------------------------------------------
-// AppConfig — Dynamic API Quotas
+// AppConfig — 动态 API 配额
 // ---------------------------------------------------------------------------
 
 const APPCONFIG_BASE = process.env.APPCONFIG_BASE_URL ?? 'http://localhost:2772';

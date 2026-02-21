@@ -2,8 +2,8 @@ import { StandardTelemetry } from './StandardTelemetry';
 import { TelemetryAdapter } from './TelemetryAdapter';
 
 /**
- * Native MQTT adapter — handles the flat telemetry format
- * published directly by SOLFACIL-controlled devices.
+ * 原生 MQTT 适配器 — 处理 SOLFACIL 自有设备
+ * 直接发布的扁平遥测格式。
  */
 export class NativeAdapter implements TelemetryAdapter {
   readonly source = 'mqtt' as const;

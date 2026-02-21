@@ -5,7 +5,7 @@ import { Role } from '../../shared/types/auth';
 import { extractTenantContext, requireRole, apiError } from '../middleware/tenant-context';
 
 // ---------------------------------------------------------------------------
-// AppConfig — Feature Flags
+// AppConfig — 功能开关
 // ---------------------------------------------------------------------------
 
 const APPCONFIG_BASE = process.env.APPCONFIG_BASE_URL ?? 'http://localhost:2772';
@@ -45,8 +45,8 @@ function isFlagEnabled(flags: FeatureFlags, flagName: string, orgId: string): bo
 
 /**
  * GET /assets
- * Returns VPP asset portfolio with mode & financial metrics.
- * Field names match the frontend INITIAL_DATA.assets shape exactly.
+ * 返回 VPP 资产组合及运行模式和财务指标。
+ * 字段名与前端 INITIAL_DATA.assets 结构完全一致。
  */
 export async function handler(
   event: APIGatewayProxyEventV2,
@@ -139,12 +139,12 @@ export async function handler(
     },
   ];
 
-  // Data isolation: SOLFACIL_ADMIN sees all orgs; others filtered by their orgId
+  // 数据隔离：SOLFACIL_ADMIN 可查看所有组织；其他角色按 orgId 过滤
   const filtered = ctx.role === Role.SOLFACIL_ADMIN
     ? ALL_ASSETS
     : ALL_ASSETS.filter(a => a.orgId === ctx.orgId);
 
-  // Apply feature flag: conditionally include ROI metrics
+  // 应用功能开关：按条件决定是否包含 ROI 指标
   const assets = filtered.map(a => ({
     ...a,
     roi: showRoiMetrics ? a.roi : undefined,

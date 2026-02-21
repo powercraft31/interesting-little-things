@@ -1,8 +1,8 @@
 /**
- * M8 Admin Control Plane — Update VPP Strategy
+ * M8 Admin 控制面板 — 更新 VPP 策略
  *
- * Partially updates a VPP strategy by ID.
- * Application-layer validation runs before DB constraints as defense-in-depth.
+ * 根据 ID 局部更新 VPP 策略。
+ * 应用层验证在数据库约束之前执行，实现纵深防御。
  */
 import type {
   APIGatewayProxyEventV2,
@@ -23,13 +23,13 @@ import {
 } from "../../bff/middleware/tenant-context";
 
 // ---------------------------------------------------------------------------
-// DB pool
+// 数据库连接池
 // ---------------------------------------------------------------------------
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // ---------------------------------------------------------------------------
-// Validation
+// 输入验证
 // ---------------------------------------------------------------------------
 
 function validateSocConstraints(update: UpdateVppStrategyRequest): string | null {
@@ -115,7 +115,7 @@ export async function handler(
     await client.query("BEGIN");
     await client.query("SET LOCAL app.current_org_id = $1", [tenant.orgId]);
 
-    // Check existence (RLS filters cross-org, returning 404 to prevent enumeration)
+    // 检查记录是否存在（RLS 过滤跨组织访问，返回 404 防止枚举攻击）
     const existing = await client.query(
       "SELECT id FROM vpp_strategies WHERE id = $1",
       [strategyId],

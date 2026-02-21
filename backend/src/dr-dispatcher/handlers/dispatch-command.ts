@@ -1,11 +1,11 @@
 /**
- * DR Dispatcher — Dispatch Command Handler
+ * DR 调度器 — 下发调度指令 Handler
  *
- * Triggered by EventBridge rule matching DRCommandIssued events from BFF.
- * Implements a transaction-like flow:
- *   1. Write dispatch record to DynamoDB (status: EXECUTING)
- *   2. Publish MQTT command to device via IoT Data Plane
- *   3. Enqueue timeout tracker message to SQS
+ * 由 EventBridge 规则触发，匹配来自 BFF 的 DRCommandIssued 事件。
+ * 实现类事务流程：
+ *   1. 将调度记录写入 DynamoDB（状态：EXECUTING）
+ *   2. 通过 IoT Data Plane 发布 MQTT 指令到设备
+ *   3. 将超时追踪消息入队到 SQS
  */
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
 import { DynamoDBDocumentClient, PutCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
@@ -13,7 +13,7 @@ import { IoTDataPlaneClient, PublishCommand } from '@aws-sdk/client-iot-data-pla
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 
 // ---------------------------------------------------------------------------
-// Types
+// 类型定义
 // ---------------------------------------------------------------------------
 
 interface DRCommandDetail {
@@ -30,7 +30,7 @@ interface DRCommandEvent {
 }
 
 // ---------------------------------------------------------------------------
-// Environment
+// 环境变量
 // ---------------------------------------------------------------------------
 
 const TABLE_NAME = process.env.TABLE_NAME ?? '';
@@ -38,7 +38,7 @@ const QUEUE_URL = process.env.QUEUE_URL ?? '';
 const IOT_ENDPOINT = process.env.IOT_ENDPOINT ?? '';
 
 // ---------------------------------------------------------------------------
-// SDK clients (instantiated once per Lambda cold-start)
+// SDK 客户端（每次 Lambda 冷启动实例化一次）
 // ---------------------------------------------------------------------------
 
 const ddbDoc = DynamoDBDocumentClient.from(new DynamoDBClient({}));
@@ -65,7 +65,7 @@ export async function handler(event: DRCommandEvent): Promise<void> {
     dispatchId, assetId, targetMode, orgId,
   }));
 
-  // ── Step 1: Write dispatch record to DynamoDB ──────────────────────────
+  // ── 步骤 1：将调度记录写入 DynamoDB ───────────────────────────────────
   try {
     await ddbDoc.send(
       new PutCommand({
@@ -100,7 +100,7 @@ export async function handler(event: DRCommandEvent): Promise<void> {
     throw err;
   }
 
-  // ── Step 2: Publish MQTT command to device ─────────────────────────────
+  // ── 步骤 2：通过 MQTT 发布指令到设备 ──────────────────────────────────
   try {
     const topic = `solfacil/${orgId}/${assetId}/command/mode`;
     const payload = JSON.stringify({ targetMode, dispatchId });
@@ -129,12 +129,12 @@ export async function handler(event: DRCommandEvent): Promise<void> {
       error: String(err),
     }));
 
-    // Roll-back: mark the dispatch record as FAILED
+    // 回滚：将调度记录标记为 FAILED
     await markFailed(dispatchId, assetId, traceId);
     throw err;
   }
 
-  // ── Step 3: Enqueue timeout tracker message to SQS ─────────────────────
+  // ── 步骤 3：将超时追踪消息入队到 SQS ──────────────────────────────────
   try {
     await sqs.send(
       new SendMessageCommand({
@@ -171,7 +171,7 @@ export async function handler(event: DRCommandEvent): Promise<void> {
 }
 
 // ---------------------------------------------------------------------------
-// Helpers
+// 辅助函数
 // ---------------------------------------------------------------------------
 
 async function markFailed(dispatchId: string, assetId: string, traceId?: string): Promise<void> {

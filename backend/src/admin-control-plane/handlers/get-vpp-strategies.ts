@@ -1,8 +1,8 @@
 /**
- * M8 Admin Control Plane — Get VPP Strategies
+ * M8 Admin 控制面板 — 查询 VPP 策略
  *
- * Lists VPP strategies for the caller's organization.
- * ORG_OPERATOR can read strategies; only ORG_MANAGER+ can modify.
+ * 列出调用方所属组织的 VPP 策略。
+ * ORG_OPERATOR 可读取策略；仅 ORG_MANAGER 及以上可修改。
  */
 import type {
   APIGatewayProxyEventV2,
@@ -19,13 +19,13 @@ import {
 } from "../../bff/middleware/tenant-context";
 
 // ---------------------------------------------------------------------------
-// DB pool
+// 数据库连接池
 // ---------------------------------------------------------------------------
 
 const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 
 // ---------------------------------------------------------------------------
-// Allowed roles: ORG_OPERATOR can read strategies
+// 允许的角色：ORG_OPERATOR 可读取策略
 // ---------------------------------------------------------------------------
 
 const ALLOWED_ROLES = [Role.ORG_MANAGER, Role.ORG_OPERATOR];

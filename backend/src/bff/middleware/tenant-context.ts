@@ -5,14 +5,14 @@ import { fail } from '../../shared/types/api';
 const VALID_ROLES = new Set<string>(Object.values(Role));
 
 /**
- * Extract tenant context from the Authorization header.
+ * 从 Authorization 请求头中提取租户上下文。
  *
- * Accepts two formats:
- *   1. Raw JSON string: {"userId":"u1","orgId":"ORG_ENERGIA_001","role":"ORG_MANAGER"}
- *   2. JWT-style token: header.payload.signature (payload is Base64-encoded JSON
- *      with userId, orgId, role claims)
+ * 支持两种格式：
+ *   1. 原始 JSON 字符串：{"userId":"u1","orgId":"ORG_ENERGIA_001","role":"ORG_MANAGER"}
+ *   2. JWT 风格令牌：header.payload.signature（payload 为 Base64 编码的 JSON，
+ *      包含 userId、orgId、role 声明）
  *
- * Throws { statusCode, message } on failure.
+ * 失败时抛出 { statusCode, message }。
  */
 export function extractTenantContext(event: APIGatewayProxyEventV2): TenantContext {
   const token = event.headers?.['authorization'] ?? event.headers?.['Authorization'] ?? '';
@@ -25,10 +25,10 @@ export function extractTenantContext(event: APIGatewayProxyEventV2): TenantConte
 
   try {
     if (token.trim().startsWith('{')) {
-      // Raw JSON (local testing)
+      // 原始 JSON（本地测试用）
       claims = JSON.parse(token);
     } else {
-      // JWT-style: extract payload segment
+      // JWT 风格：提取 payload 段
       const parts = token.replace(/^Bearer\s+/i, '').split('.');
       if (parts.length < 2) {
         throw new Error('malformed token');
@@ -50,9 +50,9 @@ export function extractTenantContext(event: APIGatewayProxyEventV2): TenantConte
 }
 
 /**
- * Enforce role-based access.
- * SOLFACIL_ADMIN bypasses all role checks.
- * Throws { statusCode: 403, message: "Forbidden" } on failure.
+ * 强制执行基于角色的访问控制。
+ * SOLFACIL_ADMIN 跳过所有角色检查。
+ * 失败时抛出 { statusCode: 403, message: "Forbidden" }。
  */
 export function requireRole(ctx: TenantContext, allowedRoles: Role[]): void {
   if (ctx.role === Role.SOLFACIL_ADMIN) return;
@@ -61,7 +61,7 @@ export function requireRole(ctx: TenantContext, allowedRoles: Role[]): void {
   }
 }
 
-/** Build a standard API Gateway error response. */
+/** 构建标准 API Gateway 错误响应。 */
 export function apiError(statusCode: number, message: string): APIGatewayProxyResultV2 {
   return {
     statusCode,

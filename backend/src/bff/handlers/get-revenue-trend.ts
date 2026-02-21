@@ -5,8 +5,8 @@ import { extractTenantContext, requireRole, apiError } from '../middleware/tenan
 
 /**
  * GET /revenue-trend
- * Returns 7-day revenue/cost/profit trend arrays.
- * Field names match the frontend INITIAL_DATA.revenueTrend shape exactly.
+ * 返回 7 天的收入/成本/利润趋势数组。
+ * 字段名与前端 INITIAL_DATA.revenueTrend 结构完全一致。
  */
 export async function handler(
   event: APIGatewayProxyEventV2,
