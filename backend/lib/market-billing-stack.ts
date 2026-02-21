@@ -116,6 +116,7 @@ export class MarketBillingStack extends cdk.Stack {
       securityGroups: [lambdaSg],
       memorySize: 256,
       timeout: cdk.Duration.seconds(10),
+      tracing: lambda.Tracing.ACTIVE,
       environment: {
         STAGE: stage,
         NODE_OPTIONS: "--enable-source-maps",
@@ -168,6 +169,7 @@ export class MarketBillingStack extends cdk.Stack {
       handler: exportName,
       memorySize: 256,
       timeout: cdk.Duration.seconds(10),
+      tracing: lambda.Tracing.ACTIVE,
       environment: {
         STAGE: stage,
         NODE_OPTIONS: "--enable-source-maps",

@@ -5,6 +5,7 @@ import { BffStack } from "../lib/bff-stack";
 import { DrDispatcherStack } from "../lib/dr-dispatcher-stack";
 import { IotHubStack } from "../lib/iot-hub-stack";
 import { MarketBillingStack } from "../lib/market-billing-stack";
+import { AdminControlPlaneStack } from "../lib/admin-control-plane-stack";
 import { VppEventBus } from "../lib/shared/event-bus";
 import { DEFAULT_STAGE } from "../lib/shared/constants";
 
@@ -50,5 +51,16 @@ new BffStack(app, `SolfacilVpp-${stage}-Bff`, {
   eventBus: eventBus.bus,
   description: "Module 5: REST API Gateway for the React dashboard",
 });
+
+// ── Module 8: Admin Control Plane ─────────────────────────────────
+const adminControlPlaneStack = new AdminControlPlaneStack(
+  app,
+  `SolfacilVpp-${stage}-AdminControlPlane`,
+  {
+    stage,
+    description: "Module 8: Admin Control Plane — AppConfig + M8 CRUD APIs",
+  },
+);
+adminControlPlaneStack.addDependency(sharedStack);
 
 app.synth();

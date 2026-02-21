@@ -98,6 +98,7 @@ export class BffStack extends cdk.Stack {
       handler: exportName,
       memorySize: 256,
       timeout: cdk.Duration.seconds(10),
+      tracing: lambda.Tracing.ACTIVE,
       environment: {
         STAGE: stage,
         NODE_OPTIONS: "--enable-source-maps",

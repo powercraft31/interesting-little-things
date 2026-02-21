@@ -80,6 +80,7 @@ export class DrDispatcherStack extends cdk.Stack {
         handler: "handler",
         memorySize: 256,
         timeout: cdk.Duration.seconds(10),
+        tracing: lambda.Tracing.ACTIVE,
         environment: {
           DISPATCH_TABLE_NAME: table.tableName,
           TIMEOUT_QUEUE_URL: timeoutQueue.queueUrl,
@@ -124,6 +125,7 @@ export class DrDispatcherStack extends cdk.Stack {
         handler: "handler",
         memorySize: 256,
         timeout: cdk.Duration.seconds(10),
+        tracing: lambda.Tracing.ACTIVE,
         environment: {
           DISPATCH_TABLE_NAME: table.tableName,
           NODE_OPTIONS: "--enable-source-maps",
@@ -179,6 +181,7 @@ export class DrDispatcherStack extends cdk.Stack {
       handler: "handler",
       memorySize: 256,
       timeout: cdk.Duration.seconds(10),
+      tracing: lambda.Tracing.ACTIVE,
       environment: {
         DISPATCH_TABLE_NAME: table.tableName,
         EVENT_BUS_NAME: eventBus.eventBusName,

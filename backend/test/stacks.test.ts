@@ -1,7 +1,9 @@
 import * as cdk from "aws-cdk-lib";
 import { Template } from "aws-cdk-lib/assertions";
+import { AdminControlPlaneStack } from "../lib/admin-control-plane-stack";
 import { BffStack } from "../lib/bff-stack";
 import { IdentityStack } from "../lib/identity-stack";
+import { IotHubStack } from "../lib/iot-hub-stack";
 import { MarketBillingStack } from "../lib/market-billing-stack";
 import { VppEventBus } from "../lib/shared/event-bus";
 import { DEFAULT_STAGE } from "../lib/shared/constants";
@@ -144,5 +146,114 @@ describe("IdentityStack — IAM compliance", () => {
     expect(names).toContain("SOLFACIL_ADMIN");
     expect(names).toContain("ORG_MANAGER");
     expect(names).toContain("ORG_VIEWER");
+  });
+});
+
+// ── Module 8: AdminControlPlaneStack ─────────────────────────────────
+
+describe("AdminControlPlaneStack — IaC compliance", () => {
+  let app: cdk.App;
+  let template: Template;
+
+  beforeEach(() => {
+    app = new cdk.App();
+    const stack = new AdminControlPlaneStack(app, "TestAdminControlPlane", {
+      stage: DEFAULT_STAGE,
+    });
+    template = Template.fromStack(stack);
+  });
+
+  test("creates AppConfig Application (count = 1)", () => {
+    template.resourceCountIs("AWS::AppConfig::Application", 1);
+  });
+
+  test("creates AppConfig Environment (count = 1)", () => {
+    template.resourceCountIs("AWS::AppConfig::Environment", 1);
+  });
+
+  test("creates 7 Configuration Profiles (M1–M7)", () => {
+    template.resourceCountIs("AWS::AppConfig::ConfigurationProfile", 7);
+  });
+
+  test("creates 4 Lambda Functions (CRUD handlers)", () => {
+    template.resourceCountIs("AWS::Lambda::Function", 4);
+  });
+
+  test("creates HTTP API Gateway (count = 1)", () => {
+    template.resourceCountIs("AWS::ApiGatewayV2::Api", 1);
+  });
+
+  test("all 4 Lambdas have X-Ray tracing Active", () => {
+    const templateJson = template.toJSON();
+    const resources = templateJson.Resources as Record<string, any>;
+    const lambdas = Object.values(resources).filter(
+      (r: any) => r.Type === "AWS::Lambda::Function",
+    );
+
+    expect(lambdas).toHaveLength(4);
+    for (const fn of lambdas) {
+      expect((fn as any).Properties.TracingConfig).toEqual({
+        Mode: "Active",
+      });
+    }
+  });
+});
+
+// ── X-Ray Global Compliance ──────────────────────────────────────────
+
+describe("X-Ray tracing compliance", () => {
+  test("IotHubStack — all Lambdas have TracingConfig.Mode = Active", () => {
+    const app = new cdk.App();
+    const sharedStack = new cdk.Stack(app, "TestSharedXRay");
+    const eventBus = new VppEventBus(
+      sharedStack,
+      "TestEventBusXRay",
+      DEFAULT_STAGE,
+    );
+
+    const stack = new IotHubStack(app, "TestIotHubXRay", {
+      eventBus: eventBus.bus,
+    });
+    const template = Template.fromStack(stack);
+    const templateJson = template.toJSON();
+    const resources = templateJson.Resources as Record<string, any>;
+    const lambdas = Object.values(resources).filter(
+      (r: any) => r.Type === "AWS::Lambda::Function",
+    );
+
+    expect(lambdas.length).toBeGreaterThanOrEqual(2);
+    for (const fn of lambdas) {
+      expect((fn as any).Properties.TracingConfig).toEqual({
+        Mode: "Active",
+      });
+    }
+  });
+
+  test("BffStack — all Lambdas have TracingConfig.Mode = Active", () => {
+    const app = new cdk.App();
+    const sharedStack = new cdk.Stack(app, "TestSharedXRayBff");
+    const eventBus = new VppEventBus(
+      sharedStack,
+      "TestEventBusXRayBff",
+      DEFAULT_STAGE,
+    );
+
+    const stack = new BffStack(app, "TestBffXRay", {
+      stage: DEFAULT_STAGE,
+      eventBus: eventBus.bus,
+    });
+    const template = Template.fromStack(stack);
+    const templateJson = template.toJSON();
+    const resources = templateJson.Resources as Record<string, any>;
+    const lambdas = Object.values(resources).filter(
+      (r: any) => r.Type === "AWS::Lambda::Function",
+    );
+
+    expect(lambdas.length).toBeGreaterThanOrEqual(4);
+    for (const fn of lambdas) {
+      expect((fn as any).Properties.TracingConfig).toEqual({
+        Mode: "Active",
+      });
+    }
   });
 });
