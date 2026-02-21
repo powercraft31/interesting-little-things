@@ -1,3 +1,7 @@
+// Mock global.fetch for AppConfig Sidecar BEFORE module import
+const mockFetch = jest.fn();
+global.fetch = mockFetch;
+
 import { mockClient } from 'aws-sdk-client-mock';
 import {
   EventBridgeClient,
@@ -56,6 +60,13 @@ describe('run-optimization handler', () => {
   beforeEach(() => {
     ebMock.reset();
     ebMock.on(PutEventsCommand).resolves({ FailedEntryCount: 0 });
+    // Mock AppConfig returning default strategy (minSoc:20, maxSoc:90)
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({
+        ORG_ENERGIA_001: { minSoc: 20, maxSoc: 90, emergencySoc: 10, profitMargin: 0.15 },
+      }),
+    });
     jest.spyOn(console, 'info').mockImplementation(() => {});
     jest.spyOn(console, 'error').mockImplementation(() => {});
   });
@@ -147,5 +158,37 @@ describe('run-optimization handler', () => {
     ).rejects.toThrow('Invalid SOC value');
 
     expect(ebMock.commandCalls(PutEventsCommand)).toHaveLength(0);
+  });
+
+  // ── AppConfig dynamic thresholds ──────────────────────────────────────
+
+  it('uses dynamic thresholds from AppConfig (custom minSoc=30, maxSoc=85)', async () => {
+    // Override mock: return custom strategy
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        ORG_ENERGIA_001: { minSoc: 30, maxSoc: 85, emergencySoc: 15, profitMargin: 0.20 },
+      }),
+    });
+
+    // SOC=25 is above default minSoc(20) but below custom minSoc(30)
+    // → should be idle with custom strategy, not discharge
+    const result = await handler(makeEvent({ currentTariffPeriod: 'peak', soc: 25 }));
+    expect(result.data.targetMode).toBe('idle');
+  });
+
+  it('falls back to default strategy when AppConfig is unavailable', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('Connection refused'));
+
+    // Default minSoc=20, so soc=80 peak → discharge
+    const result = await handler(makeEvent({ currentTariffPeriod: 'peak', soc: 80 }));
+    expect(result.success).toBe(true);
+    expect(result.data.targetMode).toBe('discharge');
+  });
+
+  it('publishes traceId in EventBridge detail', async () => {
+    await handler(makeEvent({ currentTariffPeriod: 'peak', soc: 80 }));
+    const detail = extractPublishedDetail();
+    expect(detail.traceId).toMatch(/^vpp-[0-9a-f-]{36}$/);
   });
 });
