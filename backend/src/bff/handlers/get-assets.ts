@@ -1,7 +1,47 @@
 import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
+import { randomUUID } from 'crypto';
 import { ok } from '../../shared/types/api';
 import { Role } from '../../shared/types/auth';
 import { extractTenantContext, requireRole, apiError } from '../middleware/tenant-context';
+
+// ---------------------------------------------------------------------------
+// AppConfig — Feature Flags
+// ---------------------------------------------------------------------------
+
+const APPCONFIG_BASE = process.env.APPCONFIG_BASE_URL ?? 'http://localhost:2772';
+const APPCONFIG_APP  = process.env.APPCONFIG_APP    ?? 'solfacil-vpp-dev';
+const APPCONFIG_ENV  = process.env.APPCONFIG_ENV    ?? 'dev';
+
+interface FeatureFlags {
+  readonly [flagName: string]: {
+    readonly isEnabled: boolean;
+    readonly targetOrgIds?: string[];
+  };
+}
+
+const DEFAULT_FLAGS: FeatureFlags = {};
+
+async function fetchFeatureFlags(): Promise<FeatureFlags> {
+  try {
+    const url = `${APPCONFIG_BASE}/applications/${APPCONFIG_APP}/environments/${APPCONFIG_ENV}/configurations/feature-flags`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(500) });
+    if (!res.ok) return DEFAULT_FLAGS;
+    return await res.json() as FeatureFlags;
+  } catch {
+    return DEFAULT_FLAGS;
+  }
+}
+
+function isFlagEnabled(flags: FeatureFlags, flagName: string, orgId: string): boolean {
+  const flag = flags[flagName];
+  if (!flag || !flag.isEnabled) return false;
+  if (!flag.targetOrgIds || flag.targetOrgIds.length === 0) return true;
+  return flag.targetOrgIds.includes(orgId);
+}
+
+// ---------------------------------------------------------------------------
+// Handler
+// ---------------------------------------------------------------------------
 
 /**
  * GET /assets
@@ -19,6 +59,10 @@ export async function handler(
     const e = err as { statusCode?: number; message?: string };
     return apiError(e.statusCode ?? 500, e.message ?? 'Error');
   }
+
+  const traceId = `vpp-${randomUUID()}`;
+  const flags = await fetchFeatureFlags();
+  const showRoiMetrics = isFlagEnabled(flags, 'show-roi-metrics', ctx.orgId);
 
   const ALL_ASSETS = [
     {
@@ -96,15 +140,22 @@ export async function handler(
   ];
 
   // Data isolation: SOLFACIL_ADMIN sees all orgs; others filtered by their orgId
-  const assets = ctx.role === Role.SOLFACIL_ADMIN
+  const filtered = ctx.role === Role.SOLFACIL_ADMIN
     ? ALL_ASSETS
     : ALL_ASSETS.filter(a => a.orgId === ctx.orgId);
+
+  // Apply feature flag: conditionally include ROI metrics
+  const assets = filtered.map(a => ({
+    ...a,
+    roi: showRoiMetrics ? a.roi : undefined,
+    payback: showRoiMetrics ? a.payback : undefined,
+  }));
 
   const body = ok({ assets, _tenant: { orgId: ctx.orgId, role: ctx.role } });
 
   return {
     statusCode: 200,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { 'Content-Type': 'application/json', 'x-trace-id': traceId },
     body: JSON.stringify(body),
   };
 }

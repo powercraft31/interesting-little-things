@@ -8,6 +8,7 @@
  * No DB connection required — tariff data is passed in the event.
  */
 import type { Handler } from 'aws-lambda';
+import { randomUUID } from 'crypto';
 import { ok, fail } from '../../shared/types/api';
 
 // ---------------------------------------------------------------------------
@@ -31,6 +32,41 @@ interface ProfitRequest {
   readonly tariff?: Partial<Tariff>;
   readonly operatingCostPerKwh?: number;
   readonly role?: string;
+}
+
+// ---------------------------------------------------------------------------
+// AppConfig — Dynamic Billing Rules
+// ---------------------------------------------------------------------------
+
+const APPCONFIG_BASE = process.env.APPCONFIG_BASE_URL ?? 'http://localhost:2772';
+const APPCONFIG_APP  = process.env.APPCONFIG_APP    ?? 'solfacil-vpp-dev';
+const APPCONFIG_ENV  = process.env.APPCONFIG_ENV    ?? 'dev';
+
+interface BillingRulesConfig {
+  readonly [orgId: string]: {
+    readonly tariffPenaltyMultiplier?: number;
+    readonly operatingCostPerKwh?: number;
+  };
+}
+
+const DEFAULT_BILLING_RULES = {
+  tariffPenaltyMultiplier: 1.0,
+};
+
+async function fetchBillingRules(orgId: string): Promise<typeof DEFAULT_BILLING_RULES> {
+  try {
+    const url = `${APPCONFIG_BASE}/applications/${APPCONFIG_APP}/environments/${APPCONFIG_ENV}/configurations/billing-rules`;
+    const res = await fetch(url, { signal: AbortSignal.timeout(500) });
+    if (!res.ok) return DEFAULT_BILLING_RULES;
+    const configs = await res.json() as BillingRulesConfig;
+    const orgRules = configs[orgId];
+    if (!orgRules) return DEFAULT_BILLING_RULES;
+    return {
+      tariffPenaltyMultiplier: orgRules.tariffPenaltyMultiplier ?? 1.0,
+    };
+  } catch {
+    return DEFAULT_BILLING_RULES;
+  }
 }
 
 // ---------------------------------------------------------------------------
@@ -70,6 +106,7 @@ export const handler: Handler = async (event: ProfitRequest) => {
   }
 
   const { orgId, assetId, date, energyKwh, tariff, operatingCostPerKwh, role } = event;
+  const traceId = `vpp-${randomUUID()}`;
 
   // ── Zero / negative energy → all zeros (not an error) ────────────────
   if (!energyKwh || energyKwh <= 0) {
@@ -87,6 +124,7 @@ export const handler: Handler = async (event: ProfitRequest) => {
           offPeakEnergy: 0, offPeakRevenue: 0,
           intermediateEnergy: 0, intermediateRevenue: 0,
         },
+        traceId,
         _tenant: { orgId, role },
       })),
     };
@@ -103,6 +141,9 @@ export const handler: Handler = async (event: ProfitRequest) => {
     throw new Error('Invalid tariff hours: must sum to 24');
   }
 
+  // ── Fetch dynamic billing rules from AppConfig ────────────────────────
+  const billingRules = await fetchBillingRules(orgId);
+
   // ── Energy distribution (weighted by time-of-use) ────────────────────
   const peakEnergy = round2(energyKwh * (tariff.peakHours / TOTAL_HOURS));
   const offPeakEnergy = round2(energyKwh * (tariff.offPeakHours / TOTAL_HOURS));
@@ -115,8 +156,16 @@ export const handler: Handler = async (event: ProfitRequest) => {
 
   // ── Totals ───────────────────────────────────────────────────────────
   const grossRevenue = round2(peakRevenue + offPeakRevenue + intermediateRevenue);
-  const operatingCost = round2(energyKwh * (operatingCostPerKwh ?? 0));
+  const operatingCost = round2(energyKwh * (operatingCostPerKwh ?? 0) * billingRules.tariffPenaltyMultiplier);
   const profit = round2(grossRevenue - operatingCost);
+
+  console.info(JSON.stringify({
+    level: 'INFO',
+    traceId,
+    module: 'M4',
+    action: 'profit_calculated',
+    orgId, assetId, grossRevenue, operatingCost, profit,
+  }));
 
   return {
     statusCode: 200,
@@ -132,6 +181,7 @@ export const handler: Handler = async (event: ProfitRequest) => {
         offPeakEnergy, offPeakRevenue,
         intermediateEnergy, intermediateRevenue,
       },
+      traceId,
       _tenant: { orgId, role },
     })),
   };

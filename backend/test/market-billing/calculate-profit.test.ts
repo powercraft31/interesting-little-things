@@ -9,6 +9,9 @@
  *   5. Missing tariff → throws Error
  *   6. Invalid tariff hours (≠24) → throws Error
  *   7. Negative energyKwh → returns all zeros
+ *   8. Penalty multiplier from AppConfig
+ *   9. AppConfig 404 → fallback to default (1.0)
+ *  10. AppConfig NetworkError → fallback to default (1.0)
  */
 
 import { handler } from '../../src/market-billing/handlers/calculate-profit';
@@ -30,6 +33,8 @@ const STANDARD_TARIFF = {
   offPeakHours: 14,
   intermediateHours: 7,
 } as const;
+
+const mockFetch = jest.fn();
 
 function makeEvent(overrides: Record<string, unknown> = {}) {
   return {
@@ -53,6 +58,20 @@ function parseBody(result: { body: string }) {
 // ---------------------------------------------------------------------------
 
 describe('calculate-profit handler', () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+    mockFetch.mockResolvedValue({
+      ok: true,
+      json: async () => ({ [ORG_ID]: { tariffPenaltyMultiplier: 1.0 } }),
+    });
+    global.fetch = mockFetch as any;
+    jest.spyOn(console, 'info').mockImplementation(() => {});
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   // ── Test 1: Standard calculation — deep numeric assertions ────────────
   it('computes correct grossRevenue / operatingCost / profit for 240 kWh', async () => {
     /**
@@ -66,7 +85,7 @@ describe('calculate-profit handler', () => {
      *   intermediateRevenue = 70 × 0.80 = 56.00
      *
      *   grossRevenue  = 45 + 56 + 56     = 157.00
-     *   operatingCost = 240 × 0.10       = 24.00
+     *   operatingCost = 240 × 0.10 × 1.0 = 24.00
      *   profit        = 157.00 - 24.00   = 133.00
      */
     const result = await handler(makeEvent(), {} as any, () => {});
@@ -115,7 +134,7 @@ describe('calculate-profit handler', () => {
      *   intermediateRevenue = 35 × 0.60 = 21.00
      *
      *   grossRevenue  = 75 + 21 + 21 = 117.00
-     *   operatingCost = 120 × 0.15   = 18.00
+     *   operatingCost = 120 × 0.15 × 1.0 = 18.00
      *   profit        = 117.00 - 18.00 = 99.00
      */
     const event = makeEvent({
@@ -201,5 +220,45 @@ describe('calculate-profit handler', () => {
     expect(d.profit).toBe(0);
     expect(d.grossRevenue).toBe(0);
     expect(d.operatingCost).toBe(0);
+  });
+
+  // ── Test 8: Penalty multiplier from AppConfig billing-rules ───────────
+  it('applies penalty multiplier from AppConfig billing-rules', async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({ [ORG_ID]: { tariffPenaltyMultiplier: 2.0 } }),
+    });
+
+    const result = await handler(makeEvent(), {} as any, () => {});
+    const d = parseBody(result).data;
+
+    // operatingCost = 240 × 0.10 × 2.0 = 48.00
+    // profit = 157.00 − 48.00 = 109.00
+    expect(d.operatingCost).toBe(48.00);
+    expect(d.profit).toBe(109.00);
+  });
+
+  // ── Test 9: AppConfig returns 404 → fallback to 1.0 multiplier ────────
+  it('falls back to default billing rules (1.0 multiplier) when AppConfig returns 404', async () => {
+    mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
+
+    const result = await handler(makeEvent(), {} as any, () => {});
+
+    expect(result.statusCode).toBe(200);
+    const d = parseBody(result).data;
+    expect(d.operatingCost).toBe(24.00);
+    expect(d.profit).toBe(133.00);
+  });
+
+  // ── Test 10: AppConfig throws NetworkError → fallback to 1.0 ──────────
+  it('falls back to default billing rules when AppConfig throws NetworkError', async () => {
+    mockFetch.mockRejectedValueOnce(new Error('Connection refused'));
+
+    const result = await handler(makeEvent(), {} as any, () => {});
+
+    expect(result.statusCode).toBe(200);
+    const d = parseBody(result).data;
+    expect(d.operatingCost).toBe(24.00);
+    expect(d.profit).toBe(133.00);
   });
 });

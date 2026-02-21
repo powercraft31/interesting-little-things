@@ -5,6 +5,12 @@ import type {
 import { handler } from "../../src/bff/handlers/get-assets";
 
 // ---------------------------------------------------------------------------
+// Fetch mock for AppConfig feature-flags
+// ---------------------------------------------------------------------------
+
+const mockFetch = jest.fn();
+
+// ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
@@ -41,11 +47,26 @@ function tokenFor(userId: string, orgId: string, role: string): string {
   return JSON.stringify({ userId, orgId, role });
 }
 
+function makeAdminEvent() {
+  return makeEvent(tokenFor("admin", "SOLFACIL", "SOLFACIL_ADMIN"));
+}
+
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
 describe("GET /assets handler", () => {
+  beforeEach(() => {
+    mockFetch.mockReset();
+    // Default: feature-flags unavailable → fall back → showRoiMetrics = false
+    mockFetch.mockResolvedValue({ ok: false, status: 503 });
+    global.fetch = mockFetch as any;
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it("SOLFACIL_ADMIN receives all assets (unfiltered)", async () => {
     const event = makeEvent(tokenFor("admin", "SOLFACIL", "SOLFACIL_ADMIN"));
     const result = (await handler(event)) as APIGatewayProxyStructuredResultV2;
@@ -153,5 +174,52 @@ describe("GET /assets handler", () => {
     const event = makeEvent(undefined);
     const result = (await handler(event)) as APIGatewayProxyStructuredResultV2;
     expect(result.statusCode).toBe(401);
+  });
+
+  // ── Feature Flag Tests ────────────────────────────────────────────────
+
+  it("excludes roi and payback fields when show-roi-metrics flag is disabled", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        "show-roi-metrics": { isEnabled: false },
+      }),
+    });
+
+    const result = (await handler(
+      makeAdminEvent(),
+    )) as APIGatewayProxyStructuredResultV2;
+    const body = JSON.parse(result.body as string);
+    const assets = body.data.assets;
+
+    expect(assets[0].roi).toBeUndefined();
+    expect(assets[0].payback).toBeUndefined();
+  });
+
+  it("includes roi and payback fields when show-roi-metrics flag is enabled for org", async () => {
+    mockFetch.mockResolvedValueOnce({
+      ok: true,
+      json: async () => ({
+        "show-roi-metrics": { isEnabled: true, targetOrgIds: ["SOLFACIL"] },
+      }),
+    });
+
+    const result = (await handler(
+      makeAdminEvent(),
+    )) as APIGatewayProxyStructuredResultV2;
+    const body = JSON.parse(result.body as string);
+    const assets = body.data.assets;
+
+    expect(assets[0].roi).toBeDefined();
+    expect(assets[0].payback).toBeDefined();
+  });
+
+  it("falls back gracefully when AppConfig returns NetworkError", async () => {
+    mockFetch.mockRejectedValueOnce(new Error("timeout"));
+
+    const result = (await handler(
+      makeAdminEvent(),
+    )) as APIGatewayProxyStructuredResultV2;
+    expect(result.statusCode).toBe(200);
   });
 });

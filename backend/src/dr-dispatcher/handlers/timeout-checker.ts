@@ -27,6 +27,7 @@ import type { SQSEvent } from 'aws-lambda';
 interface TimeoutMessage {
   readonly dispatchId: string;
   readonly assetId: string;
+  readonly traceId?: string;
 }
 
 interface DispatchRecord {
@@ -61,15 +62,25 @@ const eventBridge = new EventBridgeClient({});
 // ---------------------------------------------------------------------------
 
 export async function handler(event: SQSEvent): Promise<void> {
-  console.info('[timeout-checker] Processing batch', {
+  console.info(JSON.stringify({
+    level: 'INFO',
+    module: 'M3',
+    action: 'timeout_batch_start',
     recordCount: event.Records.length,
-  });
+  }));
 
   for (const record of event.Records) {
     const message: TimeoutMessage = JSON.parse(record.body);
-    const { dispatchId, assetId } = message;
+    const { dispatchId, assetId, traceId: rawTraceId } = message;
+    const traceId = rawTraceId ?? 'unknown';
 
-    console.info('[timeout-checker] Checking dispatch', { dispatchId, assetId });
+    console.info(JSON.stringify({
+      level: 'INFO',
+      traceId,
+      module: 'M3',
+      action: 'timeout_checking_dispatch',
+      dispatchId, assetId,
+    }));
 
     // ── Step 1: Read current dispatch record ────────────────────────────
     let dispatch: DispatchRecord | undefined;
@@ -82,28 +93,38 @@ export async function handler(event: SQSEvent): Promise<void> {
       );
       dispatch = result.Item as DispatchRecord | undefined;
     } catch (err) {
-      console.error('[timeout-checker] Failed to read dispatch record', {
-        dispatchId,
-        assetId,
-        error: err,
-      });
+      console.error(JSON.stringify({
+        level: 'ERROR',
+        traceId,
+        module: 'M3',
+        action: 'dispatch_record_read_failed',
+        dispatchId, assetId,
+        error: String(err),
+      }));
       throw err;
     }
 
     if (!dispatch) {
-      console.error('[timeout-checker] Dispatch record not found', {
-        dispatchId,
-        assetId,
-      });
+      console.error(JSON.stringify({
+        level: 'ERROR',
+        traceId,
+        module: 'M3',
+        action: 'dispatch_record_not_found',
+        dispatchId, assetId,
+      }));
       continue;
     }
 
     // ── Step 2: Idempotency — skip if already in terminal state ─────────
     if (TERMINAL_STATUSES.has(dispatch.status)) {
-      console.info('[timeout-checker] Already in terminal state — skipping', {
+      console.info(JSON.stringify({
+        level: 'INFO',
+        traceId,
+        module: 'M3',
+        action: 'dispatch_already_terminal',
         dispatchId,
         currentStatus: dispatch.status,
-      });
+      }));
       continue;
     }
 
@@ -124,19 +145,33 @@ export async function handler(event: SQSEvent): Promise<void> {
           },
         }),
       );
-      console.info('[timeout-checker] Dispatch marked TIMEOUT', { dispatchId });
+      console.info(JSON.stringify({
+        level: 'INFO',
+        traceId,
+        module: 'M3',
+        action: 'dispatch_marked_timeout',
+        dispatchId,
+      }));
     } catch (err) {
       const error = err as { name?: string };
       if (error.name === 'ConditionalCheckFailedException') {
-        console.info('[timeout-checker] Race condition — record already transitioned', {
+        console.info(JSON.stringify({
+          level: 'INFO',
+          traceId,
+          module: 'M3',
+          action: 'dispatch_race_condition',
           dispatchId,
-        });
+        }));
         continue;
       }
-      console.error('[timeout-checker] Failed to update dispatch record', {
+      console.error(JSON.stringify({
+        level: 'ERROR',
+        traceId,
+        module: 'M3',
+        action: 'dispatch_update_failed',
         dispatchId,
-        error: err,
-      });
+        error: String(err),
+      }));
       throw err;
     }
 
@@ -154,25 +189,37 @@ export async function handler(event: SQSEvent): Promise<void> {
                 assetId,
                 orgId: dispatch.orgId,
                 status: 'TIMEOUT',
+                traceId,
               }),
             },
           ],
         }),
       );
-      console.info('[timeout-checker] DRDispatchCompleted event published', {
+      console.info(JSON.stringify({
+        level: 'INFO',
+        traceId,
+        module: 'M3',
+        action: 'dispatch_completed_event_published',
         dispatchId,
         status: 'TIMEOUT',
-      });
+      }));
     } catch (err) {
-      console.error('[timeout-checker] EventBridge publish failed', {
+      console.error(JSON.stringify({
+        level: 'ERROR',
+        traceId,
+        module: 'M3',
+        action: 'eventbridge_publish_failed',
         dispatchId,
-        error: err,
-      });
+        error: String(err),
+      }));
       throw err;
     }
   }
 
-  console.info('[timeout-checker] Batch processing complete', {
+  console.info(JSON.stringify({
+    level: 'INFO',
+    module: 'M3',
+    action: 'timeout_batch_complete',
     recordCount: event.Records.length,
-  });
+  }));
 }

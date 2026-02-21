@@ -36,6 +36,7 @@ function makeDRCommandEvent(
     assetId: string;
     targetMode: string;
     orgId: string;
+    traceId: string;
   }> = {},
 ) {
   return {
@@ -45,6 +46,7 @@ function makeDRCommandEvent(
       assetId: overrides.assetId ?? "ASSET_SP_001",
       targetMode: overrides.targetMode ?? "peak_shaving",
       orgId: overrides.orgId ?? "ORG_ENERGIA_001",
+      traceId: overrides.traceId ?? "vpp-test-trace-001",
     },
   };
 }
@@ -159,5 +161,17 @@ describe("dispatch-command handler", () => {
     // DB and MQTT were called
     expect(ddbMock.commandCalls(PutCommand)).toHaveLength(1);
     expect(iotMock.commandCalls(PublishCommand)).toHaveLength(1);
+  });
+
+  it("passes traceId into SQS message body", async () => {
+    ddbMock.on(PutCommand).resolves({});
+    iotMock.on(PublishCommand).resolves({});
+    sqsMock.on(SendMessageCommand).resolves({});
+
+    await handler(makeDRCommandEvent({ traceId: "vpp-abc-123" }));
+
+    const sqsCalls = sqsMock.commandCalls(SendMessageCommand);
+    const body = JSON.parse(sqsCalls[0].args[0].input.MessageBody!);
+    expect(body.traceId).toBe("vpp-abc-123");
   });
 });

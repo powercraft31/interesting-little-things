@@ -21,6 +21,7 @@ interface DRCommandDetail {
   readonly assetId: string;
   readonly targetMode: string;
   readonly orgId: string;
+  readonly traceId?: string;
 }
 
 interface DRCommandEvent {
@@ -53,15 +54,16 @@ const sqs = new SQSClient({});
 // ---------------------------------------------------------------------------
 
 export async function handler(event: DRCommandEvent): Promise<void> {
-  const { dispatchId, assetId, targetMode, orgId } = event.detail;
+  const { dispatchId, assetId, targetMode, orgId, traceId } = event.detail;
   const now = new Date().toISOString();
 
-  console.info('[dispatch-command] Received DRCommandIssued', {
-    dispatchId,
-    assetId,
-    targetMode,
-    orgId,
-  });
+  console.info(JSON.stringify({
+    level: 'INFO',
+    traceId,
+    module: 'M3',
+    action: 'dr_command_received',
+    dispatchId, assetId, targetMode, orgId,
+  }));
 
   // ── Step 1: Write dispatch record to DynamoDB ──────────────────────────
   try {
@@ -79,12 +81,22 @@ export async function handler(event: DRCommandEvent): Promise<void> {
         },
       }),
     );
-    console.info('[dispatch-command] Dispatch record created', { dispatchId });
-  } catch (err) {
-    console.error('[dispatch-command] Failed to write dispatch record', {
+    console.info(JSON.stringify({
+      level: 'INFO',
+      traceId,
+      module: 'M3',
+      action: 'dispatch_record_created',
       dispatchId,
-      error: err,
-    });
+    }));
+  } catch (err) {
+    console.error(JSON.stringify({
+      level: 'ERROR',
+      traceId,
+      module: 'M3',
+      action: 'dispatch_record_write_failed',
+      dispatchId,
+      error: String(err),
+    }));
     throw err;
   }
 
@@ -100,18 +112,25 @@ export async function handler(event: DRCommandEvent): Promise<void> {
         payload: new TextEncoder().encode(payload),
       }),
     );
-    console.info('[dispatch-command] MQTT command published', {
-      dispatchId,
-      topic,
-    });
+    console.info(JSON.stringify({
+      level: 'INFO',
+      traceId,
+      module: 'M3',
+      action: 'mqtt_command_published',
+      dispatchId, topic,
+    }));
   } catch (err) {
-    console.error('[dispatch-command] MQTT publish failed — marking FAILED', {
+    console.error(JSON.stringify({
+      level: 'ERROR',
+      traceId,
+      module: 'M3',
+      action: 'mqtt_publish_failed',
       dispatchId,
-      error: err,
-    });
+      error: String(err),
+    }));
 
     // Roll-back: mark the dispatch record as FAILED
-    await markFailed(dispatchId, assetId);
+    await markFailed(dispatchId, assetId, traceId);
     throw err;
   }
 
@@ -120,26 +139,42 @@ export async function handler(event: DRCommandEvent): Promise<void> {
     await sqs.send(
       new SendMessageCommand({
         QueueUrl: QUEUE_URL,
-        MessageBody: JSON.stringify({ dispatchId, assetId }),
+        MessageBody: JSON.stringify({ dispatchId, assetId, traceId }),
       }),
     );
-    console.info('[dispatch-command] Timeout message enqueued', { dispatchId });
-  } catch (err) {
-    console.error('[dispatch-command] SQS send failed', {
+    console.info(JSON.stringify({
+      level: 'INFO',
+      traceId,
+      module: 'M3',
+      action: 'timeout_message_enqueued',
       dispatchId,
-      error: err,
-    });
+    }));
+  } catch (err) {
+    console.error(JSON.stringify({
+      level: 'ERROR',
+      traceId,
+      module: 'M3',
+      action: 'sqs_send_failed',
+      dispatchId,
+      error: String(err),
+    }));
     throw err;
   }
 
-  console.info('[dispatch-command] All steps completed', { dispatchId });
+  console.info(JSON.stringify({
+    level: 'INFO',
+    traceId,
+    module: 'M3',
+    action: 'all_steps_completed',
+    dispatchId,
+  }));
 }
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
 
-async function markFailed(dispatchId: string, assetId: string): Promise<void> {
+async function markFailed(dispatchId: string, assetId: string, traceId?: string): Promise<void> {
   try {
     await ddbDoc.send(
       new UpdateCommand({
@@ -153,11 +188,21 @@ async function markFailed(dispatchId: string, assetId: string): Promise<void> {
         },
       }),
     );
-    console.info('[dispatch-command] Dispatch record marked FAILED', { dispatchId });
-  } catch (updateErr) {
-    console.error('[dispatch-command] Failed to mark record as FAILED', {
+    console.info(JSON.stringify({
+      level: 'INFO',
+      traceId,
+      module: 'M3',
+      action: 'dispatch_record_marked_failed',
       dispatchId,
-      error: updateErr,
-    });
+    }));
+  } catch (updateErr) {
+    console.error(JSON.stringify({
+      level: 'ERROR',
+      traceId,
+      module: 'M3',
+      action: 'mark_failed_error',
+      dispatchId,
+      error: String(updateErr),
+    }));
   }
 }
