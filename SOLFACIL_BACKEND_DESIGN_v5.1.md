@@ -1,6 +1,6 @@
 # SOLFACIL VPP — Unified Backend Architecture Design
 
-> **Version:** 5.0 | **Date:** 2026-02-21
+> **Version:** 5.1 | **Date:** 2026-02-21
 > **Author:** Cloud Architecture Team
 > **Status:** ACTIVE — Grand Fusion Architecture
 > **Supersedes:** `SOLFACIL_BACKEND_DESIGN.md` v1.1, `SOLFACIL_AUTH_TENANT_DESIGN.md` v2.0
@@ -20,6 +20,7 @@
 | **v4.0** | 2026-02-20 | **DDD Architecture Upgrade.** Added §19 Data Strategy & Anti-Corruption Layer: (1) M4 Extensible Metadata — PostgreSQL JSONB `metadata` column + GIN index on assets/organizations, enabling zero-migration business attribute expansion; (2) M1 Dual Ingestion & ACL — `StandardTelemetry` canonical contract, `TelemetryAdapter` interface, `HuaweiAdapter` (devSn→deviceId, W÷1000→kW) + `NativeAdapter`, `AdapterRegistry` priority chain; M2 Algorithm Engine is permanently isolated from vendor-specific formats. |
 | **v4.1 (Draft)** | 2026-02-21 | **Admin Control Plane草案。** Added Module 8: Admin Control Plane (Configuration-Driven, No-Code Operations). Defines device_parser_rules + vpp_strategies schemas and REST API endpoints. M1–M7 unchanged. Full fusion deferred to v5.0. |
 | **v5.0** | 2026-02-21 | **Grand Fusion.** M8 confirmed as Global Control Plane. M1-M7 confirmed as Data Plane. Introduces Control Plane vs. Data Plane separation law, Grand Fusion Matrix (8-module dependency map), and Configuration Sync Architecture (EventBridge ConfigUpdated + ElastiCache Redis). No hardcoding rule enforced across all modules. |
+| **v5.1** | 2026-02-21 | **Cloud-Native Upgrade.** §0.2 replaced ElastiCache Redis + EventBridge broadcast (anti-pattern) with AWS AppConfig + Lambda Extension (sidecar pattern). Eliminates Redis ops cost, TTL management code, and config-refresh Lambdas. Adds Canary Deployment + Auto-Rollback safety for M8 config publishing. |
 
 ---
 
@@ -27,7 +28,7 @@
 
 0. [Architectural Law: Control Plane vs. Data Plane](#0-architectural-law-control-plane-vs-data-plane-全局法則)
    - 0.1 [Grand Fusion Matrix — 8-Module Configuration Dependency](#01-grand-fusion-matrix--8-module-configuration-dependency八大模塊全面融合矩陣)
-   - 0.2 [Configuration Sync & Caching Architecture](#02-configuration-sync--caching-architecture配置同步與快取架構)
+   - 0.2 [Configuration Distribution Architecture — AWS AppConfig + Lambda Extension](#02-configuration-distribution-architecture--aws-appconfig--lambda-extension)
 1. [Executive Summary & Design Principles](#1-executive-summary--design-principles)
 2. [Architecture Overview](#2-architecture-overview)
 3. [Global Data Isolation Strategy](#3-global-data-isolation-strategy)
@@ -211,148 +212,96 @@ M7's API Gateway Lambda Authorizer reads rate limits and webhook retry policies 
 
 ---
 
-### 0.2 Configuration Sync & Caching Architecture (配置同步與快取架構)
+### 0.2 Configuration Distribution Architecture — AWS AppConfig + Lambda Extension
 
-> This is the **technical soul** of v5.0 — the mechanism that makes the Control Plane / Data Plane separation operationally viable at scale.
+**架構決策紀錄（ADR）**
 
-#### The Problem
+**❌ 廢棄方案：ElastiCache Redis + EventBridge 廣播（Anti-pattern）**
 
-M1-M7 (7 Data Plane modules) all need to read configuration from M8's PostgreSQL tables. If every Lambda invocation queries PostgreSQL directly, high-traffic scenarios (especially M1 telemetry ingestion at ~1M events/day) will exhaust the database connection pool (**Connection Pool Exhaustion**), creating a single point of failure.
+為什麼不用：
+- ElastiCache Redis 是常駐服務，在 Serverless 架構中產生固定成本（~$15-30/月/節點），且需要 VPC 子網路和安全群組管理
+- 自行管理 TTL、Cache Invalidation、config-refresh Lambda，代碼複雜度高且容易出錯
+- EventBridge 廣播 ConfigUpdated 事件到 7 個 config-refresh Lambda，是典型的反模式：用事件驅動架構解決本地快取問題，過度工程化
+- Lambda Memory Cache 無法跨實例共享，且生命週期不可控
 
-#### Solution: Three-Tier Caching Architecture (三層快取架構)
+**✅ 採用方案：AWS AppConfig + Lambda Extension（Cloud-Native Sidecar Pattern）**
 
-```
-┌─────────────────────────────────────────────────────────────────────────────────┐
-│                          Three-Tier Caching Architecture                         │
-│                                                                                 │
-│  Tier 1: Lambda Memory Cache (最快，Lambda 實例內部)                               │
-│  ┌─────────────────────────────────────────────────────────────────────────┐    │
-│  │  Module-level variable outside Lambda handler function                   │    │
-│  │  TTL determined by Lambda Execution Environment lifecycle               │    │
-│  │  Suitable for: infrequently changing config (billing_rules, TTL=60min)  │    │
-│  │  Limitation: Not shared across Lambda instances                         │    │
-│  └──────────────────────────────────┬──────────────────────────────────────┘    │
-│                                     │ MISS                                      │
-│                                     ▼                                           │
-│  Tier 2: ElastiCache Redis (共享快取，所有 Lambda 實例共用)                          │
-│  ┌─────────────────────────────────────────────────────────────────────────┐    │
-│  │  Shared cache accessible by all Lambda instances across all modules      │    │
-│  │  Each config type has a dedicated Redis Key (see Grand Fusion Matrix)   │    │
-│  │  Update flow: M8 writes PostgreSQL → deletes Redis Key → next read      │    │
-│  │    rebuilds cache (Cache Invalidation pattern)                          │    │
-│  │  Suitable for: medium-frequency config changes                          │    │
-│  └──────────────────────────────────┬──────────────────────────────────────┘    │
-│                                     │ MISS                                      │
-│                                     ▼                                           │
-│  Tier 3: PostgreSQL (M8 的 Source of Truth)                                      │
-│  ┌─────────────────────────────────────────────────────────────────────────┐    │
-│  │  The ultimate source of truth for all configuration                      │    │
-│  │  NOT directly exposed to M1-M7 — accessed only via Redis cache layer   │    │
-│  │  Owned exclusively by M8 Admin Control Plane                            │    │
-│  └─────────────────────────────────────────────────────────────────────────┘    │
-│                                                                                 │
-└─────────────────────────────────────────────────────────────────────────────────┘
-```
+AppConfig 是 AWS 為 Serverless 配置管理量身打造的服務，完全消除上述所有問題。
 
-#### ConfigUpdated Event Broadcast Mechanism (配置更新事件廣播機制)
+---
 
-The following sequence describes the end-to-end configuration update flow:
+**架構設計：M8 → AppConfig → Lambda Extension → M1-M7**
 
-```
-Step 1: Operator modifies config in M8 Admin UI
-        (e.g., changes vpp_strategy for ORG_ENERGIA_001)
-              │
-              ▼
-Step 2: M8 Lambda writes updated config to PostgreSQL
-              │
-              ▼
-Step 3: M8 publishes ConfigUpdated event to EventBridge
-        ┌──────────────────────────────────────────────────┐
-        │  Source: solfacil.admin-control-plane             │
-        │  DetailType: ConfigUpdated                        │
-        │  Detail: {                                        │
-        │    "module": "M2",                                │
-        │    "orgId": "ORG_ENERGIA_001",                    │
-        │    "configType": "vpp_strategy",                  │
-        │    "updatedAt": "2026-02-21T14:30:00Z"            │
-        │  }                                                │
-        └──────────────────────────┬───────────────────────┘
-                                   │
-                                   ▼
-Step 4: EventBridge Rule routes to target module's config-refresh Lambda
-        based on the "module" field:
-        ┌──────────────────────────────────────────────────────────────┐
-        │  module='M1' → M1 config-refresh Lambda                      │
-        │                → DELETE Redis Key `parser_rules:{org_id}`    │
-        │                → Reload from PostgreSQL on next invocation   │
-        │                                                              │
-        │  module='M2' → M2 config-refresh Lambda                      │
-        │                → DELETE Redis Key `vpp_strategy:{org_id}`    │
-        │                                                              │
-        │  module='M3' → M3 config-refresh Lambda                      │
-        │                → DELETE Redis Key `dispatch_policy:{org_id}` │
-        │                                                              │
-        │  module='M4' → M4 config-refresh Lambda                      │
-        │                → DELETE Redis Key `billing_rules:{org_id}`   │
-        │                                                              │
-        │  module='M5' → M5 config-refresh Lambda                      │
-        │                → DELETE Redis Key `feature_flags:{org_id}`   │
-        │                                                              │
-        │  module='M6' → M6 config-refresh Lambda                      │
-        │                → DELETE Redis Key `rbac:{role}`              │
-        │                                                              │
-        │  module='M7' → M7 config-refresh Lambda                      │
-        │                → DELETE Redis Key `api_quota:{partner_id}`   │
-        │                → DELETE Redis Key `webhook_policy:{org_id}`  │
-        │                                                              │
-        │  module='ALL' → Broadcast to ALL modules (global config reset)│
-        └──────────────────────────────────────────────────────────────┘
-                                   │
-                                   ▼
-Step 5: Next Lambda invocation discovers Redis Key missing
-        → Automatically reloads latest config from PostgreSQL
-        → Writes fresh value back to Redis with appropriate TTL
-        → Business logic proceeds with updated configuration
-```
+配置更新流程：
 
-#### New CDK Stack: ConfigSyncStack (v5.0 Deliverable)
+1. 運營人員在 M8 後台（Admin Control Plane）修改配置（如調整某 org 的 vpp_strategy 閾值）
 
-| Resource | AWS Service | Purpose |
-|----------|-------------|---------|
-| Redis Cluster | ElastiCache Redis | Shared configuration cache (cluster mode disabled for dev, enabled for prod) |
-| Redis Security Group | EC2 SG | Only accessible from Lambda Security Group |
-| config-refresh Lambdas x7 | Lambda (Node.js 20) | One per Data Plane module (M1-M7) — invalidates Redis keys on ConfigUpdated |
-| EventBridge Rule | EventBridge | Source=`solfacil.admin-control-plane`, DetailType=`ConfigUpdated` |
-| VPC Endpoint (Redis) | VPC Endpoint | Lambda → ElastiCache connectivity within VPC |
+2. M8 的 Lambda 執行兩個操作（Transaction）：
+   - 寫入 PostgreSQL（M8 的 Source of Truth，RLS 保護）
+   - 呼叫 AppConfig StartDeployment API，將新配置版本發佈到對應的 AppConfig Configuration Profile
 
-#### v5.0 Deployment Order (融合後的系統部署順序)
+3. AWS AppConfig 處理配置發佈（關鍵能力）：
+   - 漸進式部署（Canary Deployment）：可設定「先讓 10% 的 Lambda 實例套用新配置，觀察 10 分鐘，無異常再全量推送」
+   - 自動回滾（Auto-Rollback）：若 CloudWatch Alarm 偵測到 Error Rate 異常上升，AppConfig 自動回滾到前一個穩定版本
+   - 這對 VPP 系統至關重要：若運營人員誤將 min_soc=20 改為 200，系統不會瞬間全崩，而是在 Canary 階段被攔截
 
-```
-Phase 0: SharedStack
-    │
-    ▼
-Phase 1: AuthStack (M6)
-    │
-    ▼
-Phase 2: ConfigSyncStack (NEW — ElastiCache Redis + config-refresh Lambdas)
-    │
-    ▼
-Phase 3: AdminControlPlaneStack (M8 — must deploy before Data Plane)
-    │
-    ▼
-Phase 4: IotHubStack (M1) + AlgorithmStack (M2)
-    │
-    ▼
-Phase 5: DrDispatcherStack (M3) + MarketBillingStack (M4)
-    │
-    ▼
-Phase 6: BffStack (M5)
-    │
-    ▼
-Phase 7: OpenApiStack (M7)
-```
+4. Lambda Extension（Sidecar 模式）：
+   - M1-M7 的所有 Lambda 在部署時掛載 AWS AppConfig Lambda Extension Layer
+   - Extension 作為背景進程（PID 1 之外）在 Lambda 執行環境中運行
+   - Extension 非同步、定期（預設每 45 秒）從 AppConfig 拉取最新配置，快取在本地記憶體
+   - M1-M7 的業務代碼透過本地 HTTP 呼叫（http://localhost:2772/applications/...）讀取配置
+   - 本地 localhost 呼叫延遲 < 1ms，真正的零網路延遲
 
-**Key Change from v4.1:** ConfigSyncStack and AdminControlPlaneStack are deployed **before** any Data Plane stacks, ensuring that M1-M7 can read configuration from M8 + Redis from their very first invocation.
+5. M1-M7 代碼讀取配置（業務代碼無需任何快取邏輯）：
+   ```
+   // M1 ingest-telemetry.ts 讀取解析規則（偽代碼，v5.0 實作目標）
+   const config = await fetch(
+     'http://localhost:2772/applications/solfacil-vpp/environments/prod/configurations/parser-rules'
+   ).then(r => r.json());
+   const rules = config[orgId]; // 直接用，Extension 保證是最新的
+   ```
+
+---
+
+**AppConfig 資源規劃（CDK AdminControlPlaneStack 的一部分）**
+
+AppConfig Application：solfacil-vpp
+
+Configuration Profiles（每個模塊的配置獨立管理）：
+- parser-rules（M1）：各廠商的 field_mapping + unit_conversions，按 org_id 分層
+- vpp-strategies（M2）：min_soc, max_soc, emergency_soc, profit_margin，按 org_id 分層
+- dispatch-policies（M3）：max_retry_count, timeout_minutes，按 org_id 分層
+- billing-rules（M4）：tariff_penalty_multiplier, operating_cost_per_kwh，按 org_id 分層
+- feature-flags（M5）：flag_name → is_enabled, target_org_ids（全局，無 org 分層）
+- rbac-policies（M6）：role → resource → actions 矩陣（全局）
+- api-quotas（M7）：partner_id → calls_per_minute, burst_limit（按 partner 分層）
+
+Deployment Strategy（部署策略）：
+- Production：Canary 10% → 10 分鐘觀察期 → 90% 全量（共 20 分鐘）
+- Rollback Trigger：CloudWatch Alarm（Lambda Error Rate > 1%）
+- Development：Linear 100%（立即全量，方便本地測試）
+
+---
+
+**對比總結（AppConfig vs Redis）**
+
+| 維度 | ElastiCache Redis (廢棄) | AWS AppConfig + Extension (採用) |
+|------|--------------------------|----------------------------------|
+| 運維成本 | ~$15-30/月/節點，常駐服務 | 按配置部署次數計費，接近零成本 |
+| 代碼複雜度 | TTL 管理 + Cache Invalidation + config-refresh Lambda | 業務代碼零快取邏輯，Extension 全包 |
+| 配置讀取延遲 | ~1-5ms（Redis 網路 RTT） | < 1ms（localhost 呼叫） |
+| 配置更新安全性 | 無保護，錯誤配置瞬間全量生效 | Canary 部署 + 自動回滾，防爆設計 |
+| VPC 依賴 | 必須在 VPC 內，增加子網路複雜度 | Lambda Extension 無需額外 VPC 資源 |
+| 災難恢復 | 需要 Redis 備份與快照策略 | AppConfig 內建版本歷史，一鍵回滾 |
+
+---
+
+**v5.1 系統部署順序（更新）**
+
+SharedStack → AuthStack → AdminControlPlaneStack（M8 + AppConfig Profiles）→ IotHubStack（M1 + Extension）→ AlgorithmStack（M2 + Extension）→ DrDispatcherStack（M3 + Extension）→ MarketBillingStack（M4 + Extension）→ BffStack（M5 + Extension）→ OpenApiStack（M7 + Extension）
+
+注意：移除 ConfigSyncStack（不再需要 ElastiCache Redis 和 config-refresh Lambdas）
+
 
 ---
 
