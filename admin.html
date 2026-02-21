@@ -1,0 +1,189 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOLFACIL Control Plane</title>
+
+  <!-- Material Icons -->
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+
+  <!-- JetBrains Mono (Monospace) -->
+  <link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- Ajv JSON Schema Validator (v8, draft-07) -->
+  <script src="https://cdn.jsdelivr.net/npm/ajv@8/dist/ajv.bundle.min.js"></script>
+
+  <!-- Admin CSS -->
+  <link rel="stylesheet" href="css/admin.css">
+</head>
+<body>
+
+  <!-- ═══════════════ TOP BAR ═══════════════ -->
+  <header id="topbar">
+    <div class="topbar-left">
+      <button id="btn-toggle-nav" class="topbar-btn" title="Toggle Navigation">
+        <i class="material-icons">menu</i>
+      </button>
+      <span class="topbar-logo">
+        <i class="material-icons topbar-logo-icon">bolt</i>
+        <span class="topbar-title">SOLFACIL</span>
+        <span class="topbar-subtitle">Control Plane</span>
+      </span>
+    </div>
+    <div class="topbar-right">
+      <div class="env-badge env-prod" id="env-badge">
+        <i class="material-icons" style="font-size:14px">cloud</i>
+        ENV: PROD
+      </div>
+      <div class="topbar-user" id="topbar-user">
+        <i class="material-icons">person</i>
+        <span>admin@solfacil.com.br</span>
+      </div>
+      <button class="topbar-btn" title="Settings">
+        <i class="material-icons">settings</i>
+      </button>
+    </div>
+  </header>
+
+  <!-- ═══════════════ MAIN CONTAINER ═══════════════ -->
+  <div id="app-container">
+
+    <!-- ─── LEFT NAV ─── -->
+    <nav id="left-nav">
+      <div class="nav-section-label">DATA PLANE</div>
+      <ul id="nav-modules">
+        <!-- Rendered by admin.js from MODULE_REGISTRY -->
+      </ul>
+
+      <div class="nav-section-label">SYSTEM</div>
+      <ul class="nav-system">
+        <li class="nav-system-item" data-system="deploy-status">
+          <i class="material-icons">rocket_launch</i>
+          <span>Deploy Status</span>
+        </li>
+        <li class="nav-system-item" data-system="audit-log">
+          <i class="material-icons">history</i>
+          <span>Audit Log</span>
+        </li>
+      </ul>
+
+      <div class="nav-footer">
+        <div class="nav-footer-version">v1.0 &middot; Backend v5.1</div>
+        <div class="nav-footer-status">
+          <span class="status-dot status-dot--success"></span>
+          AppConfig: Connected
+        </div>
+      </div>
+    </nav>
+
+    <!-- ─── MAIN EDITOR AREA ─── -->
+    <main id="main-editor">
+      <!-- Breadcrumb -->
+      <div id="breadcrumb" class="breadcrumb">
+        <span class="breadcrumb-item">Control Plane</span>
+        <i class="material-icons breadcrumb-sep">chevron_right</i>
+        <span class="breadcrumb-item active" id="breadcrumb-module">M1 IoT Hub</span>
+      </div>
+
+      <!-- Module Content -->
+      <div id="module-content" class="module-content">
+        <!-- Rendered by admin.js switchModule() -->
+      </div>
+
+      <!-- Action Bar -->
+      <div id="action-bar" class="action-bar">
+        <div class="action-bar-left">
+          <span class="action-status" id="action-status">
+            <span class="status-dot status-dot--neutral"></span>
+            No changes
+          </span>
+        </div>
+        <div class="action-bar-right">
+          <button class="btn btn-secondary" disabled>
+            <i class="material-icons">check_circle</i>
+            Validate
+            <kbd>Ctrl+E</kbd>
+          </button>
+          <button class="btn btn-secondary" disabled>
+            <i class="material-icons">difference</i>
+            Preview Diff
+            <kbd>Ctrl+D</kbd>
+          </button>
+          <button class="btn btn-primary" disabled>
+            <i class="material-icons">cloud_upload</i>
+            Deploy to AppConfig
+            <kbd>Ctrl+Shift+Enter</kbd>
+          </button>
+        </div>
+      </div>
+
+      <!-- Status Bar -->
+      <div id="status-bar" class="status-bar">
+        <span class="status-dot status-dot--success"></span>
+        <span>AppConfig: <strong>BAKED</strong></span>
+        <span class="status-bar-separator">|</span>
+        <span>Last deploy: —</span>
+        <span class="status-bar-right">
+          Phase 1 — Skeleton
+        </span>
+      </div>
+    </main>
+
+    <!-- ─── AUDIT PANEL ─── -->
+    <aside id="audit-panel">
+      <div class="audit-header">
+        <h3>
+          <i class="material-icons">history</i>
+          Audit Log
+        </h3>
+        <button class="topbar-btn" id="btn-toggle-audit" title="Collapse Audit Panel">
+          <i class="material-icons">chevron_right</i>
+        </button>
+      </div>
+      <div class="audit-entries" id="audit-entries">
+        <!-- Mock audit entries for Phase 1 -->
+        <div class="audit-entry">
+          <div class="audit-time">16:45</div>
+          <div class="audit-badge audit-badge--success">DEPLOY</div>
+          <div class="audit-detail">
+            <strong>M2</strong> vpp-strategies &rarr; BAKED
+            <div class="audit-user">admin@solfacil.com.br</div>
+          </div>
+        </div>
+        <div class="audit-entry">
+          <div class="audit-time">16:42</div>
+          <div class="audit-badge audit-badge--info">EDIT</div>
+          <div class="audit-detail">
+            <strong>M2</strong> Changed: min_soc 20&rarr;15
+            <div class="audit-user">admin@solfacil.com.br</div>
+          </div>
+        </div>
+        <div class="audit-entry">
+          <div class="audit-time">16:38</div>
+          <div class="audit-badge audit-badge--error">ROLLBACK</div>
+          <div class="audit-detail">
+            <strong>M4</strong> billing-rules &rarr; AUTO ROLLBACK
+            <div class="audit-user">CW Alarm (Error&gt;1%)</div>
+          </div>
+        </div>
+        <div class="audit-entry">
+          <div class="audit-time">16:30</div>
+          <div class="audit-badge audit-badge--neutral">LOGIN</div>
+          <div class="audit-detail">
+            admin@solfacil.com.br
+          </div>
+        </div>
+      </div>
+    </aside>
+
+  </div><!-- /app-container -->
+
+  <!-- Toast Container -->
+  <div id="toast-container"></div>
+
+  <!-- Admin JS (no ES modules — works with file://) -->
+  <script src="js/admin.js"></script>
+
+</body>
+</html>
