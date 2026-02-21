@@ -36,6 +36,11 @@
         <i class="material-icons" style="font-size:14px">cloud</i>
         ENV: PROD
       </div>
+      <div class="lang-switcher">
+        <button id="lang-en" onclick="setLang('en')" class="lang-btn">EN</button>
+        <span class="lang-divider">|</span>
+        <button id="lang-zh" onclick="setLang('zh')" class="lang-btn active">\u7B80</button>
+      </div>
       <div class="topbar-user" id="topbar-user">
         <i class="material-icons">person</i>
         <span>admin@solfacil.com.br</span>
@@ -182,6 +187,8 @@
   <!-- Toast Container -->
   <div id="toast-container"></div>
 
+  <!-- i18n (EN/ZH) -->
+  <script src="js/i18n.js"></script>
   <!-- Admin JS (no ES modules — works with file://) -->
   <script src="js/admin.js"></script>
 
