@@ -112,6 +112,406 @@ var MODULE_ORDER = ["m1", "m2", "m3", "m4", "m5", "m6", "m7"];
 
 var activeModuleId = "m1";
 
+/* ═══════════════════════════════════════════════════════════════════
+   SECTION 2: M1 IoT Hub — Parser Rules Editor
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── M1 Sample JSON Templates ─────────────────────────────────── */
+
+var M1_VENDOR_TEMPLATES = {
+  Huawei: JSON.stringify(
+    {
+      vendor: "Huawei",
+      protocol: "Modbus/TCP",
+      registers: {
+        soc: { address: 37004, scale: 0.1, unit: "%" },
+        power_w: { address: 37001, scale: 1, unit: "W" },
+        voltage: { address: 37006, scale: 0.1, unit: "V" },
+      },
+      poll_interval_ms: 5000,
+    },
+    null,
+    2,
+  ),
+  Sungrow: JSON.stringify(
+    {
+      vendor: "Sungrow",
+      protocol: "Modbus/TCP",
+      registers: {
+        soc: { address: 13022, scale: 1, unit: "%" },
+        power_w: { address: 13033, scale: 1, unit: "W" },
+      },
+      poll_interval_ms: 3000,
+    },
+    null,
+    2,
+  ),
+  Growatt: JSON.stringify(
+    {
+      vendor: "Growatt",
+      protocol: "Modbus/TCP",
+      registers: {
+        soc: { address: 1014, scale: 0.01, unit: "%" },
+        power_w: { address: 1009, scale: 0.1, unit: "W" },
+      },
+      poll_interval_ms: 5000,
+    },
+    null,
+    2,
+  ),
+  SolarEdge: JSON.stringify(
+    {
+      vendor: "SolarEdge",
+      protocol: "SunSpec/TCP",
+      registers: {
+        soc: { address: 62852, scale: 1, unit: "%" },
+        power_w: { address: 62836, scale: 1, unit: "W" },
+      },
+      poll_interval_ms: 5000,
+    },
+    null,
+    2,
+  ),
+  BYD: JSON.stringify(
+    {
+      vendor: "BYD",
+      protocol: "CAN/RS485",
+      registers: {
+        soc: { address: 256, scale: 1, unit: "%" },
+        power_w: { address: 258, scale: 1, unit: "W" },
+      },
+      poll_interval_ms: 5000,
+    },
+    null,
+    2,
+  ),
+  Custom: JSON.stringify(
+    {
+      vendor: "",
+      protocol: "",
+      registers: {},
+      poll_interval_ms: 5000,
+    },
+    null,
+    2,
+  ),
+};
+
+var M1_VENDOR_OPTIONS = [
+  { value: "Huawei", label: "Huawei (LUNA2000 series)" },
+  { value: "Sungrow", label: "Sungrow (SH series)" },
+  { value: "Growatt", label: "Growatt (SPH series)" },
+  { value: "SolarEdge", label: "SolarEdge (StorEdge)" },
+  { value: "BYD", label: "BYD (Battery-Box)" },
+  { value: "Custom", label: "[Custom / \u81EA\u5B9A\u7FA9]" },
+];
+
+/* ─── M1 State ─────────────────────────────────────────────────── */
+
+var m1State = {
+  selectedVendor: "Huawei",
+  jsonText: M1_VENDOR_TEMPLATES.Huawei,
+  originalJson: M1_VENDOR_TEMPLATES.Huawei,
+  validationStatus: "neutral", // "neutral" | "valid" | "error"
+  validationMessage: "Press Validate to check syntax",
+  debounceTimer: null,
+};
+
+/* ─── M1 Renderer ──────────────────────────────────────────────── */
+
+function renderM1ParserRules(container, mod) {
+  var accent = mod.accent;
+
+  // Build vendor <option> list
+  var optionsHtml = "";
+  for (var i = 0; i < M1_VENDOR_OPTIONS.length; i++) {
+    var opt = M1_VENDOR_OPTIONS[i];
+    var selected = opt.value === m1State.selectedVendor ? " selected" : "";
+    optionsHtml +=
+      '<option value="' +
+      opt.value +
+      '"' +
+      selected +
+      ">" +
+      opt.label +
+      "</option>";
+  }
+
+  container.innerHTML =
+    '<div class="fade-in m1-editor">' +
+    // Header
+    '<div class="module-header">' +
+    '  <div class="module-header-title" style="color:' +
+    accent +
+    '">' +
+    '    <i class="material-icons">' +
+    mod.icon +
+    "</i>" +
+    "    M1 IoT Hub &mdash; Parser Rules Editor" +
+    "  </div>" +
+    '  <div class="module-header-meta">' +
+    '    <span class="meta-tag">Profile: ' +
+    mod.appConfigProfile +
+    "</span>" +
+    '    <span class="meta-tag">TTL: ' +
+    mod.cacheTTL +
+    "</span>" +
+    '    <span class="meta-tag">Table: ' +
+    mod.m8Table +
+    "</span>" +
+    "  </div>" +
+    "</div>" +
+    // Vendor Selector Section
+    '<div class="m1-section m1-vendor-section">' +
+    '  <div class="m1-section-title">' +
+    '    <i class="material-icons" style="color:' +
+    accent +
+    '">factory</i>' +
+    "    \u5EE0\u724C (Manufacturer)" +
+    "  </div>" +
+    '  <select class="m1-select" id="m1-vendor-select">' +
+    optionsHtml +
+    "  </select>" +
+    "</div>" +
+    // JSON Editor Section
+    '<div class="m1-section m1-json-section">' +
+    '  <div class="m1-section-title">' +
+    '    <i class="material-icons" style="color:' +
+    accent +
+    '">code</i>' +
+    "    JSON Editor" +
+    "  </div>" +
+    '  <textarea class="m1-textarea" id="m1-json-editor" spellcheck="false">' +
+    m1EscapeHtml(m1State.jsonText) +
+    "</textarea>" +
+    "</div>" +
+    // Validation Feedback
+    '<div class="m1-validation" id="m1-validation">' +
+    '  <span class="m1-validation-text m1-validation--' +
+    m1State.validationStatus +
+    '">' +
+    m1EscapeHtml(m1State.validationMessage) +
+    "  </span>" +
+    "</div>" +
+    // Action Bar
+    '<div class="m1-action-bar">' +
+    '  <button class="btn btn-secondary m1-btn-validate" id="m1-btn-validate" style="border-color:' +
+    accent +
+    ";color:" +
+    accent +
+    '">' +
+    '    <i class="material-icons">check_circle</i> Validate JSON' +
+    "  </button>" +
+    '  <button class="btn btn-primary m1-btn-deploy" id="m1-btn-deploy" disabled style="background:' +
+    accent +
+    '">' +
+    '    <i class="material-icons">rocket_launch</i> Deploy Parser Rule' +
+    "  </button>" +
+    "</div>" +
+    "</div>";
+
+  m1BindEvents();
+  m1UpdateDeployButton();
+}
+
+/* ─── M1 Helpers ───────────────────────────────────────────────── */
+
+function m1EscapeHtml(str) {
+  return str
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;");
+}
+
+/* ─── M1 Event Binding ─────────────────────────────────────────── */
+
+function m1BindEvents() {
+  var vendorSelect = document.getElementById("m1-vendor-select");
+  var jsonEditor = document.getElementById("m1-json-editor");
+  var btnValidate = document.getElementById("m1-btn-validate");
+  var btnDeploy = document.getElementById("m1-btn-deploy");
+
+  if (vendorSelect) {
+    vendorSelect.addEventListener("change", function () {
+      m1State.selectedVendor = this.value;
+      var template =
+        M1_VENDOR_TEMPLATES[this.value] || M1_VENDOR_TEMPLATES.Custom;
+      m1State.jsonText = template;
+      m1State.originalJson = template;
+      m1State.validationStatus = "neutral";
+      m1State.validationMessage = "Press Validate to check syntax";
+      var editor = document.getElementById("m1-json-editor");
+      if (editor) editor.value = template;
+      m1UpdateValidationDisplay();
+      m1UpdateDeployButton();
+    });
+  }
+
+  if (jsonEditor) {
+    // Tab key inserts 2 spaces
+    jsonEditor.addEventListener("keydown", function (e) {
+      if (e.key === "Tab") {
+        e.preventDefault();
+        var start = this.selectionStart;
+        var end = this.selectionEnd;
+        var value = this.value;
+        this.value = value.substring(0, start) + "  " + value.substring(end);
+        this.selectionStart = start + 2;
+        this.selectionEnd = start + 2;
+        // Trigger input event for state sync
+        m1OnEditorInput.call(this);
+      }
+    });
+
+    // Debounced validation on input
+    jsonEditor.addEventListener("input", m1OnEditorInput);
+  }
+
+  if (btnValidate) btnValidate.addEventListener("click", m1ValidateJson);
+  if (btnDeploy) btnDeploy.addEventListener("click", m1ShowConfirmModal);
+}
+
+function m1OnEditorInput() {
+  m1State.jsonText = this.value;
+  // Debounced auto-validation (800ms)
+  if (m1State.debounceTimer) clearTimeout(m1State.debounceTimer);
+  m1State.debounceTimer = setTimeout(function () {
+    m1ValidateJson();
+  }, 800);
+  m1UpdateDeployButton();
+}
+
+/* ─── M1 JSON Validation ───────────────────────────────────────── */
+
+function m1ValidateJson() {
+  var text = m1State.jsonText.trim();
+  if (!text) {
+    m1State.validationStatus = "error";
+    m1State.validationMessage = "\u2717 Invalid JSON: empty input";
+    m1UpdateValidationDisplay();
+    m1UpdateDeployButton();
+    return;
+  }
+
+  try {
+    var parsed = JSON.parse(text);
+
+    // Count registers
+    var registerCount = 0;
+    if (parsed.registers && typeof parsed.registers === "object") {
+      registerCount = Object.keys(parsed.registers).length;
+    }
+    var pollMs = parsed.poll_interval_ms || "N/A";
+
+    m1State.validationStatus = "valid";
+    m1State.validationMessage =
+      "\u2713 Valid JSON \u2014 " +
+      registerCount +
+      " registers, poll interval " +
+      pollMs +
+      "ms";
+  } catch (err) {
+    m1State.validationStatus = "error";
+    m1State.validationMessage = "\u2717 Invalid JSON: " + err.message;
+  }
+
+  m1UpdateValidationDisplay();
+  m1UpdateDeployButton();
+}
+
+function m1UpdateValidationDisplay() {
+  var el = document.getElementById("m1-validation");
+  if (!el) return;
+  el.innerHTML =
+    '<span class="m1-validation-text m1-validation--' +
+    m1State.validationStatus +
+    '">' +
+    m1EscapeHtml(m1State.validationMessage) +
+    "</span>";
+}
+
+/* ─── M1 Deploy Button State ──────────────────────────────────── */
+
+function m1UpdateDeployButton() {
+  var btn = document.getElementById("m1-btn-deploy");
+  if (!btn) return;
+  var isValid = m1State.validationStatus === "valid";
+  var hasChanges = m1State.jsonText !== m1State.originalJson;
+  btn.disabled = !isValid || !hasChanges;
+}
+
+/* ─── M1 Confirm Modal ────────────────────────────────────────── */
+
+function m1ShowConfirmModal() {
+  var vendor = m1State.selectedVendor;
+
+  var existing = document.getElementById("m1-confirm-modal");
+  if (existing) existing.parentNode.removeChild(existing);
+
+  var overlay = document.createElement("div");
+  overlay.id = "m1-confirm-modal";
+  overlay.className = "m1-modal-overlay";
+  overlay.innerHTML =
+    '<div class="m1-modal">' +
+    '  <div class="m1-modal-header">' +
+    '    <i class="material-icons" style="color:#06b6d4">warning</i>' +
+    "    \u78BA\u8A8D\u90E8\u7F72\u89E3\u6790\u898F\u5247" +
+    "  </div>" +
+    '  <div class="m1-modal-body">' +
+    "    \u5373\u5C07\u66F4\u65B0 <strong>" +
+    m1EscapeHtml(vendor) +
+    "</strong> \u7684\u89E3\u6790\u898F\u5247\u81F3 AppConfig\uFF0C\u78BA\u8A8D\u5F8C\u7ACB\u5373\u751F\u6548\u3002\u662F\u5426\u78BA\u8A8D\uFF1F" +
+    "  </div>" +
+    '  <div class="m1-modal-footer">' +
+    '    <button class="btn btn-secondary" id="m1-modal-cancel">Cancel</button>' +
+    '    <button class="btn btn-primary" id="m1-modal-confirm" style="background:#06b6d4">' +
+    '      <i class="material-icons">check</i> Confirm' +
+    "    </button>" +
+    "  </div>" +
+    "</div>";
+
+  document.body.appendChild(overlay);
+
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay) m1CloseConfirmModal();
+  });
+
+  document
+    .getElementById("m1-modal-cancel")
+    .addEventListener("click", m1CloseConfirmModal);
+  document
+    .getElementById("m1-modal-confirm")
+    .addEventListener("click", function () {
+      m1CloseConfirmModal();
+      m1DeploySuccess();
+    });
+}
+
+function m1CloseConfirmModal() {
+  var modal = document.getElementById("m1-confirm-modal");
+  if (modal) {
+    modal.classList.add("m1-modal-closing");
+    setTimeout(function () {
+      if (modal.parentNode) modal.parentNode.removeChild(modal);
+    }, 200);
+  }
+}
+
+function m1DeploySuccess() {
+  var vendor = m1State.selectedVendor;
+  // Update original to reflect deployed state
+  m1State.originalJson = m1State.jsonText;
+  m1UpdateDeployButton();
+  showToast(
+    "\u2713 " +
+      vendor +
+      " \u89E3\u6790\u898F\u5247\u5DF2\u767C\u4F48\u81F3 AppConfig",
+    "success",
+    3000,
+  );
+}
+
 /* ─── SECTION 3: Navigation & Layout ───────────────────────────── */
 
 function initNavigation() {
@@ -204,6 +604,12 @@ function renderBreadcrumb(mod) {
 function renderModuleContent(mod) {
   var container = document.getElementById("module-content");
   if (!container) return;
+
+  // Route M1 to its dedicated renderer
+  if (mod.id === "m1") {
+    renderM1ParserRules(container, mod);
+    return;
+  }
 
   // Route M2 to its dedicated renderer
   if (mod.id === "m2") {

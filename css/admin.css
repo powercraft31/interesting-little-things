@@ -1309,3 +1309,230 @@ html, body {
     grid-template-columns: 1fr 1fr;
   }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   PHASE 3: M1 IoT Hub — Parser Rules Editor
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── M1 Editor Layout ───────────────────────────────────────────── */
+.m1-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+.m1-section {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.m1-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-4);
+}
+.m1-section-title .material-icons {
+  font-size: 20px;
+}
+
+/* ─── M1 Vendor Selector ─────────────────────────────────────────── */
+.m1-vendor-section {
+  border-left: 3px solid var(--accent-m1);
+}
+
+.m1-select {
+  width: 100%;
+  max-width: 420px;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  transition: border-color 0.2s, box-shadow 0.2s;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+}
+.m1-select:focus {
+  border-color: var(--accent-m1);
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.2);
+}
+.m1-select option {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+/* ─── M1 JSON Editor Textarea ────────────────────────────────────── */
+.m1-json-section {
+  flex: 1;
+}
+
+.m1-textarea {
+  display: block;
+  width: 100%;
+  min-height: 320px;
+  resize: vertical;
+  padding: var(--space-4);
+  background: var(--bg-base);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: 'JetBrains Mono', monospace;
+  font-size: var(--text-sm);
+  line-height: 1.6;
+  tab-size: 2;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.m1-textarea:focus {
+  border-color: var(--accent-m1);
+  box-shadow: 0 0 0 3px rgba(6, 182, 212, 0.2);
+}
+
+/* ─── M1 Validation Feedback ─────────────────────────────────────── */
+.m1-validation {
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  min-height: 36px;
+  display: flex;
+  align-items: center;
+}
+
+.m1-validation-text {
+  font-size: var(--text-sm);
+  font-family: var(--font-mono);
+  font-weight: 500;
+}
+
+.m1-validation--neutral {
+  color: var(--text-muted);
+}
+.m1-validation--valid {
+  color: var(--status-success);
+}
+.m1-validation--error {
+  color: var(--status-error);
+}
+
+/* ─── M1 Action Bar ──────────────────────────────────────────────── */
+.m1-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+}
+
+.m1-btn-validate:hover:not(:disabled) {
+  background: rgba(6, 182, 212, 0.08) !important;
+}
+
+.m1-btn-deploy {
+  box-shadow: 0 1px 3px rgba(6, 182, 212, 0.3);
+}
+.m1-btn-deploy:hover:not(:disabled) {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(6, 182, 212, 0.4);
+}
+.m1-btn-deploy:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* ─── M1 Confirm Modal ──────────────────────────────────────────── */
+.m1-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  animation: m1-modal-fade-in 0.2s ease;
+}
+.m1-modal-overlay.m1-modal-closing {
+  animation: m1-modal-fade-out 0.2s ease forwards;
+}
+
+.m1-modal {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  width: 480px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: m1-modal-scale-in 0.2s ease;
+}
+.m1-modal-closing .m1-modal {
+  animation: m1-modal-scale-out 0.2s ease forwards;
+}
+
+.m1-modal-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.m1-modal-header .material-icons {
+  font-size: 22px;
+}
+
+.m1-modal-body {
+  padding: var(--space-6);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.m1-modal-body strong {
+  color: var(--accent-m1);
+  font-weight: 700;
+}
+
+.m1-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+}
+
+@keyframes m1-modal-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes m1-modal-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes m1-modal-scale-in {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes m1-modal-scale-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to   { opacity: 0; transform: scale(0.95) translateY(10px); }
+}
