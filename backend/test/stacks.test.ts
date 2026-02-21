@@ -1,5 +1,5 @@
 import * as cdk from "aws-cdk-lib";
-import { Template } from "aws-cdk-lib/assertions";
+import { Match, Template } from "aws-cdk-lib/assertions";
 import { AdminControlPlaneStack } from "../lib/admin-control-plane-stack";
 import { BffStack } from "../lib/bff-stack";
 import { IdentityStack } from "../lib/identity-stack";
@@ -255,5 +255,40 @@ describe("X-Ray tracing compliance", () => {
         Mode: "Active",
       });
     }
+  });
+});
+
+// ── AppConfig IAM Compliance ──────────────────────────────────────────
+
+describe("AppConfig IAM compliance", () => {
+  test("IotHubStack — Lambda has AppConfig read permissions in IAM Policy", () => {
+    const app = new cdk.App();
+    const sharedStack = new cdk.Stack(app, "TestSharedIAM");
+    const eventBus = new VppEventBus(
+      sharedStack,
+      "TestEventBusIAM",
+      DEFAULT_STAGE,
+    );
+
+    const stack = new IotHubStack(app, "TestIotHubIAM", {
+      eventBus: eventBus.bus,
+    });
+    const template = Template.fromStack(stack);
+
+    // Assert that at least one IAM Policy in this Stack grants AppConfig read access.
+    // This prevents any engineer from accidentally removing the permission without tests failing.
+    template.hasResourceProperties("AWS::IAM::Policy", {
+      PolicyDocument: {
+        Statement: Match.arrayWith([
+          Match.objectLike({
+            Action: Match.arrayWith([
+              "appconfig:StartConfigurationSession",
+              "appconfig:GetLatestConfiguration",
+            ]),
+            Effect: "Allow",
+          }),
+        ]),
+      },
+    });
   });
 });
