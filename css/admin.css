@@ -1536,3 +1536,382 @@ html, body {
   from { opacity: 1; transform: scale(1) translateY(0); }
   to   { opacity: 0; transform: scale(0.95) translateY(10px); }
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   PHASE 4: Shared Components for M3/M4/M5/M7
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── CP Section (shared container) ─────────────────────────────── */
+.cp-section {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+}
+
+.cp-section-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-base);
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-4);
+}
+.cp-section-title .material-icons {
+  font-size: 20px;
+}
+
+/* ─── CP Form Grid ──────────────────────────────────────────────── */
+.cp-form-grid {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  gap: var(--space-4);
+}
+
+@media (max-width: 1200px) {
+  .cp-form-grid {
+    grid-template-columns: 1fr 1fr;
+  }
+}
+
+.cp-field {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+
+.cp-label {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  color: var(--text-secondary);
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.cp-input {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-base);
+  font-weight: 500;
+  outline: none;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.cp-input:focus {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+
+.cp-select {
+  width: 100%;
+  padding: var(--space-3) var(--space-4);
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-md);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: var(--text-sm);
+  font-weight: 500;
+  outline: none;
+  cursor: pointer;
+  -webkit-appearance: none;
+  -moz-appearance: none;
+  appearance: none;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%2394a3b8' d='M6 8L1 3h10z'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 12px center;
+  padding-right: 36px;
+  transition: border-color 0.2s, box-shadow 0.2s;
+}
+.cp-select:focus {
+  border-color: var(--border-strong);
+  box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.15);
+}
+.cp-select option {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.cp-hint {
+  font-size: 10px;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+}
+
+/* ─── CP Action Bar ─────────────────────────────────────────────── */
+.cp-action-bar {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) 0;
+}
+
+.cp-btn-deploy {
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.3);
+}
+.cp-btn-deploy:hover:not(:disabled) {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.4);
+}
+.cp-btn-deploy:active:not(:disabled) {
+  transform: translateY(0);
+}
+
+/* ─── CP Module Editor Layout ───────────────────────────────────── */
+.m3-editor,
+.m4-editor,
+.m5-editor,
+.m7-editor {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+}
+
+/* ─── CP Warning Banner (M4) ───────────────────────────────────── */
+.cp-warning-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: var(--space-3) var(--space-4);
+  background: rgba(239, 68, 68, 0.1);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-left: 4px solid #ef4444;
+  border-radius: var(--radius-md);
+  font-size: var(--text-sm);
+  color: #fca5a5;
+  font-weight: 500;
+}
+.cp-warning-banner .material-icons {
+  font-size: 20px;
+  color: #ef4444;
+  flex-shrink: 0;
+}
+
+/* ─── CP Toggle Switch (M5 Feature Flags) ───────────────────────── */
+.cp-flag-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.cp-flag-row {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-4);
+  background: var(--bg-overlay);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-md);
+  transition: border-color 0.15s, background 0.15s;
+}
+.cp-flag-row:hover {
+  border-color: var(--accent-m5);
+  background: rgba(236, 72, 153, 0.04);
+}
+
+.cp-flag-info {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  min-width: 0;
+}
+
+.cp-flag-label {
+  font-size: var(--text-sm);
+  font-weight: 500;
+  color: var(--text-primary);
+}
+
+.cp-flag-key {
+  font-size: var(--text-xs);
+  font-family: var(--font-mono);
+  color: var(--text-muted);
+}
+
+.cp-flag-controls {
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  flex-shrink: 0;
+}
+
+.cp-toggle-status {
+  font-size: var(--text-xs);
+  font-weight: 600;
+  font-family: var(--font-mono);
+  min-width: 40px;
+  text-align: right;
+}
+.cp-toggle-status--on {
+  color: var(--status-success);
+}
+.cp-toggle-status--off {
+  color: var(--text-muted);
+}
+
+/* Pure CSS Toggle Switch */
+.cp-toggle-switch {
+  position: relative;
+  display: inline-block;
+  width: 44px;
+  height: 24px;
+  flex-shrink: 0;
+  cursor: pointer;
+}
+.cp-toggle-switch .cp-toggle-input {
+  opacity: 0;
+  width: 0;
+  height: 0;
+  position: absolute;
+}
+.cp-toggle-slider {
+  position: absolute;
+  inset: 0;
+  background: var(--bg-input);
+  border: 1px solid var(--border-default);
+  border-radius: 12px;
+  transition: background 0.25s, border-color 0.25s;
+}
+.cp-toggle-slider::before {
+  content: '';
+  position: absolute;
+  width: 18px;
+  height: 18px;
+  left: 2px;
+  bottom: 2px;
+  background: var(--text-muted);
+  border-radius: 50%;
+  transition: transform 0.25s, background 0.25s;
+}
+
+/* Checked state */
+.cp-toggle-input:checked + .cp-toggle-slider {
+  background: var(--status-success);
+  border-color: var(--status-success);
+}
+.cp-toggle-input:checked + .cp-toggle-slider::before {
+  transform: translateX(20px);
+  background: #fff;
+}
+
+/* Focus ring */
+.cp-toggle-input:focus-visible + .cp-toggle-slider {
+  box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.3);
+}
+
+/* ─── CP Generic Modal (M3/M4/M5/M7) ───────────────────────────── */
+.cp-modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 300;
+  animation: cp-modal-fade-in 0.2s ease;
+}
+.cp-modal-overlay.cp-modal-closing {
+  animation: cp-modal-fade-out 0.2s ease forwards;
+}
+
+.cp-modal {
+  background: var(--bg-elevated);
+  border: 1px solid var(--border-default);
+  border-radius: var(--radius-lg);
+  width: 520px;
+  max-width: 90vw;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
+  animation: cp-modal-scale-in 0.2s ease;
+}
+.cp-modal-closing .cp-modal {
+  animation: cp-modal-scale-out 0.2s ease forwards;
+}
+
+.cp-modal-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-4) var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  font-size: var(--text-base);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.cp-modal-header .material-icons {
+  font-size: 22px;
+}
+
+.cp-modal-body {
+  padding: var(--space-6);
+  font-size: var(--text-sm);
+  color: var(--text-secondary);
+  line-height: 1.7;
+}
+.cp-modal-body strong {
+  color: var(--text-primary);
+  font-weight: 700;
+}
+
+.cp-modal-footer {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  padding: var(--space-4) var(--space-6);
+  border-top: 1px solid var(--border-subtle);
+}
+
+@keyframes cp-modal-fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes cp-modal-fade-out {
+  from { opacity: 1; }
+  to   { opacity: 0; }
+}
+@keyframes cp-modal-scale-in {
+  from { opacity: 0; transform: scale(0.95) translateY(10px); }
+  to   { opacity: 1; transform: scale(1) translateY(0); }
+}
+@keyframes cp-modal-scale-out {
+  from { opacity: 1; transform: scale(1) translateY(0); }
+  to   { opacity: 0; transform: scale(0.95) translateY(10px); }
+}
+
+/* ─── Live Audit Log: Type-specific Badge Colors ────────────────── */
+.audit-badge--deploy {
+  background: rgba(6, 182, 212, 0.15);
+  color: #06b6d4;
+}
+.audit-badge--edit {
+  background: rgba(245, 158, 11, 0.15);
+  color: #f59e0b;
+}
+.audit-badge--rollback {
+  background: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+.audit-badge--login {
+  background: rgba(107, 114, 128, 0.15);
+  color: #6b7280;
+}
+
+/* ─── Audit Entry New Item Flash Animation ──────────────────────── */
+.audit-entry--new {
+  animation: audit-flash 1.5s ease;
+}
+
+@keyframes audit-flash {
+  0%   { background: rgba(16, 185, 129, 0.25); }
+  50%  { background: rgba(16, 185, 129, 0.10); }
+  100% { background: transparent; }
+}

@@ -617,7 +617,31 @@ function renderModuleContent(mod) {
     return;
   }
 
-  // Default placeholder for other modules
+  // Route M3 to its dedicated renderer
+  if (mod.id === "m3") {
+    renderM3DispatchPolicies(container, mod);
+    return;
+  }
+
+  // Route M4 to its dedicated renderer
+  if (mod.id === "m4") {
+    renderM4BillingRules(container, mod);
+    return;
+  }
+
+  // Route M5 to its dedicated renderer
+  if (mod.id === "m5") {
+    renderM5FeatureFlags(container, mod);
+    return;
+  }
+
+  // Route M7 to its dedicated renderer
+  if (mod.id === "m7") {
+    renderM7ApiQuotas(container, mod);
+    return;
+  }
+
+  // Default placeholder for other modules (M6 read-only)
   renderModulePlaceholder(container, mod);
 }
 
@@ -1244,6 +1268,801 @@ function m2DeploySuccess() {
   );
 }
 
+/* ═══════════════════════════════════════════════════════════════════
+   SECTION 5: M3 DR Dispatcher — Dispatch Policies
+   ═══════════════════════════════════════════════════════════════════ */
+
+var m3State = {
+  max_retries: 3,
+  dispatch_timeout_ms: 5000,
+  priority_order: "SOC優先",
+};
+
+function renderM3DispatchPolicies(container, mod) {
+  var accent = mod.accent;
+
+  container.innerHTML =
+    '<div class="fade-in m3-editor">' +
+    // Header
+    '<div class="module-header">' +
+    '  <div class="module-header-title" style="color:' +
+    accent +
+    '">' +
+    '    <i class="material-icons">' +
+    mod.icon +
+    "</i>" +
+    "    DR Dispatcher &mdash; Dispatch Policies" +
+    "  </div>" +
+    '  <div class="module-header-meta">' +
+    '    <span class="meta-tag">Profile: ' +
+    mod.appConfigProfile +
+    "</span>" +
+    '    <span class="meta-tag">TTL: ' +
+    mod.cacheTTL +
+    "</span>" +
+    '    <span class="meta-tag">Table: ' +
+    mod.m8Table +
+    "</span>" +
+    "  </div>" +
+    "</div>" +
+    // Form Section
+    '<div class="cp-section">' +
+    '  <div class="cp-section-title">' +
+    '    <i class="material-icons" style="color:' +
+    accent +
+    '">tune</i>' +
+    "    調度參數 (Dispatch Parameters)" +
+    "  </div>" +
+    '  <div class="cp-form-grid">' +
+    '    <div class="cp-field">' +
+    '      <label class="cp-label" for="m3-max-retries">最大重試次數 (Max Retries)</label>' +
+    '      <input type="number" id="m3-max-retries" class="cp-input" min="1" max="10" step="1" value="' +
+    m3State.max_retries +
+    '">' +
+    '      <div class="cp-hint">Range: 1 – 10</div>' +
+    "    </div>" +
+    '    <div class="cp-field">' +
+    '      <label class="cp-label" for="m3-dispatch-timeout">調度超時 (Timeout ms)</label>' +
+    '      <input type="number" id="m3-dispatch-timeout" class="cp-input" min="1000" max="30000" step="100" value="' +
+    m3State.dispatch_timeout_ms +
+    '">' +
+    '      <div class="cp-hint">Range: 1000 – 30000</div>' +
+    "    </div>" +
+    '    <div class="cp-field">' +
+    '      <label class="cp-label" for="m3-priority-order">調度優先順序</label>' +
+    '      <select class="cp-select" id="m3-priority-order">' +
+    "        <option" +
+    (m3State.priority_order === "SOC優先" ? " selected" : "") +
+    ">SOC優先</option>" +
+    "        <option" +
+    (m3State.priority_order === "容量優先" ? " selected" : "") +
+    ">容量優先</option>" +
+    "        <option" +
+    (m3State.priority_order === "響應速度優先" ? " selected" : "") +
+    ">響應速度優先</option>" +
+    "      </select>" +
+    "    </div>" +
+    "  </div>" +
+    "</div>" +
+    // Action Bar
+    '<div class="cp-action-bar">' +
+    '  <button class="btn btn-primary cp-btn-deploy" id="m3-btn-deploy" style="background:' +
+    accent +
+    '">' +
+    '    <i class="material-icons">rocket_launch</i> Deploy Dispatch Policy' +
+    "  </button>" +
+    "</div>" +
+    "</div>";
+
+  m3BindEvents();
+}
+
+function m3BindEvents() {
+  var retryInput = document.getElementById("m3-max-retries");
+  var timeoutInput = document.getElementById("m3-dispatch-timeout");
+  var prioritySelect = document.getElementById("m3-priority-order");
+  var btnDeploy = document.getElementById("m3-btn-deploy");
+
+  if (retryInput)
+    retryInput.addEventListener("input", function () {
+      m3State.max_retries = parseInt(this.value, 10) || 3;
+    });
+  if (timeoutInput)
+    timeoutInput.addEventListener("input", function () {
+      m3State.dispatch_timeout_ms = parseInt(this.value, 10) || 5000;
+    });
+  if (prioritySelect)
+    prioritySelect.addEventListener("change", function () {
+      m3State.priority_order = this.value;
+    });
+  if (btnDeploy) btnDeploy.addEventListener("click", m3ShowConfirmModal);
+}
+
+function m3ShowConfirmModal() {
+  showGenericConfirmModal({
+    id: "m3-confirm-modal",
+    accent: "#f97316",
+    title: "確認部署調度策略",
+    body:
+      "即將更新 DR Dispatcher 調度策略至 AppConfig。" +
+      "<br>Max Retries: <strong>" +
+      m3State.max_retries +
+      "</strong>" +
+      " | Timeout: <strong>" +
+      m3State.dispatch_timeout_ms +
+      "ms</strong>" +
+      " | Priority: <strong>" +
+      m3State.priority_order +
+      "</strong>" +
+      "<br>確認後立即生效。是否確認？",
+    onConfirm: function () {
+      showToast("✓ DR Dispatcher 調度策略已發佈至 AppConfig", "success", 3000);
+      addAuditEntry(
+        "M3",
+        "DR Dispatcher",
+        "DEPLOY",
+        "dispatch-policies → BAKED",
+      );
+    },
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SECTION 6: M4 Market & Billing — Billing Rules
+   ═══════════════════════════════════════════════════════════════════ */
+
+var m4State = {
+  tariff_penalty_multiplier: 1.5,
+  base_rate_kwh: 0.18,
+  peak_multiplier: 1.8,
+};
+
+function renderM4BillingRules(container, mod) {
+  var accent = mod.accent;
+
+  container.innerHTML =
+    '<div class="fade-in m4-editor">' +
+    // Header
+    '<div class="module-header">' +
+    '  <div class="module-header-title" style="color:' +
+    accent +
+    '">' +
+    '    <i class="material-icons">' +
+    mod.icon +
+    "</i>" +
+    "    Market &amp; Billing &mdash; Billing Rules" +
+    "  </div>" +
+    '  <div class="module-header-meta">' +
+    '    <span class="meta-tag">Profile: ' +
+    mod.appConfigProfile +
+    "</span>" +
+    '    <span class="meta-tag">TTL: ' +
+    mod.cacheTTL +
+    "</span>" +
+    '    <span class="meta-tag">Table: ' +
+    mod.m8Table +
+    "</span>" +
+    "  </div>" +
+    "</div>" +
+    // Warning Banner
+    '<div class="cp-warning-banner">' +
+    '  <i class="material-icons">warning</i>' +
+    "  <span>警告：修改計費規則將影響所有租戶的帳單計算，請謹慎操作</span>" +
+    "</div>" +
+    // Form Section
+    '<div class="cp-section">' +
+    '  <div class="cp-section-title">' +
+    '    <i class="material-icons" style="color:' +
+    accent +
+    '">tune</i>' +
+    "    計費參數 (Billing Parameters)" +
+    "  </div>" +
+    '  <div class="cp-form-grid">' +
+    '    <div class="cp-field">' +
+    '      <label class="cp-label" for="m4-penalty-multiplier">違約懲罰倍率 (Penalty Multiplier)</label>' +
+    '      <input type="number" id="m4-penalty-multiplier" class="cp-input" min="1.0" max="5.0" step="0.1" value="' +
+    m4State.tariff_penalty_multiplier +
+    '">' +
+    '      <div class="cp-hint">Range: 1.0 – 5.0</div>' +
+    "    </div>" +
+    '    <div class="cp-field">' +
+    '      <label class="cp-label" for="m4-base-rate">基準電費 ($/kWh)</label>' +
+    '      <input type="number" id="m4-base-rate" class="cp-input" min="0" step="0.001" value="' +
+    m4State.base_rate_kwh +
+    '">' +
+    "    </div>" +
+    '    <div class="cp-field">' +
+    '      <label class="cp-label" for="m4-peak-multiplier">尖峰時段倍率</label>' +
+    '      <input type="number" id="m4-peak-multiplier" class="cp-input" min="1.0" max="3.0" step="0.1" value="' +
+    m4State.peak_multiplier +
+    '">' +
+    '      <div class="cp-hint">Range: 1.0 – 3.0</div>' +
+    "    </div>" +
+    "  </div>" +
+    "</div>" +
+    // Action Bar
+    '<div class="cp-action-bar">' +
+    '  <button class="btn btn-primary cp-btn-deploy" id="m4-btn-deploy" style="background:' +
+    accent +
+    '">' +
+    '    <i class="material-icons">rocket_launch</i> Deploy Billing Rules' +
+    "  </button>" +
+    "</div>" +
+    "</div>";
+
+  m4BindEvents();
+}
+
+function m4BindEvents() {
+  var penaltyInput = document.getElementById("m4-penalty-multiplier");
+  var baseInput = document.getElementById("m4-base-rate");
+  var peakInput = document.getElementById("m4-peak-multiplier");
+  var btnDeploy = document.getElementById("m4-btn-deploy");
+
+  if (penaltyInput)
+    penaltyInput.addEventListener("input", function () {
+      m4State.tariff_penalty_multiplier = parseFloat(this.value) || 1.5;
+    });
+  if (baseInput)
+    baseInput.addEventListener("input", function () {
+      m4State.base_rate_kwh = parseFloat(this.value) || 0.18;
+    });
+  if (peakInput)
+    peakInput.addEventListener("input", function () {
+      m4State.peak_multiplier = parseFloat(this.value) || 1.8;
+    });
+  if (btnDeploy) btnDeploy.addEventListener("click", m4ShowConfirmModal);
+}
+
+function m4ShowConfirmModal() {
+  showGenericConfirmModal({
+    id: "m4-confirm-modal",
+    accent: "#10b981",
+    title: "確認部署計費規則",
+    body:
+      "即將更新 Market & Billing 計費規則至 AppConfig。" +
+      "<br>Penalty: <strong>" +
+      m4State.tariff_penalty_multiplier +
+      "x</strong>" +
+      " | Base: <strong>$" +
+      m4State.base_rate_kwh +
+      "/kWh</strong>" +
+      " | Peak: <strong>" +
+      m4State.peak_multiplier +
+      "x</strong>" +
+      '<br><em style="color:#ef4444">⚠ 此操作影響所有租戶帳單計算</em>' +
+      "<br>確認後立即生效。是否確認？",
+    onConfirm: function () {
+      showToast("✓ 計費規則已發佈至 AppConfig", "success", 3000);
+      addAuditEntry("M4", "Billing", "DEPLOY", "billing-rules → BAKED");
+    },
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SECTION 7: M5 Frontend BFF — Feature Flags
+   ═══════════════════════════════════════════════════════════════════ */
+
+var m5State = {
+  flags: [
+    {
+      key: "show-roi-metrics",
+      label: "顯示投資回報率 (Show ROI Metrics)",
+      enabled: true,
+    },
+    {
+      key: "enable-dr-notifications",
+      label: "啟用 DR 事件通知",
+      enabled: true,
+    },
+    { key: "show-battery-forecast", label: "顯示電池預測圖表", enabled: false },
+    { key: "enable-export-csv", label: "允許匯出 CSV 報表", enabled: false },
+  ],
+  originalFlags: null,
+};
+
+function m5InitOriginal() {
+  m5State.originalFlags = [];
+  for (var i = 0; i < m5State.flags.length; i++) {
+    m5State.originalFlags.push({
+      key: m5State.flags[i].key,
+      enabled: m5State.flags[i].enabled,
+    });
+  }
+}
+
+function m5GetChangedFlags() {
+  if (!m5State.originalFlags) return [];
+  var changed = [];
+  for (var i = 0; i < m5State.flags.length; i++) {
+    if (m5State.flags[i].enabled !== m5State.originalFlags[i].enabled) {
+      changed.push(m5State.flags[i]);
+    }
+  }
+  return changed;
+}
+
+function renderM5FeatureFlags(container, mod) {
+  var accent = mod.accent;
+  if (!m5State.originalFlags) m5InitOriginal();
+
+  var flagsHtml = "";
+  for (var i = 0; i < m5State.flags.length; i++) {
+    var f = m5State.flags[i];
+    var checkedAttr = f.enabled ? " checked" : "";
+    var statusText = f.enabled ? "已啟用" : "已停用";
+    var statusClass = f.enabled
+      ? "cp-toggle-status--on"
+      : "cp-toggle-status--off";
+    flagsHtml +=
+      '<div class="cp-flag-row">' +
+      '  <div class="cp-flag-info">' +
+      '    <div class="cp-flag-label">' +
+      f.label +
+      "</div>" +
+      '    <div class="cp-flag-key">' +
+      f.key +
+      "</div>" +
+      "  </div>" +
+      '  <div class="cp-flag-controls">' +
+      '    <span class="cp-toggle-status ' +
+      statusClass +
+      '" id="m5-status-' +
+      i +
+      '">' +
+      statusText +
+      "</span>" +
+      '    <label class="cp-toggle-switch">' +
+      '      <input type="checkbox" class="cp-toggle-input" data-flag-idx="' +
+      i +
+      '"' +
+      checkedAttr +
+      ">" +
+      '      <span class="cp-toggle-slider"></span>' +
+      "    </label>" +
+      "  </div>" +
+      "</div>";
+  }
+
+  container.innerHTML =
+    '<div class="fade-in m5-editor">' +
+    // Header
+    '<div class="module-header">' +
+    '  <div class="module-header-title" style="color:' +
+    accent +
+    '">' +
+    '    <i class="material-icons">' +
+    mod.icon +
+    "</i>" +
+    "    Frontend BFF &mdash; Feature Flags" +
+    "  </div>" +
+    '  <div class="module-header-meta">' +
+    '    <span class="meta-tag">Profile: ' +
+    mod.appConfigProfile +
+    "</span>" +
+    '    <span class="meta-tag">TTL: ' +
+    mod.cacheTTL +
+    "</span>" +
+    '    <span class="meta-tag">Table: ' +
+    mod.m8Table +
+    "</span>" +
+    "  </div>" +
+    "</div>" +
+    // Flags Section
+    '<div class="cp-section">' +
+    '  <div class="cp-section-title">' +
+    '    <i class="material-icons" style="color:' +
+    accent +
+    '">toggle_on</i>' +
+    "    Feature Flags" +
+    "  </div>" +
+    '  <div class="cp-flag-list" id="m5-flag-list">' +
+    flagsHtml +
+    "  </div>" +
+    "</div>" +
+    // Action Bar
+    '<div class="cp-action-bar">' +
+    '  <button class="btn btn-primary cp-btn-deploy" id="m5-btn-deploy" style="background:' +
+    accent +
+    '">' +
+    '    <i class="material-icons">rocket_launch</i> Deploy Feature Flags' +
+    "  </button>" +
+    "</div>" +
+    "</div>";
+
+  m5BindEvents();
+}
+
+function m5BindEvents() {
+  var toggles = document.querySelectorAll(".cp-toggle-input");
+  for (var i = 0; i < toggles.length; i++) {
+    toggles[i].addEventListener("change", function () {
+      var idx = parseInt(this.getAttribute("data-flag-idx"), 10);
+      m5State.flags[idx].enabled = this.checked;
+      var statusEl = document.getElementById("m5-status-" + idx);
+      if (statusEl) {
+        statusEl.textContent = this.checked ? "已啟用" : "已停用";
+        statusEl.className =
+          "cp-toggle-status " +
+          (this.checked ? "cp-toggle-status--on" : "cp-toggle-status--off");
+      }
+    });
+  }
+
+  var btnDeploy = document.getElementById("m5-btn-deploy");
+  if (btnDeploy) btnDeploy.addEventListener("click", m5ShowConfirmModal);
+}
+
+function m5ShowConfirmModal() {
+  var changed = m5GetChangedFlags();
+  var changedHtml = "";
+  if (changed.length > 0) {
+    changedHtml =
+      '<br><br><strong>變更項目：</strong><ul style="margin:4px 0 0 16px;">';
+    for (var i = 0; i < changed.length; i++) {
+      changedHtml +=
+        "<li>" +
+        changed[i].key +
+        " → " +
+        (changed[i].enabled ? "ON" : "OFF") +
+        "</li>";
+    }
+    changedHtml += "</ul>";
+  } else {
+    changedHtml = "<br><br><em>未檢測到變更。</em>";
+  }
+
+  showGenericConfirmModal({
+    id: "m5-confirm-modal",
+    accent: "#ec4899",
+    title: "確認部署 Feature Flags",
+    body:
+      "即將更新 Frontend BFF Feature Flags 至 AppConfig。" +
+      changedHtml +
+      "<br>確認後立即生效。是否確認？",
+    onConfirm: function () {
+      m5InitOriginal(); // reset original to current
+      showToast("✓ Feature Flags 已發佈至 AppConfig", "success", 3000);
+      addAuditEntry("M5", "BFF", "DEPLOY", "feature-flags → BAKED");
+    },
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SECTION 8: M7 Open API — API Quotas & Webhook
+   ═══════════════════════════════════════════════════════════════════ */
+
+var m7State = {
+  webhook_timeout_ms: 5000,
+  rate_limit_rpm: 100,
+  max_payload_kb: 256,
+};
+
+function renderM7ApiQuotas(container, mod) {
+  var accent = mod.accent;
+
+  container.innerHTML =
+    '<div class="fade-in m7-editor">' +
+    // Header
+    '<div class="module-header">' +
+    '  <div class="module-header-title" style="color:' +
+    accent +
+    '">' +
+    '    <i class="material-icons">' +
+    mod.icon +
+    "</i>" +
+    "    Open API &mdash; API Quotas &amp; Webhook" +
+    "  </div>" +
+    '  <div class="module-header-meta">' +
+    '    <span class="meta-tag">Profile: ' +
+    mod.appConfigProfile +
+    "</span>" +
+    '    <span class="meta-tag">TTL: ' +
+    mod.cacheTTL +
+    "</span>" +
+    '    <span class="meta-tag">Table: ' +
+    mod.m8Table +
+    "</span>" +
+    "  </div>" +
+    "</div>" +
+    // Form Section
+    '<div class="cp-section">' +
+    '  <div class="cp-section-title">' +
+    '    <i class="material-icons" style="color:' +
+    accent +
+    '">tune</i>' +
+    "    API 配額與 Webhook 設定" +
+    "  </div>" +
+    '  <div class="cp-form-grid">' +
+    '    <div class="cp-field">' +
+    '      <label class="cp-label" for="m7-webhook-timeout">Webhook 逾時 (ms)</label>' +
+    '      <input type="number" id="m7-webhook-timeout" class="cp-input" min="1000" max="30000" step="100" value="' +
+    m7State.webhook_timeout_ms +
+    '">' +
+    '      <div class="cp-hint">Range: 1000 – 30000</div>' +
+    "    </div>" +
+    '    <div class="cp-field">' +
+    '      <label class="cp-label" for="m7-rate-limit">API 速率限制 (req/min)</label>' +
+    '      <input type="number" id="m7-rate-limit" class="cp-input" min="10" max="1000" step="10" value="' +
+    m7State.rate_limit_rpm +
+    '">' +
+    '      <div class="cp-hint">Range: 10 – 1000</div>' +
+    "    </div>" +
+    '    <div class="cp-field">' +
+    '      <label class="cp-label" for="m7-max-payload">最大 Payload (KB)</label>' +
+    '      <input type="number" id="m7-max-payload" class="cp-input" min="16" max="1024" step="16" value="' +
+    m7State.max_payload_kb +
+    '">' +
+    '      <div class="cp-hint">Range: 16 – 1024</div>' +
+    "    </div>" +
+    "  </div>" +
+    "</div>" +
+    // Action Bar
+    '<div class="cp-action-bar">' +
+    '  <button class="btn btn-primary cp-btn-deploy" id="m7-btn-deploy" style="background:' +
+    accent +
+    '">' +
+    '    <i class="material-icons">rocket_launch</i> Deploy API Quotas' +
+    "  </button>" +
+    "</div>" +
+    "</div>";
+
+  m7BindEvents();
+}
+
+function m7BindEvents() {
+  var whInput = document.getElementById("m7-webhook-timeout");
+  var rlInput = document.getElementById("m7-rate-limit");
+  var mpInput = document.getElementById("m7-max-payload");
+  var btnDeploy = document.getElementById("m7-btn-deploy");
+
+  if (whInput)
+    whInput.addEventListener("input", function () {
+      m7State.webhook_timeout_ms = parseInt(this.value, 10) || 5000;
+    });
+  if (rlInput)
+    rlInput.addEventListener("input", function () {
+      m7State.rate_limit_rpm = parseInt(this.value, 10) || 100;
+    });
+  if (mpInput)
+    mpInput.addEventListener("input", function () {
+      m7State.max_payload_kb = parseInt(this.value, 10) || 256;
+    });
+  if (btnDeploy) btnDeploy.addEventListener("click", m7ShowConfirmModal);
+}
+
+function m7ShowConfirmModal() {
+  showGenericConfirmModal({
+    id: "m7-confirm-modal",
+    accent: "#14b8a6",
+    title: "確認部署 API Quotas",
+    body:
+      "即將更新 Open API Quotas & Webhook 設定至 AppConfig。" +
+      "<br>Webhook Timeout: <strong>" +
+      m7State.webhook_timeout_ms +
+      "ms</strong>" +
+      " | Rate Limit: <strong>" +
+      m7State.rate_limit_rpm +
+      " req/min</strong>" +
+      " | Max Payload: <strong>" +
+      m7State.max_payload_kb +
+      " KB</strong>" +
+      "<br>確認後立即生效。是否確認？",
+    onConfirm: function () {
+      showToast(
+        "✓ API Quotas & Webhook 設定已發佈至 AppConfig",
+        "success",
+        3000,
+      );
+      addAuditEntry("M7", "Open API", "DEPLOY", "api-quotas → BAKED");
+    },
+  });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SECTION 9: Generic Confirm Modal (shared by M3/M4/M5/M7)
+   ═══════════════════════════════════════════════════════════════════ */
+
+function showGenericConfirmModal(opts) {
+  var existing = document.getElementById(opts.id);
+  if (existing) existing.parentNode.removeChild(existing);
+
+  var overlay = document.createElement("div");
+  overlay.id = opts.id;
+  overlay.className = "cp-modal-overlay";
+  overlay.innerHTML =
+    '<div class="cp-modal">' +
+    '  <div class="cp-modal-header">' +
+    '    <i class="material-icons" style="color:' +
+    opts.accent +
+    '">warning</i>' +
+    "    " +
+    opts.title +
+    "  </div>" +
+    '  <div class="cp-modal-body">' +
+    opts.body +
+    "</div>" +
+    '  <div class="cp-modal-footer">' +
+    '    <button class="btn btn-secondary" id="' +
+    opts.id +
+    '-cancel">Cancel</button>' +
+    '    <button class="btn btn-primary" id="' +
+    opts.id +
+    '-confirm" style="background:' +
+    opts.accent +
+    '">' +
+    '      <i class="material-icons">check</i> Confirm' +
+    "    </button>" +
+    "  </div>" +
+    "</div>";
+
+  document.body.appendChild(overlay);
+
+  function closeModal() {
+    overlay.classList.add("cp-modal-closing");
+    setTimeout(function () {
+      if (overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    }, 200);
+  }
+
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay) closeModal();
+  });
+  document
+    .getElementById(opts.id + "-cancel")
+    .addEventListener("click", closeModal);
+  document
+    .getElementById(opts.id + "-confirm")
+    .addEventListener("click", function () {
+      closeModal();
+      if (typeof opts.onConfirm === "function") opts.onConfirm();
+    });
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   SECTION 10: Live Global Audit Log
+   ═══════════════════════════════════════════════════════════════════ */
+
+var auditLog = [
+  {
+    time: "16:45",
+    type: "DEPLOY",
+    module: "M2",
+    detail: "vpp-strategies → BAKED",
+    user: "admin@solfacil.com.br",
+  },
+  {
+    time: "16:42",
+    type: "EDIT",
+    module: "M2",
+    detail: "min_soc 20 → 15",
+    user: "admin@solfacil.com.br",
+  },
+  {
+    time: "16:38",
+    type: "ROLLBACK",
+    module: "M4",
+    detail: "billing-rules → AUTO ROLLBACK\nCW Alarm (Error>1%)",
+    user: "",
+  },
+  {
+    time: "16:30",
+    type: "LOGIN",
+    module: "",
+    detail: "admin@solfacil.com.br",
+    user: "",
+  },
+];
+
+function auditBadgeClass(type) {
+  switch (type) {
+    case "DEPLOY":
+      return "audit-badge--deploy";
+    case "EDIT":
+      return "audit-badge--edit";
+    case "ROLLBACK":
+      return "audit-badge--rollback";
+    case "LOGIN":
+      return "audit-badge--login";
+    default:
+      return "audit-badge--neutral";
+  }
+}
+
+function renderAuditEntry(entry, highlight) {
+  var detailLines = (entry.detail || "").split("\n");
+  var detailHtml = detailLines[0];
+  for (var i = 1; i < detailLines.length; i++) {
+    detailHtml += "<br>" + detailLines[i];
+  }
+  var moduleTag = entry.module ? "<strong>" + entry.module + "</strong> " : "";
+  var userHtml = entry.user
+    ? '<div class="audit-user">' + entry.user + "</div>"
+    : "";
+  var highlightClass = highlight ? " audit-entry--new" : "";
+
+  return (
+    '<div class="audit-entry' +
+    highlightClass +
+    '">' +
+    '<div class="audit-time">' +
+    entry.time +
+    "</div>" +
+    '<div class="audit-badge ' +
+    auditBadgeClass(entry.type) +
+    '">' +
+    entry.type +
+    "</div>" +
+    '<div class="audit-detail">' +
+    moduleTag +
+    detailHtml +
+    userHtml +
+    "</div>" +
+    "</div>"
+  );
+}
+
+function renderAuditPanel() {
+  var container = document.getElementById("audit-entries");
+  if (!container) return;
+  var html = "";
+  for (var i = 0; i < auditLog.length; i++) {
+    html += renderAuditEntry(auditLog[i], false);
+  }
+  container.innerHTML = html;
+}
+
+function addAuditEntry(moduleId, moduleName, action, detail) {
+  var now = new Date();
+  var hh =
+    String(now.getHours()).length < 2
+      ? "0" + now.getHours()
+      : String(now.getHours());
+  var mm =
+    String(now.getMinutes()).length < 2
+      ? "0" + now.getMinutes()
+      : String(now.getMinutes());
+  var ss =
+    String(now.getSeconds()).length < 2
+      ? "0" + now.getSeconds()
+      : String(now.getSeconds());
+  var timeStr = hh + ":" + mm + ":" + ss;
+
+  var entry = {
+    time: timeStr,
+    type: action || "DEPLOY",
+    module: moduleId.toUpperCase(),
+    detail: detail,
+    user: "admin@solfacil.com.br",
+  };
+
+  auditLog.unshift(entry);
+
+  // Prepend new entry with highlight animation
+  var container = document.getElementById("audit-entries");
+  if (!container) return;
+
+  var entryHtml = renderAuditEntry(entry, true);
+  var temp = document.createElement("div");
+  temp.innerHTML = entryHtml;
+  var newNode = temp.firstChild;
+  container.insertBefore(newNode, container.firstChild);
+}
+
+/* ─── Hook M1 and M2 deploy flows into audit log ────────────── */
+
+var _origM1DeploySuccess = m1DeploySuccess;
+m1DeploySuccess = function () {
+  _origM1DeploySuccess();
+  addAuditEntry("M1", "IoT Hub", "DEPLOY", "parser-rules → BAKED");
+};
+
+var _origM2DeploySuccess = m2DeploySuccess;
+m2DeploySuccess = function () {
+  _origM2DeploySuccess();
+  addAuditEntry("M2", "Algorithm Engine", "DEPLOY", "vpp-strategies → BAKED");
+};
+
 /* ─── SECTION 3b: Panel Toggles ────────────────────────────────── */
 
 function initToggleNav() {
@@ -1337,8 +2156,11 @@ function init() {
     renderModuleContent(defaultMod);
   }
 
+  // Initialize audit log panel with live entries
+  renderAuditPanel();
+
   // Welcome toast
-  showToast("Control Plane UI loaded — Phase 1 Skeleton", "success");
+  showToast("Control Plane UI loaded — All Modules Active", "success");
 }
 
 document.addEventListener("DOMContentLoaded", init);
