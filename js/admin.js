@@ -4,6 +4,18 @@
    Phase 2: M2 Algorithm Engine — VPP Strategies + Batch Ops
    ═══════════════════════════════════════════════════════════════════ */
 
+/* ─── UUID Helper ─────────────────────────────────────────────── */
+
+function generateUUID() {
+  if (typeof crypto !== "undefined" && crypto.randomUUID) {
+    return crypto.randomUUID();
+  }
+  return "xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx".replace(/[xy]/g, function (c) {
+    var r = (Math.random() * 16) | 0;
+    return (c === "x" ? r : (r & 0x3) | 0x8).toString(16);
+  });
+}
+
 /* ─── SECTION 0: Constants & Configuration ─────────────────────── */
 
 var MODULE_REGISTRY = {
@@ -111,6 +123,115 @@ var MODULE_REGISTRY = {
 var MODULE_ORDER = ["m1", "m2", "m3", "m4", "m5", "m6", "m7"];
 
 var activeModuleId = "m1";
+
+/* ─── Shared Input Validation ─────────────────────────────────── */
+
+function validateModuleInputs(moduleId) {
+  var editor = document.querySelector("." + moduleId + "-editor");
+  if (!editor) return true;
+  var inputs = editor.querySelectorAll('input[type="number"]');
+  var allValid = true;
+
+  for (var i = 0; i < inputs.length; i++) {
+    var input = inputs[i];
+    var valid = input.checkValidity();
+    var warnId = input.id + "-warn";
+    var warnEl = document.getElementById(warnId);
+    if (!warnEl) {
+      warnEl = document.createElement("div");
+      warnEl.id = warnId;
+      warnEl.className = "cp-validation-warn";
+      input.parentNode.appendChild(warnEl);
+    }
+    if (!valid) {
+      allValid = false;
+      var min = input.getAttribute("min");
+      var max = input.getAttribute("max");
+      var rangeText = "";
+      if (min !== null && max !== null) {
+        rangeText = " (Range: " + min + "\u2013" + max + ")";
+      } else if (min !== null) {
+        rangeText = " (Min: " + min + ")";
+      } else if (max !== null) {
+        rangeText = " (Max: " + max + ")";
+      }
+      warnEl.textContent =
+        "\u26A0 \u6578\u503C\u8D85\u51FA\u5141\u8A31\u7BC4\u570D" + rangeText;
+      warnEl.style.display = "block";
+      input.classList.add("cp-input--invalid");
+    } else {
+      warnEl.style.display = "none";
+      warnEl.textContent = "";
+      input.classList.remove("cp-input--invalid");
+    }
+  }
+
+  var btn = document.getElementById(moduleId + "-btn-deploy");
+  if (btn) {
+    btn.disabled = !allValid;
+  }
+  return allValid;
+}
+
+/* ─── Shared API Deploy ───────────────────────────────────────── */
+
+function apiDeploy(moduleId, profile, payload) {
+  var mod = MODULE_REGISTRY[moduleId] || {};
+  var moduleName = moduleId.toUpperCase() + " " + (mod.name || "");
+  var traceId = generateUUID();
+
+  fetch("/api/admin/configs/" + profile, {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      "x-trace-id": traceId,
+    },
+    body: JSON.stringify({
+      config: payload,
+      deployedBy: "admin@solfacil.com.br",
+    }),
+  })
+    .then(function (res) {
+      if (res.ok) {
+        showToast(
+          "\u2713 " +
+            moduleName.trim() +
+            " \u7B56\u7565\u5DF2\u6210\u529F\u767C\u4F48\u81F3 AppConfig",
+          "success",
+          3000,
+        );
+        addAuditEntry(
+          moduleId.toUpperCase(),
+          mod.name || moduleId,
+          "DEPLOY",
+          profile + " \u2192 BAKED (trace: " + traceId.slice(0, 8) + ")",
+        );
+      } else if (res.status >= 400 && res.status < 500) {
+        showToast(
+          "\u2717 \u767C\u4F48\u5931\u6557 (" +
+            res.status +
+            ")\uFF1A\u8ACB\u78BA\u8A8D\u5F8C\u7AEF\u6B0A\u9650\u8207 AppConfig \u8A2D\u5B9A",
+          "error",
+          5000,
+        );
+      } else {
+        showToast(
+          "\u2717 \u5F8C\u7AEF\u7570\u5E38 (" +
+            res.status +
+            ")\uFF1A\u8ACB\u6AA2\u67E5 Lambda \u65E5\u8A8C\u6216\u670D\u52D9\u72C0\u614B",
+          "error",
+          5000,
+        );
+      }
+    })
+    .catch(function () {
+      showToast(
+        "\u2717 \u7DB2\u8DEF\u9023\u7DDA\u5931\u6557\uFF1A\u5F8C\u7AEF\u672A\u555F\u52D5\u6216\u4E0D\u53EF\u9054",
+        "error",
+        5000,
+      );
+    });
+}
 
 /* ═══════════════════════════════════════════════════════════════════
    SECTION 2: M1 IoT Hub — Parser Rules Editor
@@ -500,16 +621,20 @@ function m1CloseConfirmModal() {
 
 function m1DeploySuccess() {
   var vendor = m1State.selectedVendor;
-  // Update original to reflect deployed state
   m1State.originalJson = m1State.jsonText;
   m1UpdateDeployButton();
-  showToast(
-    "\u2713 " +
-      vendor +
-      " \u89E3\u6790\u898F\u5247\u5DF2\u767C\u4F48\u81F3 AppConfig",
-    "success",
-    3000,
-  );
+  var parsed;
+  try {
+    parsed = JSON.parse(m1State.jsonText);
+  } catch (e) {
+    parsed = {};
+  }
+  apiDeploy("m1", "parser-rules", {
+    vendor: parsed.vendor,
+    protocol: parsed.protocol,
+    registers: parsed.registers,
+    poll_interval_ms: parsed.poll_interval_ms,
+  });
 }
 
 /* ─── SECTION 3: Navigation & Layout ───────────────────────────── */
@@ -1266,12 +1391,17 @@ function m2CloseConfirmModal() {
 }
 
 function m2DeploySuccess() {
-  var tenantCount = m2GetSelectedCount();
-  showToast(
-    "✓ 策略發佈成功！已套用至 " + tenantCount + " 個租戶",
-    "success",
-    3000,
-  );
+  var targets = [];
+  for (var i = 0; i < M2_TENANTS.length; i++) {
+    if (m2State.selectedTenants[M2_TENANTS[i].id])
+      targets.push(M2_TENANTS[i].id);
+  }
+  apiDeploy("m2", "vpp-strategies", {
+    min_soc: m2State.min_soc,
+    max_soc: m2State.max_soc,
+    emergency_reserve: m2State.emergency_reserve,
+    targets: targets,
+  });
 }
 
 /* ═══════════════════════════════════════════════════════════════════
@@ -1361,6 +1491,7 @@ function renderM3DispatchPolicies(container, mod) {
     "</div>";
 
   m3BindEvents();
+  validateModuleInputs("m3");
 }
 
 function m3BindEvents() {
@@ -1372,10 +1503,12 @@ function m3BindEvents() {
   if (retryInput)
     retryInput.addEventListener("input", function () {
       m3State.max_retries = parseInt(this.value, 10) || 3;
+      validateModuleInputs("m3");
     });
   if (timeoutInput)
     timeoutInput.addEventListener("input", function () {
       m3State.dispatch_timeout_ms = parseInt(this.value, 10) || 5000;
+      validateModuleInputs("m3");
     });
   if (prioritySelect)
     prioritySelect.addEventListener("change", function () {
@@ -1402,13 +1535,11 @@ function m3ShowConfirmModal() {
       "</strong>" +
       "<br>確認後立即生效。是否確認？",
     onConfirm: function () {
-      showToast("✓ DR Dispatcher 調度策略已發佈至 AppConfig", "success", 3000);
-      addAuditEntry(
-        "M3",
-        "DR Dispatcher",
-        "DEPLOY",
-        "dispatch-policies → BAKED",
-      );
+      apiDeploy("m3", "dispatch-policies", {
+        max_retries: m3State.max_retries,
+        dispatch_timeout_ms: m3State.dispatch_timeout_ms,
+        priority_order: m3State.priority_order,
+      });
     },
   });
 }
@@ -1497,6 +1628,7 @@ function renderM4BillingRules(container, mod) {
     "</div>";
 
   m4BindEvents();
+  validateModuleInputs("m4");
 }
 
 function m4BindEvents() {
@@ -1508,14 +1640,17 @@ function m4BindEvents() {
   if (penaltyInput)
     penaltyInput.addEventListener("input", function () {
       m4State.tariff_penalty_multiplier = parseFloat(this.value) || 1.5;
+      validateModuleInputs("m4");
     });
   if (baseInput)
     baseInput.addEventListener("input", function () {
       m4State.base_rate_kwh = parseFloat(this.value) || 0.18;
+      validateModuleInputs("m4");
     });
   if (peakInput)
     peakInput.addEventListener("input", function () {
       m4State.peak_multiplier = parseFloat(this.value) || 1.8;
+      validateModuleInputs("m4");
     });
   if (btnDeploy) btnDeploy.addEventListener("click", m4ShowConfirmModal);
 }
@@ -1539,13 +1674,11 @@ function m4ShowConfirmModal() {
       '<br><em style="color:#ef4444">⚠ 此操作影響所有租戶帳單計算</em>' +
       "<br>確認後立即生效。是否確認？",
     onConfirm: function () {
-      showToast("✓ 計費規則已發佈至 AppConfig", "success", 3000);
-      addAuditEntry(
-        "M4",
-        "Market & Billing",
-        "DEPLOY",
-        "billing-rules \u2192 BAKED",
-      );
+      apiDeploy("m4", "billing-rules", {
+        tariff_penalty_multiplier: m4State.tariff_penalty_multiplier,
+        base_rate_kwh: m4State.base_rate_kwh,
+        peak_multiplier: m4State.peak_multiplier,
+      });
     },
   });
 }
@@ -1732,14 +1865,12 @@ function m5ShowConfirmModal() {
       changedHtml +
       "<br>確認後立即生效。是否確認？",
     onConfirm: function () {
-      m5InitOriginal(); // reset original to current
-      showToast("✓ Feature Flags 已發佈至 AppConfig", "success", 3000);
-      addAuditEntry(
-        "M5",
-        "Frontend BFF",
-        "DEPLOY",
-        "feature-flags \u2192 BAKED",
-      );
+      m5InitOriginal();
+      var flagPayload = {};
+      for (var j = 0; j < m5State.flags.length; j++) {
+        flagPayload[m5State.flags[j].key] = m5State.flags[j].enabled;
+      }
+      apiDeploy("m5", "feature-flags", flagPayload);
     },
   });
 }
@@ -1865,6 +1996,7 @@ function renderM6RbacPolicies(container, mod) {
     "</div>";
 
   m6BindEvents();
+  validateModuleInputs("m6");
 }
 
 function m6BindEvents() {
@@ -1877,10 +2009,12 @@ function m6BindEvents() {
   if (timeoutInput)
     timeoutInput.addEventListener("input", function () {
       m6State.session_timeout_min = parseInt(this.value, 10) || 60;
+      validateModuleInputs("m6");
     });
   if (failedInput)
     failedInput.addEventListener("input", function () {
       m6State.max_failed_logins = parseInt(this.value, 10) || 5;
+      validateModuleInputs("m6");
     });
   if (roleSelect)
     roleSelect.addEventListener("change", function () {
@@ -1923,17 +2057,12 @@ function m6ShowConfirmModal() {
       "</strong>" +
       "<br>\u78BA\u8A8D\u5F8C\u7ACB\u5373\u751F\u6548\u3002\u662F\u5426\u78BA\u8A8D\uFF1F",
     onConfirm: function () {
-      showToast(
-        "\u2713 RBAC Policies \u5DF2\u767C\u4F48\u81F3 AppConfig",
-        "success",
-        3000,
-      );
-      addAuditEntry(
-        "M6",
-        "Identity & Tenant",
-        "DEPLOY",
-        "rbac-policies \u2192 BAKED",
-      );
+      apiDeploy("m6", "rbac-policies", {
+        session_timeout_min: m6State.session_timeout_min,
+        max_failed_logins: m6State.max_failed_logins,
+        default_tenant_role: m6State.default_tenant_role,
+        mfa_required: m6State.mfa_required,
+      });
     },
   });
 }
@@ -2018,6 +2147,7 @@ function renderM7ApiQuotas(container, mod) {
     "</div>";
 
   m7BindEvents();
+  validateModuleInputs("m7");
 }
 
 function m7BindEvents() {
@@ -2029,14 +2159,17 @@ function m7BindEvents() {
   if (whInput)
     whInput.addEventListener("input", function () {
       m7State.webhook_timeout_ms = parseInt(this.value, 10) || 5000;
+      validateModuleInputs("m7");
     });
   if (rlInput)
     rlInput.addEventListener("input", function () {
       m7State.rate_limit_rpm = parseInt(this.value, 10) || 100;
+      validateModuleInputs("m7");
     });
   if (mpInput)
     mpInput.addEventListener("input", function () {
       m7State.max_payload_kb = parseInt(this.value, 10) || 256;
+      validateModuleInputs("m7");
     });
   if (btnDeploy) btnDeploy.addEventListener("click", m7ShowConfirmModal);
 }
@@ -2059,12 +2192,11 @@ function m7ShowConfirmModal() {
       " KB</strong>" +
       "<br>確認後立即生效。是否確認？",
     onConfirm: function () {
-      showToast(
-        "✓ API Quotas & Webhook 設定已發佈至 AppConfig",
-        "success",
-        3000,
-      );
-      addAuditEntry("M7", "Open API", "DEPLOY", "api-quotas → BAKED");
+      apiDeploy("m7", "api-quotas", {
+        webhook_timeout_ms: m7State.webhook_timeout_ms,
+        rate_limit_rpm: m7State.rate_limit_rpm,
+        max_payload_kb: m7State.max_payload_kb,
+      });
     },
   });
 }
@@ -2259,24 +2391,7 @@ function addAuditEntry(moduleId, moduleName, action, detail) {
   container.insertBefore(newNode, container.firstChild);
 }
 
-/* ─── Hook M1 and M2 deploy flows into audit log ────────────── */
-
-var _origM1DeploySuccess = m1DeploySuccess;
-m1DeploySuccess = function () {
-  _origM1DeploySuccess();
-  addAuditEntry(
-    "M1",
-    "IoT Hub",
-    "DEPLOY",
-    m1State.selectedVendor + " parser-rules \u2192 BAKED",
-  );
-};
-
-var _origM2DeploySuccess = m2DeploySuccess;
-m2DeploySuccess = function () {
-  _origM2DeploySuccess();
-  addAuditEntry("M2", "Algorithm Engine", "DEPLOY", "vpp-strategies → BAKED");
-};
+/* ─── M1/M2 audit hooks now handled by apiDeploy() ──────────── */
 
 /* ─── SECTION 3b: Panel Toggles ────────────────────────────────── */
 
