@@ -269,6 +269,87 @@ describe("ingest-telemetry handler", () => {
     });
   });
 
+  // ---- AppConfig Graceful Degradation (防禦降級) --------------------------
+  describe("AppConfig graceful degradation", () => {
+    it("falls back to ACL/Legacy when AppConfig throws NetworkError", async () => {
+      // Simulate Lambda Extension Sidecar unreachable (e.g. cold-start race)
+      mockFetch.mockRejectedValueOnce(new Error("fetch failed: Connection refused"));
+
+      // System must NOT crash — VALID_EVENT is handled by Legacy fallback
+      const result = await handler(VALID_EVENT);
+      expect(result.success).toBe(true);
+      expect(result.recordsWritten).toBe(1);
+      expect(result.traceId).toMatch(/^vpp-[0-9a-f-]{36}$/);
+
+      // Timestream write still happened normally
+      const tsCalls = tsMock.commandCalls(WriteRecordsCommand);
+      expect(tsCalls).toHaveLength(1);
+      const dims = tsCalls[0].args[0].input.Records![0].Dimensions;
+      expect(dims).toEqual(
+        expect.arrayContaining([
+          { Name: "orgId", Value: "ORG_ENERGIA_001" },
+          { Name: "deviceId", Value: "ASSET_SP_001" },
+        ]),
+      );
+    });
+
+    it("falls back to ACL/Legacy when AppConfig returns HTTP 404", async () => {
+      // Simulate profile not yet deployed — AppConfig responds 404
+      mockFetch.mockResolvedValueOnce({ ok: false, status: 404 });
+
+      const result = await handler(VALID_EVENT);
+      expect(result.success).toBe(true);
+      expect(result.recordsWritten).toBe(1);
+
+      // Power value still correctly written
+      const calls = tsMock.commandCalls(WriteRecordsCommand);
+      const mvs = calls[0].args[0].input.Records![0].MeasureValues;
+      const power = mvs?.find((mv) => mv.Name === "power");
+      expect(power?.Value).toBe("4.8");
+    });
+
+    it("falls back to ACL/Legacy when AppConfig rules do not include the current org", async () => {
+      // Config exists, but only for a different org — our org has no rules yet
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ORG_OTHER_999: { huawei: { mappingRule: { devSn: "deviceId" } } },
+        }),
+      });
+
+      const result = await handler(VALID_EVENT);
+      expect(result.success).toBe(true);
+      expect(result.recordsWritten).toBe(1);
+    });
+
+    it("falls back to ACL/Legacy when AppConfig returns empty rules for org", async () => {
+      // Config exists for org but no manufacturer rules defined yet
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({ ORG_ENERGIA_001: {} }),
+      });
+
+      const result = await handler(VALID_EVENT);
+      expect(result.success).toBe(true);
+      expect(result.recordsWritten).toBe(1);
+    });
+
+    it("falls back to Legacy TelemetryEvent when AppConfig unavailable AND ACL adapter not found", async () => {
+      // AppConfig down + event has no recognized vendor signature → Legacy fallback
+      mockFetch.mockRejectedValueOnce(new Error("timeout"));
+
+      // VALID_EVENT_WITH_SOC uses the legacy metrics.* shape
+      const result = await handler(VALID_EVENT_WITH_SOC);
+      expect(result.success).toBe(true);
+      expect(result.recordsWritten).toBe(1);
+
+      const calls = tsMock.commandCalls(WriteRecordsCommand);
+      const mvs = calls[0].args[0].input.Records![0].MeasureValues;
+      const soc = mvs?.find((mv) => mv.Name === "soc");
+      expect(soc?.Value).toBe("72.5");
+    });
+  });
+
   // ---- traceId & EventBridge integration ----------------------------------
   describe("traceId & EventBridge", () => {
     it("returns traceId in result", async () => {
