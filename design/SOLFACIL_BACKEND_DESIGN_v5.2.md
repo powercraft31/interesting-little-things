@@ -968,6 +968,7 @@ All field mapping logic is externalized to an AWS AppConfig Configuration Profil
       "domain": "metering",
       "targetField": "metering.grid_power_kw",
       "sourcePath": "grid.activePower",
+      "valueType": "number",
       "transform": "divide:1000",
       "unit": "kW"
     },
@@ -975,6 +976,7 @@ All field mapping logic is externalized to an AWS AppConfig Configuration Profil
       "domain": "status",
       "targetField": "status.battery_soc",
       "sourcePath": "batList[0].bat_soc",
+      "valueType": "number",
       "transform": "identity",
       "unit": "%"
     }
@@ -991,12 +993,59 @@ All field mapping logic is externalized to an AWS AppConfig Configuration Profil
 | `sourcePath` | `string` | JSONPath-like expression to extract value from raw MQTT payload |
 | `transform` | `string` | Transformation to apply: `identity`, `divide:N`, `multiply:N`, `round:N` |
 | `unit` | `string` | SI unit for observability and Data Dictionary display |
+| `valueType` | `'number' \| 'string' \| 'boolean'` | REQUIRED — drives M1 type casting via `castValue()` |
+
+**Iterator Mode (Multi-Device Array):**
+
+When a gateway sends a single MQTT message containing an array of sub-devices (e.g., `batList` with N batteries), use an Iterator Rule Group:
+
+```json
+{
+  "comment": "Iterator mode — one MQTT message with batList array → N StandardTelemetry envelopes",
+  "ruleId": "goodwe-battery-array",
+  "iterator": "$.data.batList",
+  "deviceIdPath": "$.sn",
+  "rules": [
+    {
+      "domain": "status",
+      "targetField": "status.battery_soc",
+      "sourcePath": "bat_soc",
+      "valueType": "number",
+      "unit": "%"
+    },
+    {
+      "domain": "metering",
+      "targetField": "metering.charge_power_kw",
+      "sourcePath": "charge_power",
+      "valueType": "number",
+      "transform": "divide:1000",
+      "unit": "kW"
+    }
+  ]
+}
+```
 
 ### 4.3 Translation Executor — `translateGatewayPayload()` (翻譯執行器)
 
 With v5.2, M1 becomes a **pure translation executor** — it contains no field mapping knowledge. All mapping intelligence lives in AppConfig rules. The core translation function:
 
 ```typescript
+function castValue(raw: unknown, valueType: 'number' | 'string' | 'boolean'): number | string | boolean {
+  switch (valueType) {
+    case 'number':
+      const n = Number(raw);
+      if (isNaN(n)) throw new TypeError(`Cannot cast "${raw}" to number`);
+      return n;
+    case 'boolean':
+      if (typeof raw === 'boolean') return raw;
+      if (raw === 'true' || raw === 1) return true;
+      if (raw === 'false' || raw === 0) return false;
+      throw new TypeError(`Cannot cast "${raw}" to boolean`);
+    case 'string':
+      return String(raw);
+  }
+}
+
 async function translateGatewayPayload(
   rawMqttPayload: Record<string, unknown>,
   deviceId: string,
@@ -1013,11 +1062,14 @@ async function translateGatewayPayload(
     const rawValue = getNestedValue(rawMqttPayload, rule.sourcePath);
     if (rawValue === undefined) continue;
     const transformed = applyTransform(rawValue, rule.transform);
-    result[rule.domain][rule.targetField] = transformed;
+    const cast = castValue(transformed, rule.valueType);
+    result[rule.domain][rule.targetField] = cast;
   }
   return result;
 }
 ```
+
+> **Type-Safety Guarantee:** M1 NEVER blind-passes raw MQTT values. Every field passes through `castValue()` before entering the domain container. Example: MQTT delivers `"45.5"` (string) for `status.battery_soc`; the Data Dictionary defines `valueType: "number"`; M1 casts to `45.5` (number). Type mismatch throws a `TypeError` → CloudWatch alarm → bad data never reaches downstream modules silently.
 
 **Key design choices:**
 - `getParserRules()` reads from AppConfig Lambda Extension (localhost:2772), latency < 1ms
@@ -1036,6 +1088,51 @@ M1 implements a three-tier fallback strategy to ensure telemetry ingestion never
 | 3 | No rules available | Emit raw payload with `_raw` prefix, alert via CloudWatch |
 
 **Tier 3 detail:** When no rules are available (first-ever cold start before AppConfig is seeded, or catastrophic Extension failure), M1 wraps the entire raw MQTT payload into a `_raw` namespace and emits it to EventBridge with a `degraded: true` flag. A CloudWatch Alarm fires immediately, alerting the operations team.
+
+### 4.5 Multi-Device Array Iteration (多設備陣列拆包)
+
+Industrial gateways often report arrays of sub-devices in a single MQTT message (e.g., `batList` containing 3 inverters). Without iterator support, only `batList[0]` is reachable via static JSONPath — `batList[1]` and `batList[2]` are silently dropped.
+
+When a Parser Rule Group includes `"iterator": "$.data.batList"`, M1 executes the following:
+
+```typescript
+async function translateWithIterator(
+  rawPayload: Record<string, unknown>,
+  ruleGroup: IteratorRuleGroup,
+  gatewayDeviceId: string,
+  orgId: string
+): Promise<StandardTelemetry[]> {
+  const results: StandardTelemetry[] = [];
+  const items = getNestedValue(rawPayload, ruleGroup.iterator) as unknown[];
+  if (!Array.isArray(items)) return [];
+
+  for (const [index, item] of items.entries()) {
+    const subDeviceId = ruleGroup.deviceIdPath
+      ? String(getNestedValue(item as Record<string, unknown>, ruleGroup.deviceIdPath))
+      : `${gatewayDeviceId}:${index}`;
+
+    const envelope: StandardTelemetry = {
+      deviceId: subDeviceId,
+      orgId,
+      timestamp: new Date().toISOString(),
+      traceId: `vpp-${uuidv4()}`,
+      metering: {}, status: {}, config: {}
+    };
+
+    for (const rule of ruleGroup.rules) {
+      const rawValue = getNestedValue(item as Record<string, unknown>, rule.sourcePath);
+      if (rawValue === undefined) continue;
+      const transformed = applyTransform(rawValue, rule.transform ?? 'identity');
+      const cast = castValue(transformed, rule.valueType);
+      envelope[rule.domain][rule.targetField] = cast;
+    }
+    results.push(envelope);
+  }
+  return results; // 1 gateway message → N StandardTelemetry envelopes
+}
+```
+
+> **Multi-Device Guarantee:** A GoodWe gateway reports 3 batteries in `batList`. With iterator mode, M1 emits 3 independent `StandardTelemetry` envelopes — one per physical device — each with its own `deviceId` derived from `batList[n].sn`. Zero data loss from array truncation.
 
 ### Lambda Handlers
 
@@ -3511,6 +3608,64 @@ export interface DataDictionaryEntry {
   orgId: string;
 }
 ```
+
+#### Dependency Lock — FieldDependency Check
+
+Before any field can be deleted, M8 scans all downstream modules for references. This prevents silent avalanche failures where a schema change breaks billing formulas or dispatch rules at runtime.
+
+```typescript
+interface FieldDependency {
+  moduleId: 'M2' | 'M3' | 'M4' | 'M5' | 'M7';
+  configType: string;
+  configId: string;
+  configName: string;
+  usageContext: string;
+}
+
+async function checkFieldDependencies(fieldId: string): Promise<FieldDependency[]> {
+  const tables = [
+    { table: 'vpp-m2-strategies', module: 'M2' },
+    { table: 'vpp-m3-dispatch-rules', module: 'M3' },
+    { table: 'vpp-m4-billing-formulas', module: 'M4' },
+    { table: 'vpp-m5-widgets', module: 'M5' }
+  ];
+  const deps: FieldDependency[] = [];
+  for (const { table, module } of tables) {
+    const records = await dynamoDB.scan({
+      TableName: table,
+      FilterExpression: 'contains(fieldRefs, :fid)',
+      ExpressionAttributeValues: { ':fid': fieldId }
+    });
+    deps.push(...(records.Items ?? []).map(item => ({
+      moduleId: module as FieldDependency['moduleId'],
+      configType: item.configType,
+      configId: item.configId,
+      configName: item.configName,
+      usageContext: item.usageContext ?? 'referenced field'
+    })));
+  }
+  return deps;
+}
+
+async function deleteField(fieldId: string, requestedBy: string): Promise<void> {
+  const deps = await checkFieldDependencies(fieldId);
+  if (deps.length > 0) {
+    throw new DependencyLockError({
+      message: `Cannot delete field "${fieldId}" — ${deps.length} downstream dependency(s) found`,
+      blockedBy: deps.map(d => `${d.moduleId} / ${d.configName} (${d.usageContext})`),
+      resolution: 'Remove all references to this field in the listed configs before deleting.'
+    });
+  }
+  await Promise.all([
+    dynamoDB.delete({ TableName: 'vpp-data-dictionary', Key: { fieldId } }),
+    removeRuleFromAppConfig(fieldId),
+    eventBridge.putEvents({ Entries: [{ Source: 'vpp.m8.admin', DetailType: 'SchemaFieldRemoved',
+      Detail: JSON.stringify({ fieldId, removedBy: requestedBy }) }] })
+  ]);
+}
+```
+
+> **Dependency Lock Guarantee:** The system treats field references like foreign key constraints. `metering.grid_import_kwh` cannot be deleted while M4's "Time-of-Use Billing Formula #3" references it. Operator sees: *"Blocked by: M4 / Time-of-Use Billing Formula #3 (input variable in tariff calculation)"*. This prevents silent avalanche failures where a schema change breaks billing formulas at midnight.
 
 #### DynamoDB Table: `vpp-data-dictionary`
 
