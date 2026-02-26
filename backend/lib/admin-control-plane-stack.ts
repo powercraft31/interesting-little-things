@@ -1,6 +1,7 @@
 import * as cdk from "aws-cdk-lib";
 import * as appconfig from "aws-cdk-lib/aws-appconfig";
 import * as apigwv2 from "aws-cdk-lib/aws-apigatewayv2";
+import * as dynamodb from "aws-cdk-lib/aws-dynamodb";
 import * as integrations from "aws-cdk-lib/aws-apigatewayv2-integrations";
 import * as lambda from "aws-cdk-lib/aws-lambda";
 import * as nodejs from "aws-cdk-lib/aws-lambda-nodejs";
@@ -30,23 +31,15 @@ export class AdminControlPlaneStack extends cdk.Stack {
     super(scope, id, props);
 
     // ── AppConfig Application ─────────────────────────────────────
-    const application = new appconfig.CfnApplication(
-      this,
-      "VppAppConfigApp",
-      {
-        name: `solfacil-vpp-${props.stage}`,
-      },
-    );
+    const application = new appconfig.CfnApplication(this, "VppAppConfigApp", {
+      name: `solfacil-vpp-${props.stage}`,
+    });
 
     // ── AppConfig Environment ─────────────────────────────────────
-    const environment = new appconfig.CfnEnvironment(
-      this,
-      "VppAppConfigEnv",
-      {
-        applicationId: application.ref,
-        name: props.stage,
-      },
-    );
+    const environment = new appconfig.CfnEnvironment(this, "VppAppConfigEnv", {
+      applicationId: application.ref,
+      name: props.stage,
+    });
 
     // ── 7 Configuration Profiles (M1–M7) ─────────────────────────
     const profiles = [
@@ -71,6 +64,17 @@ export class AdminControlPlaneStack extends cdk.Stack {
     this.appConfigApplicationId = application.ref;
     this.appConfigEnvironmentId = environment.ref;
 
+    // ── DynamoDB: Data Dictionary ───────────────────────────────────
+    const dictionaryTable = new dynamodb.Table(this, "DataDictionary", {
+      tableName: "vpp-data-dictionary",
+      partitionKey: {
+        name: "fieldId",
+        type: dynamodb.AttributeType.STRING,
+      },
+      billingMode: dynamodb.BillingMode.PAY_PER_REQUEST,
+      pointInTimeRecoverySpecification: { pointInTimeRecoveryEnabled: true },
+    });
+
     // ── Lambda Helper ─────────────────────────────────────────────
     const makeAdminLambda = (functionId: string, entryPath: string) =>
       new nodejs.NodejsFunction(this, functionId, {
@@ -91,6 +95,24 @@ export class AdminControlPlaneStack extends cdk.Stack {
         bundling: { externalModules: ["pg-native"] },
       });
 
+    const makeDictionaryLambda = (functionId: string, entryPath: string) =>
+      new nodejs.NodejsFunction(this, functionId, {
+        runtime: lambda.Runtime.NODEJS_22_X,
+        entry: path.join(
+          __dirname,
+          "..",
+          "src",
+          "admin-control-plane",
+          "handlers",
+          entryPath,
+        ),
+        tracing: lambda.Tracing.ACTIVE,
+        environment: {
+          DICTIONARY_TABLE_NAME: dictionaryTable.tableName,
+          STAGE: props.stage,
+        },
+      });
+
     const getParserRulesFn = makeAdminLambda(
       "GetParserRules",
       "get-parser-rules.ts",
@@ -107,6 +129,24 @@ export class AdminControlPlaneStack extends cdk.Stack {
       "UpdateVppStrategy",
       "update-vpp-strategy.ts",
     );
+
+    // ── Data Dictionary Lambdas ─────────────────────────────────
+    const getDictionaryFn = makeDictionaryLambda(
+      "GetDataDictionary",
+      "get-data-dictionary.ts",
+    );
+    const createDictionaryFieldFn = makeDictionaryLambda(
+      "CreateDictionaryField",
+      "create-dictionary-field.ts",
+    );
+    const deleteDictionaryFieldFn = makeDictionaryLambda(
+      "DeleteDictionaryField",
+      "delete-dictionary-field.ts",
+    );
+
+    dictionaryTable.grantReadWriteData(getDictionaryFn);
+    dictionaryTable.grantReadWriteData(createDictionaryFieldFn);
+    dictionaryTable.grantReadWriteData(deleteDictionaryFieldFn);
 
     // ── API Gateway ───────────────────────────────────────────────
     const adminApi = new apigwv2.HttpApi(this, "AdminApi", {
@@ -148,6 +188,30 @@ export class AdminControlPlaneStack extends cdk.Stack {
       integration: new integrations.HttpLambdaIntegration(
         "UpdateStrategyIntegration",
         updateStrategyFn,
+      ),
+    });
+    adminApi.addRoutes({
+      path: "/admin/dictionary",
+      methods: [apigwv2.HttpMethod.GET],
+      integration: new integrations.HttpLambdaIntegration(
+        "GetDataDictionaryIntegration",
+        getDictionaryFn,
+      ),
+    });
+    adminApi.addRoutes({
+      path: "/admin/dictionary",
+      methods: [apigwv2.HttpMethod.POST],
+      integration: new integrations.HttpLambdaIntegration(
+        "CreateDictionaryFieldIntegration",
+        createDictionaryFieldFn,
+      ),
+    });
+    adminApi.addRoutes({
+      path: "/admin/dictionary/{fieldId}",
+      methods: [apigwv2.HttpMethod.DELETE],
+      integration: new integrations.HttpLambdaIntegration(
+        "DeleteDictionaryFieldIntegration",
+        deleteDictionaryFieldFn,
       ),
     });
 
