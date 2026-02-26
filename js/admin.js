@@ -453,10 +453,29 @@ function renderM1ParserRules(container, mod) {
     '        <i class="material-icons">add</i> + \u65b0\u589e\u5b57\u6bb5 (Add Field)' +
     "      </button>" +
     "    </div>" +
+    '  <div class="dict-iterator-config">' +
+    '    <div class="dict-iterator-title">' +
+    '      <i class="material-icons" style="font-size:16px">device_hub</i>' +
+    '      Iterator Config <span class="dict-iterator-hint">(多設備數組，選填)</span>' +
+    "    </div>" +
+    '    <div class="dict-iterator-row">' +
+    '      <label class="dict-iterator-label">Iterator Path</label>' +
+    '      <input type="text" id="mapping-iterator-path" class="dict-iterator-input" placeholder="例：data.batList">' +
+    "    </div>" +
+    '    <div class="dict-iterator-row">' +
+    '      <label class="dict-iterator-label">Device ID Path</label>' +
+    '      <input type="text" id="mapping-device-id-path" class="dict-iterator-input" placeholder="例：id">' +
+    "    </div>" +
+    "  </div>" +
     '    <div class="dict-panel-body" id="dict-panel-body">' +
     '      <div class="dict-loading"><i class="material-icons dict-spin">sync</i> Loading dictionary\u2026</div>' +
     "    </div>" +
     "  </div>" +
+    '<div class="dict-deploy-bar">' +
+    '  <button class="btn btn-primary dict-btn-deploy" id="dict-btn-deploy">' +
+    '    <i class="material-icons">rocket_launch</i> 🚀 Deploy Mapping Rules' +
+    "  </button>" +
+    "</div>" +
     "</div>" +
     "</div>" + // close m1-columns
     "</div>"; // close m1-editor
@@ -643,6 +662,12 @@ function m1InitDictionary() {
       dictRenderError("\u65e0\u6cd5\u52a0\u8f7d\u5b57\u5178 (API unavailable)");
     }
   });
+
+  // Bind deploy button
+  var deployBtn = document.getElementById("dict-btn-deploy");
+  if (deployBtn) {
+    deployBtn.addEventListener("click", m1DeployMappingRules);
+  }
 }
 
 // Render error state in dictionary panel
@@ -711,20 +736,34 @@ function dictRenderPanel(fields) {
         var typeStyle =
           DICT_TYPE_COLORS[field.valueType] || DICT_TYPE_COLORS.string;
         html +=
-          '<div class="dict-field-row">' +
-          '  <span class="dict-field-id">' +
+          '<div class="dict-field-row"' +
+          ' data-field-id="' +
           m1EscapeHtml(field.fieldId || "") +
-          "</span>" +
-          '  <span class="dict-field-name">' +
+          '"' +
+          ' data-domain="' +
+          m1EscapeHtml(field.domain || "") +
+          '"' +
+          ' data-value-type="' +
+          m1EscapeHtml(field.valueType || "number") +
+          '">' +
+          '  <div class="dict-field-info">' +
+          '    <span class="dict-field-id">' +
+          m1EscapeHtml(field.fieldId || "") +
+          "    </span>" +
+          '    <span class="dict-field-name">' +
           m1EscapeHtml(field.displayName || "") +
-          "</span>" +
-          '  <span class="dict-field-type" style="background:' +
+          "    </span>" +
+          '    <span class="dict-field-type" style="background:' +
           typeStyle.bg +
           ";color:" +
           typeStyle.color +
           '">' +
           m1EscapeHtml(field.valueType || "string") +
-          "  </span>" +
+          "    </span>" +
+          "  </div>" +
+          '  <input type="text" class="mapping-input"' +
+          '    placeholder="JSON Path (如 properties.bat_soc)"' +
+          '    title="為此字段指定 MQTT JSON 中的來源路徑">' +
           "</div>";
       }
     }
@@ -745,6 +784,98 @@ function dictBindCollapseEvents() {
       section.classList.toggle("dict-section--collapsed");
     });
   }
+}
+
+// Deploy Mapping Rules: assemble ParserRule JSON and POST to /api/admin/parser-rules
+function m1DeployMappingRules() {
+  // Collect iterator config (optional)
+  var iteratorPath =
+    (document.getElementById("mapping-iterator-path") || {}).value || "";
+  var deviceIdPath =
+    (document.getElementById("mapping-device-id-path") || {}).value || "";
+
+  // Collect all filled mapping inputs
+  var mappingInputs = document.querySelectorAll(".mapping-input");
+  var mappings = {};
+  var filledCount = 0;
+
+  for (var i = 0; i < mappingInputs.length; i++) {
+    var input = mappingInputs[i];
+    var sourcePath = input.value.trim();
+    if (!sourcePath) continue; // skip empty
+
+    var row = input.parentNode; // the dict-field-row div
+    var fieldId = row.getAttribute("data-field-id");
+    var domain = row.getAttribute("data-domain");
+    var valueType = row.getAttribute("data-value-type");
+
+    if (!fieldId || !domain) continue;
+
+    mappings[fieldId] = {
+      domain: domain,
+      sourcePath: sourcePath,
+      valueType: valueType || "number",
+    };
+    filledCount++;
+  }
+
+  if (filledCount === 0) {
+    alert("請至少填寫一個字段的 JSON Path 再下發。");
+    return;
+  }
+
+  // Assemble ParserRule
+  var rule = {
+    ruleId: "default",
+    parserType: "dynamic",
+    mappings: mappings,
+  };
+  if (iteratorPath.trim()) {
+    rule.iterator = iteratorPath.trim();
+  }
+  if (deviceIdPath.trim()) {
+    rule.deviceIdPath = deviceIdPath.trim();
+  }
+
+  // Disable button during request
+  var deployBtn = document.getElementById("dict-btn-deploy");
+  if (deployBtn) {
+    deployBtn.disabled = true;
+    deployBtn.innerHTML =
+      '<i class="material-icons">hourglass_empty</i> 下發中…';
+  }
+
+  if (
+    typeof SolfacilAPI === "undefined" ||
+    typeof SolfacilAPI.deployParserRules !== "function"
+  ) {
+    alert("API 不可用，請確認服務已啟動。");
+    if (deployBtn) {
+      deployBtn.disabled = false;
+      deployBtn.innerHTML =
+        '<i class="material-icons">rocket_launch</i> 🚀 Deploy Mapping Rules';
+    }
+    return;
+  }
+
+  SolfacilAPI.deployParserRules(rule).then(function (result) {
+    if (deployBtn) {
+      deployBtn.disabled = false;
+      deployBtn.innerHTML =
+        '<i class="material-icons">rocket_launch</i> 🚀 Deploy Mapping Rules';
+    }
+    if (result.ok) {
+      alert(
+        "✅ 規則已成功下發至網關引擎！\n\n已映射 " + filledCount + " 個字段。",
+      );
+    } else {
+      alert(
+        "❌ 下發失敗：" +
+          (result.error || "Unknown error") +
+          "\n\n（Demo 模式下此 API 尚未連接後端，屬正常現象）",
+      );
+    }
+  });
 }
 
 // ── Add Field Modal ──

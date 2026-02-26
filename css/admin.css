@@ -2209,3 +2209,150 @@ html, body {
   border-radius: var(--radius-sm);
   margin-top: var(--space-2);
 }
+
+/* ─── Phase 6.4: Mapping Inputs & Deploy ─────────────────────── */
+
+/* Iterator Config Section */
+.dict-iterator-config {
+  padding: 12px 16px;
+  background: rgba(6, 182, 212, 0.05);
+  border-bottom: 1px solid var(--border-color, rgba(255,255,255,0.08));
+}
+
+.dict-iterator-title {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--text-secondary, #94a3b8);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 10px;
+}
+
+.dict-iterator-hint {
+  font-weight: 400;
+  text-transform: none;
+  color: var(--text-muted, #64748b);
+}
+
+.dict-iterator-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 6px;
+}
+
+.dict-iterator-label {
+  font-size: 11px;
+  color: var(--text-secondary, #94a3b8);
+  width: 110px;
+  flex-shrink: 0;
+}
+
+.dict-iterator-input {
+  flex: 1;
+  background: var(--bg-card, #1e2533);
+  border: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  border-radius: 6px;
+  color: var(--text-primary, #e2e8f0);
+  font-size: 12px;
+  padding: 5px 10px;
+  outline: none;
+  font-family: 'Courier New', monospace;
+  transition: border-color 0.2s;
+}
+
+.dict-iterator-input:focus {
+  border-color: rgba(6, 182, 212, 0.5);
+}
+
+.dict-iterator-input::placeholder {
+  color: var(--text-muted, #64748b);
+  font-style: italic;
+}
+
+/* Mapping Input in each dict field row */
+.dict-field-row {
+  flex-direction: column;
+  gap: 6px;
+  padding: 8px 12px;
+  align-items: stretch;
+}
+
+.dict-field-info {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  min-width: 0;
+}
+
+.mapping-input {
+  width: 100%;
+  background: var(--bg-card, #1e2533);
+  border: 1px dashed var(--border-color, rgba(255,255,255,0.12));
+  border-radius: 5px;
+  color: var(--text-primary, #e2e8f0);
+  font-size: 11px;
+  padding: 4px 8px;
+  outline: none;
+  font-family: 'Courier New', monospace;
+  transition: border-color 0.2s, background 0.2s;
+  box-sizing: border-box;
+}
+
+.mapping-input:focus {
+  border-color: rgba(6, 182, 212, 0.6);
+  border-style: solid;
+  background: rgba(6, 182, 212, 0.05);
+}
+
+.mapping-input:not(:placeholder-shown) {
+  border-color: rgba(6, 182, 212, 0.35);
+  border-style: solid;
+}
+
+.mapping-input::placeholder {
+  color: var(--text-muted, #64748b);
+  font-style: italic;
+}
+
+/* Deploy Bar */
+.dict-deploy-bar {
+  padding: 14px 16px;
+  border-top: 1px solid var(--border-color, rgba(255,255,255,0.08));
+  background: rgba(0,0,0,0.15);
+}
+
+.dict-btn-deploy {
+  width: 100%;
+  padding: 10px 16px;
+  background: linear-gradient(135deg, #059669, #10b981);
+  color: #fff;
+  border: none;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: opacity 0.2s, transform 0.1s;
+}
+
+.dict-btn-deploy:hover:not(:disabled) {
+  opacity: 0.9;
+  transform: translateY(-1px);
+}
+
+.dict-btn-deploy:active:not(:disabled) {
+  transform: translateY(0);
+  opacity: 0.8;
+}
+
+.dict-btn-deploy:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}

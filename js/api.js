@@ -61,4 +61,33 @@ var SolfacilAPI = {
         return { ok: false, error: err.message || "Network error" };
       });
   },
+
+  /**
+   * POST /api/admin/parser-rules — deploy a dynamic parser rule to the engine
+   * @param {Object} rule - ParserRule shape: { ruleId, parserType, iterator?, deviceIdPath?, mappings }
+   * @returns {Promise<{ok: boolean, data?: Object, error?: string}>}
+   */
+  deployParserRules: function (rule) {
+    return fetch(this.baseUrl + "/admin/parser-rules", {
+      method: "POST",
+      headers: {
+        "Content-Type": "application/json",
+        "x-trace-id": typeof generateUUID === "function" ? generateUUID() : "",
+      },
+      body: JSON.stringify(rule),
+    })
+      .then(function (res) {
+        if (!res.ok) {
+          return res.text().then(function (body) {
+            return { ok: false, error: "HTTP " + res.status + ": " + body };
+          });
+        }
+        return res.json().then(function (data) {
+          return { ok: true, data: data };
+        });
+      })
+      .catch(function (err) {
+        return { ok: false, error: err.message || "Network error" };
+      });
+  },
 };
