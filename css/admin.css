@@ -2001,9 +2001,10 @@ html, body {
 /* ─── M1 Two-Column Layout ──────────────────────────────────────── */
 .m1-columns {
   display: grid;
-  grid-template-columns: 1fr 380px;
+  grid-template-columns: 1fr clamp(380px, 28%, 480px);
   gap: var(--space-6);
   margin-top: var(--space-4);
+  max-width: 1600px;
 }
 @media (max-width: 1200px) {
   .m1-columns {
