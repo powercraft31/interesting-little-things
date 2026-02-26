@@ -25,7 +25,7 @@ var SolfacilAPI = {
           });
         }
         return res.json().then(function (data) {
-          return { ok: true, data: data };
+          return { ok: true, data: Array.isArray(data) ? data : (data.fields || data) };
         });
       })
       .catch(function (err) {
