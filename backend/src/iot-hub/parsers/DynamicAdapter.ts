@@ -21,10 +21,15 @@ export function getNestedValue(
   obj: Record<string, unknown>,
   path: string,
 ): unknown {
-  const keys = path.split(".");
+  const normalizedPath = path.replace(/\[(\d+)\]/g, ".$1");
+  const keys = normalizedPath.split(".");
   let current: unknown = obj;
   for (const key of keys) {
-    if (current === null || current === undefined || typeof current !== "object") {
+    if (
+      current === null ||
+      current === undefined ||
+      typeof current !== "object"
+    ) {
       return undefined;
     }
     current = (current as Record<string, unknown>)[key];
@@ -49,13 +54,29 @@ export class DynamicAdapter {
           `Iterator path "${rule.iterator}" did not resolve to an array`,
         );
       }
-      return items.map((item: unknown, index: number) => {
+      const results: StandardTelemetry[] = [];
+      items.forEach((item: unknown, index: number) => {
         const record = item as Record<string, unknown>;
-        const deviceId = rule.deviceIdPath
-          ? String(getNestedValue(record, rule.deviceIdPath) ?? index)
-          : String(index);
-        return this.buildEnvelope(record, rule.mappings, orgId, deviceId);
+
+        if (rule.deviceIdPath) {
+          const rawId = getNestedValue(record, rule.deviceIdPath);
+          if (rawId === null || rawId === undefined || rawId === "") {
+            console.warn(
+              `[DynamicAdapter] iterator index ${index}: deviceIdPath "${rule.deviceIdPath}" resolved to empty/null — record SKIPPED (no phantom IDs allowed)`,
+            );
+            return; // skip this record
+          }
+          results.push(
+            this.buildEnvelope(record, rule.mappings, orgId, String(rawId)),
+          );
+        } else {
+          // 沒有設定 deviceIdPath → 使用 index（有意為之，不是誤用）
+          results.push(
+            this.buildEnvelope(record, rule.mappings, orgId, String(index)),
+          );
+        }
       });
+      return results;
     }
 
     // Direct mode: single envelope

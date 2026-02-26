@@ -119,7 +119,9 @@ describe("ingest-telemetry handler", () => {
       const measureValues = calls[0].args[0].input.Records![0].MeasureValues;
 
       expect(measureValues).toHaveLength(3);
-      expect(measureValues!.map((m) => m.Name)).not.toContain("status.battery_soc");
+      expect(measureValues!.map((m) => m.Name)).not.toContain(
+        "status.battery_soc",
+      );
     });
 
     it("converts timestamp to milliseconds string", async () => {
@@ -268,7 +270,9 @@ describe("ingest-telemetry handler", () => {
   describe("AppConfig graceful degradation", () => {
     it("falls back to ACL/Legacy when AppConfig throws NetworkError", async () => {
       // Simulate Lambda Extension Sidecar unreachable (e.g. cold-start race)
-      mockFetch.mockRejectedValueOnce(new Error("fetch failed: Connection refused"));
+      mockFetch.mockRejectedValueOnce(
+        new Error("fetch failed: Connection refused"),
+      );
 
       // System must NOT crash — VALID_EVENT is handled by NativeAdapter fallback
       const result = await handler(VALID_EVENT);
@@ -401,8 +405,157 @@ describe("ingest-telemetry handler", () => {
       // Verify dynamic mapping: power → status.power (all dynamic values go to status)
       const calls = tsMock.commandCalls(WriteRecordsCommand);
       const measureValues = calls[0].args[0].input.Records![0].MeasureValues;
-      const powerValue = measureValues?.find((mv) => mv.Name === "status.power");
+      const powerValue = measureValues?.find(
+        (mv) => mv.Name === "status.power",
+      );
       expect(Number(powerValue?.Value)).toBeCloseTo(5, 1);
+    });
+  });
+
+  // ---- Dynamic Parser Engine (Phase 6.4) ----------------------------------
+  describe("Dynamic Parser Engine (Phase 6.4)", () => {
+    it("invokes DynamicAdapter when AppConfig returns parserType: 'dynamic' rule", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ORG_ENERGIA_001: {
+            native: {
+              parserType: "dynamic",
+              mappings: {
+                "metering.grid_power_kw": {
+                  domain: "metering",
+                  sourcePath: "power",
+                  valueType: "number",
+                },
+                "status.battery_soc": {
+                  domain: "status",
+                  sourcePath: "soc",
+                  valueType: "number",
+                },
+              },
+            },
+          },
+        }),
+      });
+
+      const event = {
+        orgId: "ORG_ENERGIA_001",
+        deviceId: "ASSET_SP_001",
+        timestamp: "2026-02-20T14:30:00.000Z",
+        power: 5.5,
+        soc: 78.0,
+      };
+
+      const result = await handler(event);
+      expect(result.success).toBe(true);
+      expect(result.recordsWritten).toBe(1);
+      expect(result.traceId).toMatch(/^vpp-[0-9a-f-]{36}$/);
+
+      const tsCalls = tsMock.commandCalls(WriteRecordsCommand);
+      expect(tsCalls).toHaveLength(1);
+      const measureValues = tsCalls[0].args[0].input.Records![0].MeasureValues;
+      expect(measureValues).toEqual(
+        expect.arrayContaining([
+          { Name: "metering.grid_power_kw", Value: "5.5", Type: "DOUBLE" },
+          { Name: "status.battery_soc", Value: "78", Type: "DOUBLE" },
+        ]),
+      );
+    });
+
+    it("writes N Timestream records when DynamicAdapter returns N devices (iterator mode)", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ORG_ENERGIA_001: {
+            native: {
+              parserType: "dynamic",
+              iterator: "data.batList",
+              deviceIdPath: "bat_id",
+              mappings: {
+                "status.battery_soc": {
+                  domain: "status",
+                  sourcePath: "bat_soc",
+                  valueType: "number",
+                },
+              },
+            },
+          },
+        }),
+      });
+
+      const event = {
+        orgId: "ORG_ENERGIA_001",
+        gatewayId: "GW_CHINT_001",
+        data: {
+          batList: [
+            { bat_id: "BAT_001", bat_soc: 80 },
+            { bat_id: "BAT_002", bat_soc: 65 },
+          ],
+        },
+      };
+
+      const result = await handler(event);
+      expect(result.success).toBe(true);
+      expect(result.recordsWritten).toBe(2);
+
+      const tsCalls = tsMock.commandCalls(WriteRecordsCommand);
+      expect(tsCalls).toHaveLength(2);
+
+      const dims1 = tsCalls[0].args[0].input.Records![0].Dimensions;
+      expect(dims1).toEqual(
+        expect.arrayContaining([{ Name: "deviceId", Value: "BAT_001" }]),
+      );
+
+      const dims2 = tsCalls[1].args[0].input.Records![0].Dimensions;
+      expect(dims2).toEqual(
+        expect.arrayContaining([{ Name: "deviceId", Value: "BAT_002" }]),
+      );
+
+      const ebCalls = ebMock.commandCalls(PutEventsCommand);
+      expect(ebCalls).toHaveLength(2);
+    });
+
+    it("EventBridge receives traceId for each device in iterator mode", async () => {
+      mockFetch.mockResolvedValueOnce({
+        ok: true,
+        json: async () => ({
+          ORG_ENERGIA_001: {
+            native: {
+              parserType: "dynamic",
+              iterator: "devices",
+              deviceIdPath: "id",
+              mappings: {
+                "metering.grid_power_kw": {
+                  domain: "metering",
+                  sourcePath: "power_kw",
+                  valueType: "number",
+                },
+              },
+            },
+          },
+        }),
+      });
+
+      const event = {
+        orgId: "ORG_ENERGIA_001",
+        devices: [
+          { id: "INV_001", power_kw: 10.5 },
+          { id: "INV_002", power_kw: 8.3 },
+        ],
+      };
+
+      await handler(event);
+
+      const ebCalls = ebMock.commandCalls(PutEventsCommand);
+      expect(ebCalls).toHaveLength(2);
+
+      const detail1 = JSON.parse(ebCalls[0].args[0].input.Entries![0].Detail!);
+      expect(detail1.deviceId).toBe("INV_001");
+      expect(detail1.traceId).toMatch(/^vpp-[0-9a-f-]{36}$/);
+
+      const detail2 = JSON.parse(ebCalls[1].args[0].input.Entries![0].Detail!);
+      expect(detail2.deviceId).toBe("INV_002");
+      expect(detail2.traceId).toBe(detail1.traceId); // 同一批次，相同 traceId
     });
   });
 });
