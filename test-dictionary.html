@@ -1,0 +1,62 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Dictionary Tests</title>
+  <link rel="stylesheet" href="css/admin.css">
+  <link href="https://fonts.googleapis.com/icon?family=Material+Icons" rel="stylesheet">
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 20px;
+      background: #f5f5f5;
+    }
+    .test-section {
+      background: white;
+      padding: 20px;
+      margin-bottom: 20px;
+      border-radius: 8px;
+      box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+    }
+    .test-result {
+      padding: 10px;
+      margin: 5px 0;
+      border-radius: 4px;
+    }
+    .pass {
+      background: #d4edda;
+      color: #155724;
+    }
+    .fail {
+      background: #f8d7da;
+      color: #721c24;
+    }
+    #test-results {
+      text-align: center;
+      margin-bottom: 20px;
+    }
+    #test-results h2 {
+      font-size: 24px;
+    }
+  </style>
+</head>
+<body>
+  <h1>Data Dictionary — Unit Tests</h1>
+  <div id="test-results"></div>
+
+  <!-- Minimal DOM containers needed by the dictionary code -->
+  <div id="module-content" class="module-content" style="display:none;"></div>
+
+  <div class="test-section">
+    <h2>Test Output</h2>
+    <div id="test-output"></div>
+  </div>
+
+  <!-- Dependencies: i18n must load before admin.js (provides t() / tpl()) -->
+  <script src="js/i18n.js"></script>
+  <script src="js/api.js"></script>
+  <script src="js/admin.js"></script>
+  <script src="js/test-dictionary.js"></script>
+</body>
+</html>
