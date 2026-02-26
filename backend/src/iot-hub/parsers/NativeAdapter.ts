@@ -1,4 +1,4 @@
-import { StandardTelemetry } from './StandardTelemetry';
+import { StandardTelemetry, castValue } from './StandardTelemetry';
 import { TelemetryAdapter } from './TelemetryAdapter';
 
 /**
@@ -22,17 +22,34 @@ export class NativeAdapter implements TelemetryAdapter {
       current?: number;
       soc?: number;
     };
+
+    // ── metering（数值型计量指标）───────────────────────────────
+    const metering: Record<string, number> = {};
+
+    metering['metering.grid_power_kw'] = castValue(p.power, 'number');
+
+    if (p.voltage !== undefined) {
+      metering['metering.grid_voltage_v'] = castValue(p.voltage, 'number');
+    }
+
+    if (p.current !== undefined) {
+      metering['metering.grid_current_a'] = castValue(p.current, 'number');
+    }
+
+    // ── status（设备状态）──────────────────────────────────────
+    const status: Record<string, number | string | boolean> = {};
+
+    if (p.soc !== undefined) {
+      status['status.battery_soc'] = castValue(p.soc, 'number');
+    }
+
     return {
       orgId,
       deviceId: p.deviceId,
       timestamp: p.timestamp ?? new Date().toISOString(),
       source: 'mqtt',
-      metrics: {
-        power:   p.power,
-        voltage: p.voltage,
-        current: p.current,
-        soc:     p.soc,
-      },
+      metering,
+      status: Object.keys(status).length > 0 ? status : undefined,
       rawPayload: raw,
     };
   }

@@ -7,6 +7,8 @@
  *   2. 反腐层（ACL）静态适配器（降级方案）
  * 然后将多指标记录写入 Amazon Timestream，并发布包含 traceId 的
  * TelemetryIngested 事件到 EventBridge，用于分布式追踪。
+ *
+ * v5.2: 支持 Business Trinity 灵活容器（metering/status/config）
  */
 import {
   TimestreamWriteClient,
@@ -19,18 +21,7 @@ import {
   PutEventsCommand,
 } from '@aws-sdk/client-eventbridge';
 import { resolveAdapter } from '../parsers/AdapterRegistry';
-
-export interface TelemetryEvent {
-  orgId: string;
-  deviceId: string;
-  timestamp: string; // ISO 8601
-  metrics: {
-    power: number;    // kW
-    voltage: number;  // V
-    current: number;  // A
-    soc?: number;     // % 可选
-  };
-}
+import { type StandardTelemetry } from '../parsers/StandardTelemetry';
 
 interface IngestResult {
   success: true;
@@ -108,6 +99,80 @@ function applyDynamicMapping(
 }
 
 // ---------------------------------------------------------------------------
+// 从 Business Trinity 容器构建 MeasureValues
+// ---------------------------------------------------------------------------
+
+function buildMeasureValues(telemetry: StandardTelemetry): MeasureValue[] {
+  const values: MeasureValue[] = [];
+
+  // metering — 全部为 DOUBLE 类型
+  if (telemetry.metering) {
+    for (const [key, val] of Object.entries(telemetry.metering)) {
+      values.push({ Name: key, Value: String(val), Type: 'DOUBLE' });
+    }
+  }
+
+  // status — 根据值类型选择 Timestream 类型
+  if (telemetry.status) {
+    for (const [key, val] of Object.entries(telemetry.status)) {
+      if (typeof val === 'number') {
+        values.push({ Name: key, Value: String(val), Type: 'DOUBLE' });
+      } else if (typeof val === 'boolean') {
+        values.push({ Name: key, Value: String(val), Type: 'BOOLEAN' });
+      } else {
+        values.push({ Name: key, Value: String(val), Type: 'VARCHAR' });
+      }
+    }
+  }
+
+  // config — 数值为 DOUBLE，字符串为 VARCHAR
+  if (telemetry.config) {
+    for (const [key, val] of Object.entries(telemetry.config)) {
+      if (typeof val === 'number') {
+        values.push({ Name: key, Value: String(val), Type: 'DOUBLE' });
+      } else {
+        values.push({ Name: key, Value: String(val), Type: 'VARCHAR' });
+      }
+    }
+  }
+
+  return values;
+}
+
+// ---------------------------------------------------------------------------
+// 从动态映射结果构建 StandardTelemetry（兼容层）
+// ---------------------------------------------------------------------------
+
+function dynamicMappedToTelemetry(
+  mapped: Record<string, unknown>,
+  orgId: string,
+): StandardTelemetry {
+  const metering: Record<string, number> = {};
+  const status: Record<string, number | string | boolean> = {};
+
+  // 将动态映射的字段归类到对应容器
+  for (const [key, val] of Object.entries(mapped)) {
+    if (key === 'deviceId' || key === 'timestamp') continue;
+    if (typeof val === 'number') {
+      metering[`metering.${key}`] = val;
+    } else if (typeof val === 'boolean') {
+      status[`status.${key}`] = val;
+    } else if (typeof val === 'string') {
+      status[`status.${key}`] = val;
+    }
+  }
+
+  return {
+    orgId,
+    deviceId: (mapped.deviceId as string) ?? '',
+    timestamp: (mapped.timestamp as string) ?? new Date().toISOString(),
+    source: 'generic-rest',
+    metering: Object.keys(metering).length > 0 ? metering : undefined,
+    status: Object.keys(status).length > 0 ? status : undefined,
+  };
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
@@ -122,12 +187,7 @@ export async function handler(event: unknown): Promise<IngestResult> {
   }
 
   // --- ACL：规范化厂商专属负载 -----------------------------------------------
-  let deviceId: string;
-  let timestamp: string;
-  let power: number;
-  let voltage: number | undefined;
-  let current: number | undefined;
-  let soc: number | undefined;
+  let telemetry: StandardTelemetry;
 
   // 优先尝试 AppConfig 动态解析规则
   const parserRules = await fetchParserRules(orgId);
@@ -136,58 +196,36 @@ export async function handler(event: unknown): Promise<IngestResult> {
 
   if (rule && Object.keys(rule.mappingRule).length > 0) {
     const mapped = applyDynamicMapping(raw, rule);
-    deviceId  = (mapped.deviceId as string) ?? '';
-    timestamp = (mapped.timestamp as string) ?? new Date().toISOString();
-    power     = (mapped.power as number) ?? 0;
-    voltage   = mapped.voltage as number | undefined;
-    current   = mapped.current as number | undefined;
-    soc       = mapped.soc as number | undefined;
+    telemetry = dynamicMappedToTelemetry(mapped, orgId);
   } else {
     // 降级使用现有 ACL resolveAdapter 逻辑
     try {
       const adapter = resolveAdapter(event);
-      const telemetry = adapter.normalize(event, orgId);
-      deviceId  = telemetry.deviceId;
-      timestamp = telemetry.timestamp;
-      power     = telemetry.metrics.power;
-      voltage   = telemetry.metrics.voltage;
-      current   = telemetry.metrics.current;
-      soc       = telemetry.metrics.soc;
+      telemetry = adapter.normalize(event, orgId);
     } catch {
-      // 降级：使用旧版 TelemetryEvent 格式（结构化 metrics 对象）
-      const e = raw as unknown as TelemetryEvent;
-      deviceId  = e.deviceId ?? '';
-      timestamp = e.timestamp ?? new Date().toISOString();
-      power     = e.metrics?.power ?? 0;
-      voltage   = e.metrics?.voltage;
-      current   = e.metrics?.current;
-      soc       = e.metrics?.soc;
+      // 最终降级：从 raw 构造最小 StandardTelemetry
+      telemetry = {
+        orgId,
+        deviceId: (raw.deviceId as string) ?? '',
+        timestamp: (raw.timestamp as string) ?? new Date().toISOString(),
+        source: 'generic-rest',
+        metering: typeof raw.power === 'number'
+          ? { 'metering.grid_power_kw': raw.power as number }
+          : undefined,
+      };
     }
   }
 
-  if (!deviceId) {
+  if (!telemetry.deviceId) {
     throw new Error('Missing required field: deviceId');
   }
 
-  // --- 构建 MeasureValues ---------------------------------------------------
-  const measureValues: MeasureValue[] = [
-    { Name: 'power', Value: String(power), Type: 'DOUBLE' },
-  ];
+  // --- 构建 MeasureValues（从 Business Trinity 容器迭代）---------------------
+  const measureValues = buildMeasureValues(telemetry);
 
-  if (voltage !== undefined) {
-    measureValues.push({ Name: 'voltage', Value: String(voltage), Type: 'DOUBLE' });
-  }
-
-  if (current !== undefined) {
-    measureValues.push({ Name: 'current', Value: String(current), Type: 'DOUBLE' });
-  }
-
-  if (soc !== undefined) {
-    measureValues.push({
-      Name: 'soc',
-      Value: String(soc),
-      Type: 'DOUBLE',
-    });
+  // 至少需要一个 measure 值
+  if (measureValues.length === 0) {
+    measureValues.push({ Name: 'metering.heartbeat', Value: '1', Type: 'DOUBLE' });
   }
 
   // --- 构建 Timestream 记录 -------------------------------------------------
@@ -195,12 +233,12 @@ export async function handler(event: unknown): Promise<IngestResult> {
     {
       Dimensions: [
         { Name: 'orgId', Value: orgId },
-        { Name: 'deviceId', Value: deviceId },
+        { Name: 'deviceId', Value: telemetry.deviceId },
       ],
       MeasureName: 'telemetry',
       MeasureValueType: 'MULTI',
       MeasureValues: measureValues,
-      Time: String(new Date(timestamp).getTime()),
+      Time: String(new Date(telemetry.timestamp).getTime()),
       TimeUnit: 'MILLISECONDS',
     },
   ];
@@ -223,10 +261,10 @@ export async function handler(event: unknown): Promise<IngestResult> {
         DetailType: 'TelemetryIngested',
         Detail: JSON.stringify({
           orgId,
-          deviceId,
-          power,
-          soc,
-          timestamp,
+          deviceId: telemetry.deviceId,
+          timestamp: telemetry.timestamp,
+          metering: telemetry.metering,
+          status: telemetry.status,
           traceId,
         }),
       }],
@@ -239,9 +277,9 @@ export async function handler(event: unknown): Promise<IngestResult> {
     module: 'M1',
     action: 'telemetry_ingested',
     orgId,
-    deviceId,
-    power,
-    soc,
+    deviceId: telemetry.deviceId,
+    metering: telemetry.metering,
+    status: telemetry.status,
   }));
 
   return { success: true, recordsWritten: records.length, traceId };
