@@ -211,17 +211,9 @@ function apiDeploy(moduleId, profile, payload) {
           profile + " \u2192 BAKED (trace: " + traceId.slice(0, 8) + ")",
         );
       } else if (res.status >= 400 && res.status < 500) {
-        showToast(
-          tpl("deployFail403", { code: res.status }),
-          "error",
-          5000,
-        );
+        showToast(tpl("deployFail403", { code: res.status }), "error", 5000);
       } else {
-        showToast(
-          tpl("deployFail500", { code: res.status }),
-          "error",
-          5000,
-        );
+        showToast(tpl("deployFail500", { code: res.status }), "error", 5000);
       }
     })
     .catch(function () {
@@ -238,14 +230,18 @@ function apiDeploy(moduleId, profile, payload) {
 var M1_VENDOR_TEMPLATES = {
   Huawei: JSON.stringify(
     {
-      vendor: "Huawei",
-      protocol: "Modbus/TCP",
-      registers: {
-        soc: { address: 37004, scale: 0.1, unit: "%" },
-        power_w: { address: 37001, scale: 1, unit: "W" },
-        voltage: { address: 37006, scale: 0.1, unit: "V" },
+      deviceId: "GW_CHINT_001",
+      timestamp: 1678886400000,
+      data: {
+        batList: [{ id: 1, properties: { bat_soc: 45.5, bat_power: 12.3 } }],
+        gridList: [
+          {
+            id: 1,
+            properties: { ImpActiveEnergy: 1500.5, ct_activePowerA: 3.2 },
+          },
+        ],
+        dido: { do: [{ id: 1, value: 1 }] },
       },
-      poll_interval_ms: 5000,
     },
     null,
     2,
@@ -383,6 +379,10 @@ function renderM1ParserRules(container, mod) {
     "</span>" +
     "  </div>" +
     "</div>" +
+    // Two-column layout: left = editor, right = dictionary
+    '<div class="m1-columns">' +
+    // ── Left column: editor ──
+    '<div class="m1-col-left">' +
     // 厂牌选择区
     '<div class="m1-section m1-vendor-section">' +
     '  <div class="m1-section-title">' +
@@ -434,10 +434,36 @@ function renderM1ParserRules(container, mod) {
     t("deployParserRule") +
     "  </button>" +
     "</div>" +
-    "</div>";
+    "</div>" +
+    // ── Right column: Global Dictionary ──
+    '<div class="m1-col-right">' +
+    '  <div class="dict-panel">' +
+    '    <div class="dict-panel-header">' +
+    '      <div class="dict-panel-title">' +
+    '        <i class="material-icons" style="color:' +
+    accent +
+    '">menu_book</i>' +
+    "        Global Data Dictionary" +
+    "      </div>" +
+    '      <button class="btn btn-secondary dict-btn-add" id="dict-btn-add" style="border-color:' +
+    accent +
+    ";color:" +
+    accent +
+    '">' +
+    '        <i class="material-icons">add</i> + \u65b0\u589e\u5b57\u6bb5 (Add Field)' +
+    "      </button>" +
+    "    </div>" +
+    '    <div class="dict-panel-body" id="dict-panel-body">' +
+    '      <div class="dict-loading"><i class="material-icons dict-spin">sync</i> Loading dictionary\u2026</div>' +
+    "    </div>" +
+    "  </div>" +
+    "</div>" +
+    "</div>" + // close m1-columns
+    "</div>"; // close m1-editor
 
   m1BindEvents();
   m1UpdateDeployButton();
+  m1InitDictionary();
 }
 
 /* ─── M1 辅助函数 ────────────────────────────────────────────── */
@@ -570,6 +596,329 @@ function m1UpdateDeployButton() {
   var isValid = m1State.validationStatus === "valid";
   var hasChanges = m1State.jsonText !== m1State.originalJson;
   btn.disabled = !isValid || !hasChanges;
+}
+
+/* ─── M1 Global Data Dictionary ─────────────────────────────── */
+
+var m1DictState = {
+  fields: [],
+  loaded: false,
+  error: null,
+};
+
+// Domain definitions for grouping
+var DICT_DOMAINS = [
+  { key: "metering", label: "\u8ba1\u91cf Metering", icon: "speed" },
+  { key: "status", label: "\u72b6\u6001 Status", icon: "info" },
+  { key: "config", label: "\u914d\u7f6e Config", icon: "settings" },
+];
+
+// Value type badge colors
+var DICT_TYPE_COLORS = {
+  number: { bg: "rgba(59, 130, 246, 0.15)", color: "#3b82f6" },
+  string: { bg: "rgba(16, 185, 129, 0.15)", color: "#10b981" },
+  boolean: { bg: "rgba(249, 115, 22, 0.15)", color: "#f97316" },
+};
+
+// Initialize dictionary: fetch from API and render
+function m1InitDictionary() {
+  var addBtn = document.getElementById("dict-btn-add");
+  if (addBtn) {
+    addBtn.addEventListener("click", dictShowAddFieldModal);
+  }
+
+  if (typeof SolfacilAPI === "undefined") {
+    dictRenderError("\u65e0\u6cd5\u52a0\u8f7d\u5b57\u5178 (API unavailable)");
+    return;
+  }
+
+  SolfacilAPI.getDictionary().then(function (result) {
+    if (result.ok && Array.isArray(result.data)) {
+      m1DictState.fields = result.data;
+      m1DictState.loaded = true;
+      m1DictState.error = null;
+      dictRenderPanel(result.data);
+    } else {
+      m1DictState.error = result.error || "Unknown error";
+      dictRenderError("\u65e0\u6cd5\u52a0\u8f7d\u5b57\u5178 (API unavailable)");
+    }
+  });
+}
+
+// Render error state in dictionary panel
+function dictRenderError(message) {
+  var body = document.getElementById("dict-panel-body");
+  if (!body) return;
+  body.innerHTML =
+    '<div class="dict-empty">' +
+    '  <i class="material-icons" style="font-size:32px;color:var(--text-muted)">cloud_off</i>' +
+    '  <div class="dict-empty-text">' +
+    m1EscapeHtml(message) +
+    "</div>" +
+    "</div>";
+}
+
+// Render dictionary fields grouped by domain
+function dictRenderPanel(fields) {
+  var body = document.getElementById("dict-panel-body");
+  if (!body) return;
+
+  if (!fields || fields.length === 0) {
+    body.innerHTML =
+      '<div class="dict-empty">' +
+      '  <i class="material-icons" style="font-size:32px;color:var(--text-muted)">inbox</i>' +
+      '  <div class="dict-empty-text">No fields defined yet</div>' +
+      "</div>";
+    return;
+  }
+
+  var html = "";
+  for (var d = 0; d < DICT_DOMAINS.length; d++) {
+    var domain = DICT_DOMAINS[d];
+    var domainFields = [];
+    for (var f = 0; f < fields.length; f++) {
+      if (fields[f].domain === domain.key) {
+        domainFields.push(fields[f]);
+      }
+    }
+
+    var sectionId = "dict-section-" + domain.key;
+    html +=
+      '<div class="dict-section" id="' +
+      sectionId +
+      '">' +
+      '  <div class="dict-section-header" data-dict-toggle="' +
+      domain.key +
+      '">' +
+      '    <i class="material-icons dict-section-icon">' +
+      domain.icon +
+      "</i>" +
+      '    <span class="dict-section-label">\u3010' +
+      m1EscapeHtml(domain.label) +
+      "\u3011</span>" +
+      '    <span class="dict-section-count">' +
+      domainFields.length +
+      "</span>" +
+      '    <i class="material-icons dict-chevron">expand_more</i>' +
+      "  </div>" +
+      '  <div class="dict-section-body">';
+
+    if (domainFields.length === 0) {
+      html += '<div class="dict-field-empty">No fields in this domain</div>';
+    } else {
+      for (var j = 0; j < domainFields.length; j++) {
+        var field = domainFields[j];
+        var typeStyle =
+          DICT_TYPE_COLORS[field.valueType] || DICT_TYPE_COLORS.string;
+        html +=
+          '<div class="dict-field-row">' +
+          '  <span class="dict-field-id">' +
+          m1EscapeHtml(field.fieldId || "") +
+          "</span>" +
+          '  <span class="dict-field-name">' +
+          m1EscapeHtml(field.displayName || "") +
+          "</span>" +
+          '  <span class="dict-field-type" style="background:' +
+          typeStyle.bg +
+          ";color:" +
+          typeStyle.color +
+          '">' +
+          m1EscapeHtml(field.valueType || "string") +
+          "  </span>" +
+          "</div>";
+      }
+    }
+
+    html += "  </div></div>";
+  }
+
+  body.innerHTML = html;
+  dictBindCollapseEvents();
+}
+
+// Bind collapse/expand toggle events on dictionary sections
+function dictBindCollapseEvents() {
+  var headers = document.querySelectorAll("[data-dict-toggle]");
+  for (var i = 0; i < headers.length; i++) {
+    headers[i].addEventListener("click", function () {
+      var section = this.parentNode;
+      section.classList.toggle("dict-section--collapsed");
+    });
+  }
+}
+
+// ── Add Field Modal ──
+
+function dictShowAddFieldModal() {
+  var existing = document.getElementById("dict-add-modal");
+  if (existing) existing.parentNode.removeChild(existing);
+
+  var overlay = document.createElement("div");
+  overlay.id = "dict-add-modal";
+  overlay.className = "cp-modal-overlay";
+  overlay.innerHTML =
+    '<div class="cp-modal dict-modal">' +
+    '  <div class="cp-modal-header">' +
+    '    <i class="material-icons" style="color:var(--accent-m1)">playlist_add</i>' +
+    "    + \u65b0\u589e\u5b57\u6bb5 (Add Field)" +
+    "  </div>" +
+    '  <div class="cp-modal-body">' +
+    '    <div class="dict-form">' +
+    // Domain
+    '      <div class="dict-form-group">' +
+    '        <label class="cp-label" for="dict-field-domain">Domain</label>' +
+    '        <select class="cp-select" id="dict-field-domain">' +
+    '          <option value="metering">metering</option>' +
+    '          <option value="status">status</option>' +
+    '          <option value="config">config</option>' +
+    "        </select>" +
+    "      </div>" +
+    // Field ID
+    '      <div class="dict-form-group">' +
+    '        <label class="cp-label" for="dict-field-id">Field ID</label>' +
+    '        <input class="cp-input" id="dict-field-id" type="text" placeholder="e.g. status.chiller_temp">' +
+    '        <div class="dict-form-error" id="dict-field-id-error"></div>' +
+    "      </div>" +
+    // Display Name
+    '      <div class="dict-form-group">' +
+    '        <label class="cp-label" for="dict-field-display">Display Name</label>' +
+    '        <input class="cp-input" id="dict-field-display" type="text" placeholder="Human-readable label">' +
+    "      </div>" +
+    // Value Type
+    '      <div class="dict-form-group">' +
+    '        <label class="cp-label" for="dict-field-type">Value Type</label>' +
+    '        <select class="cp-select" id="dict-field-type">' +
+    '          <option value="number">number</option>' +
+    '          <option value="string">string</option>' +
+    '          <option value="boolean">boolean</option>' +
+    "        </select>" +
+    "      </div>" +
+    // API error display
+    '      <div class="dict-form-error dict-form-api-error" id="dict-api-error"></div>' +
+    "    </div>" +
+    "  </div>" +
+    '  <div class="cp-modal-footer">' +
+    '    <button class="btn btn-secondary" id="dict-modal-cancel">' +
+    '      <i class="material-icons">close</i> Cancel' +
+    "    </button>" +
+    '    <button class="btn btn-primary" id="dict-modal-save" style="background:var(--accent-m1)">' +
+    '      <i class="material-icons">save</i> Save Field' +
+    "    </button>" +
+    "  </div>" +
+    "</div>";
+
+  document.body.appendChild(overlay);
+
+  // Close on overlay click
+  overlay.addEventListener("click", function (e) {
+    if (e.target === overlay) dictCloseAddFieldModal();
+  });
+
+  document
+    .getElementById("dict-modal-cancel")
+    .addEventListener("click", dictCloseAddFieldModal);
+  document
+    .getElementById("dict-modal-save")
+    .addEventListener("click", dictSaveField);
+
+  // Auto-sync domain dropdown with field ID prefix
+  var domainSelect = document.getElementById("dict-field-domain");
+  var fieldIdInput = document.getElementById("dict-field-id");
+  if (domainSelect && fieldIdInput) {
+    domainSelect.addEventListener("change", function () {
+      var current = fieldIdInput.value;
+      var parts = current.split(".");
+      if (parts.length >= 2) {
+        fieldIdInput.value =
+          domainSelect.value + "." + parts.slice(1).join(".");
+      } else if (current === "") {
+        fieldIdInput.value = domainSelect.value + ".";
+      }
+    });
+  }
+}
+
+function dictCloseAddFieldModal() {
+  var modal = document.getElementById("dict-add-modal");
+  if (modal) {
+    modal.classList.add("cp-modal-closing");
+    setTimeout(function () {
+      if (modal.parentNode) modal.parentNode.removeChild(modal);
+    }, 200);
+  }
+}
+
+function dictSaveField() {
+  var domain = document.getElementById("dict-field-domain").value;
+  var fieldId = document.getElementById("dict-field-id").value.trim();
+  var displayName = document.getElementById("dict-field-display").value.trim();
+  var valueType = document.getElementById("dict-field-type").value;
+  var idError = document.getElementById("dict-field-id-error");
+  var apiError = document.getElementById("dict-api-error");
+
+  // Clear previous errors
+  if (idError) {
+    idError.textContent = "";
+    idError.style.display = "none";
+  }
+  if (apiError) {
+    apiError.textContent = "";
+    apiError.style.display = "none";
+  }
+
+  // Validation: all fields required
+  if (!domain || !fieldId || !displayName || !valueType) {
+    if (apiError) {
+      apiError.textContent = "All fields are required.";
+      apiError.style.display = "block";
+    }
+    return;
+  }
+
+  // Validation: field ID pattern
+  var fieldIdPattern = /^(metering|status|config)\.[a-z_]+$/;
+  if (!fieldIdPattern.test(fieldId)) {
+    if (idError) {
+      idError.textContent = "Must match: (metering|status|config).[a-z_]+";
+      idError.style.display = "block";
+    }
+    return;
+  }
+
+  // Disable save button during request
+  var saveBtn = document.getElementById("dict-modal-save");
+  if (saveBtn) saveBtn.disabled = true;
+
+  var formData = {
+    domain: domain,
+    fieldId: fieldId,
+    displayName: displayName,
+    valueType: valueType,
+  };
+
+  if (typeof SolfacilAPI === "undefined") {
+    if (apiError) {
+      apiError.textContent = "API unavailable";
+      apiError.style.display = "block";
+    }
+    if (saveBtn) saveBtn.disabled = false;
+    return;
+  }
+
+  SolfacilAPI.createDictionaryField(formData).then(function (result) {
+    if (result.ok) {
+      dictCloseAddFieldModal();
+      // Refresh dictionary panel
+      m1InitDictionary();
+      showToast("Field created: " + fieldId, "success", 3000);
+    } else {
+      if (apiError) {
+        apiError.textContent = result.error || "Failed to create field";
+        apiError.style.display = "block";
+      }
+      if (saveBtn) saveBtn.disabled = false;
+    }
+  });
 }
 
 /* ─── M1 确认弹窗 ───────────────────────────────────────────── */
@@ -878,7 +1227,12 @@ function renderModulePlaceholder(container, mod) {
 /* ─── M2 模拟数据 ────────────────────────────────────────────── */
 
 var M2_TENANTS = [
-  { id: "tenant-a", name: "Tenant A", region: "S\u00e3o Paulo Fleet", devices: 12 },
+  {
+    id: "tenant-a",
+    name: "Tenant A",
+    region: "S\u00e3o Paulo Fleet",
+    devices: 12,
+  },
   { id: "tenant-b", name: "Tenant B", region: "Rio de Janeiro", devices: 5 },
   { id: "fleet-c", name: "Fleet C", region: "Minas Gerais", devices: 8 },
   { id: "tenant-d", name: "Tenant D", region: "Bras\u00edlia", devices: 3 },
@@ -1324,7 +1678,12 @@ function m2UpdatePreviewContent() {
   for (var i = 0; i < M2_TENANTS.length; i++) {
     if (m2State.selectedTenants[M2_TENANTS[i].id]) {
       selectedNames.push(
-        M2_TENANTS[i].name + " (" + M2_TENANTS[i].devices + " " + t("devices") + ")",
+        M2_TENANTS[i].name +
+          " (" +
+          M2_TENANTS[i].devices +
+          " " +
+          t("devices") +
+          ")",
       );
     }
   }
@@ -1761,8 +2120,16 @@ function m4ShowConfirmModal() {
 var m5State = {
   flags: [
     { key: "show-roi-metrics", labelKey: "showROI", enabled: true },
-    { key: "enable-dr-notifications", labelKey: "drNotifications", enabled: true },
-    { key: "show-battery-forecast", labelKey: "batteryForecast", enabled: false },
+    {
+      key: "enable-dr-notifications",
+      labelKey: "drNotifications",
+      enabled: true,
+    },
+    {
+      key: "show-battery-forecast",
+      labelKey: "batteryForecast",
+      enabled: false,
+    },
     { key: "enable-export-csv", labelKey: "exportCsv", enabled: false },
   ],
   originalFlags: null,

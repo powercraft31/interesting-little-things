@@ -1992,3 +1992,220 @@ html, body {
   border-color: var(--accent-m6);
   box-shadow: 0 0 0 3px rgba(99, 102, 241, 0.2);
 }
+
+
+/* ═══════════════════════════════════════════════════════════════════
+   PHASE 6.3: M1 Two-Column Layout + Global Data Dictionary Panel
+   ═══════════════════════════════════════════════════════════════════ */
+
+/* ─── M1 Two-Column Layout ──────────────────────────────────────── */
+.m1-columns {
+  display: grid;
+  grid-template-columns: 1fr 380px;
+  gap: var(--space-6);
+  margin-top: var(--space-4);
+}
+@media (max-width: 1200px) {
+  .m1-columns {
+    grid-template-columns: 1fr;
+  }
+}
+.m1-col-left {
+  min-width: 0;
+}
+.m1-col-right {
+  min-width: 0;
+}
+
+/* ─── Dictionary Panel ──────────────────────────────────────────── */
+.dict-panel {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-subtle);
+  border-radius: var(--radius-lg);
+  overflow: hidden;
+}
+.dict-panel-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: var(--space-4) var(--space-4);
+  border-bottom: 1px solid var(--border-subtle);
+  background: var(--bg-elevated);
+}
+.dict-panel-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  font-size: var(--text-sm);
+  font-weight: 700;
+  color: var(--text-primary);
+}
+.dict-panel-title .material-icons {
+  font-size: 20px;
+}
+.dict-btn-add {
+  font-size: var(--text-xs) !important;
+  padding: var(--space-1) var(--space-3) !important;
+  white-space: nowrap;
+}
+.dict-btn-add .material-icons {
+  font-size: 14px !important;
+}
+.dict-panel-body {
+  padding: var(--space-3);
+  max-height: 520px;
+  overflow-y: auto;
+}
+
+/* ─── Dictionary Loading / Empty States ─────────────────────────── */
+.dict-loading,
+.dict-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-8) var(--space-4);
+  color: var(--text-muted);
+  font-size: var(--text-sm);
+  text-align: center;
+}
+.dict-spin {
+  animation: dict-spin-anim 1.2s linear infinite;
+  color: var(--accent-m1);
+  font-size: 28px;
+}
+@keyframes dict-spin-anim {
+  from { transform: rotate(0deg); }
+  to   { transform: rotate(360deg); }
+}
+.dict-empty-text {
+  font-size: var(--text-sm);
+  color: var(--text-muted);
+  line-height: 1.5;
+}
+
+/* ─── Dictionary Sections (Collapsible) ─────────────────────────── */
+.dict-section {
+  border-bottom: 1px solid var(--border-subtle);
+}
+.dict-section:last-child {
+  border-bottom: none;
+}
+.dict-section-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-3) var(--space-3);
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.15s ease;
+}
+.dict-section-header:hover {
+  background: var(--bg-hover);
+}
+.dict-section-icon {
+  font-size: 18px;
+  color: var(--accent-m1);
+}
+.dict-section-label {
+  font-size: var(--text-sm);
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+.dict-section-count {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  background: var(--bg-input);
+  padding: 1px 8px;
+  border-radius: 10px;
+}
+.dict-chevron {
+  font-size: 20px;
+  color: var(--text-muted);
+  transition: transform 0.2s ease;
+}
+.dict-section--collapsed .dict-chevron {
+  transform: rotate(-90deg);
+}
+.dict-section--collapsed .dict-section-body {
+  display: none;
+}
+.dict-section-body {
+  padding: 0 var(--space-3) var(--space-3);
+}
+
+/* ─── Dictionary Field Rows ─────────────────────────────────────── */
+.dict-field-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-2);
+  border-radius: var(--radius-sm);
+  transition: background 0.15s ease;
+}
+.dict-field-row:hover {
+  background: var(--bg-hover);
+}
+.dict-field-id {
+  font-family: var(--font-mono);
+  font-size: var(--text-xs);
+  color: var(--accent-m1);
+  min-width: 140px;
+  flex-shrink: 0;
+}
+.dict-field-name {
+  font-size: var(--text-xs);
+  color: var(--text-secondary);
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.dict-field-type {
+  font-size: 10px;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  flex-shrink: 0;
+}
+.dict-field-empty {
+  font-size: var(--text-xs);
+  color: var(--text-muted);
+  padding: var(--space-2) var(--space-2);
+  font-style: italic;
+}
+
+/* ─── Add Field Modal Form ──────────────────────────────────────── */
+.dict-modal {
+  width: 480px;
+}
+.dict-form {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+.dict-form-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-1);
+}
+.dict-form-error {
+  font-size: var(--text-xs);
+  color: var(--status-error);
+  display: none;
+  margin-top: 2px;
+}
+.dict-form-api-error {
+  font-size: var(--text-xs);
+  color: var(--status-error);
+  display: none;
+  padding: var(--space-2) var(--space-3);
+  background: rgba(239, 68, 68, 0.1);
+  border-radius: var(--radius-sm);
+  margin-top: var(--space-2);
+}
