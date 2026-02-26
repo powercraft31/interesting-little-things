@@ -12,20 +12,32 @@
 // castValue — 安全类型转换，杜绝盲目 `as` 强制转换
 // ---------------------------------------------------------------------------
 
-export function castValue(raw: unknown, type: 'number'): number;
-export function castValue(raw: unknown, type: 'string'): string;
-export function castValue(raw: unknown, type: 'boolean'): boolean;
-export function castValue(raw: unknown, type: 'number' | 'string' | 'boolean'): number | string | boolean;
-export function castValue(raw: unknown, type: 'number' | 'string' | 'boolean'): number | string | boolean {
+export function castValue(raw: unknown, type: "number"): number;
+export function castValue(raw: unknown, type: "string"): string;
+export function castValue(raw: unknown, type: "boolean"): boolean;
+export function castValue(
+  raw: unknown,
+  type: "number" | "string" | "boolean",
+): number | string | boolean;
+export function castValue(
+  raw: unknown,
+  type: "number" | "string" | "boolean",
+): number | string | boolean {
   switch (type) {
-    case 'number': {
+    case "number": {
+      if (raw === null || raw === undefined || raw === "") {
+        throw new TypeError(
+          `castValue: received null/undefined/empty string for number field`,
+        );
+      }
       const n = Number(raw);
-      if (Number.isNaN(n)) throw new TypeError(`Cannot cast ${JSON.stringify(raw)} to number`);
+      if (Number.isNaN(n))
+        throw new TypeError(`Cannot cast ${JSON.stringify(raw)} to number`);
       return n;
     }
-    case 'string':
+    case "string":
       return String(raw);
-    case 'boolean':
+    case "boolean":
       return Boolean(raw);
   }
 }
@@ -38,8 +50,8 @@ export interface StandardTelemetry {
   // ── 身份字段（不可变）──────────────────────────────────────────
   readonly orgId: string;
   readonly deviceId: string;
-  readonly timestamp: string;           // ISO 8601 UTC
-  readonly source: 'mqtt' | 'huawei' | 'sungrow' | 'generic-rest';
+  readonly timestamp: string; // ISO 8601 UTC
+  readonly source: "mqtt" | "huawei" | "sungrow" | "generic-rest";
   readonly isOnline?: boolean;
   readonly errorCode?: string;
 

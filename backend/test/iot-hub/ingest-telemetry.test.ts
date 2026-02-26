@@ -16,29 +16,24 @@ import {
   EventBridgeClient,
   PutEventsCommand,
 } from "@aws-sdk/client-eventbridge";
-import {
-  handler,
-  type TelemetryEvent,
-} from "../../src/iot-hub/handlers/ingest-telemetry";
+import { handler } from "../../src/iot-hub/handlers/ingest-telemetry";
 import { resolveAdapter } from "../../src/iot-hub/parsers/AdapterRegistry";
 
 // ---------------------------------------------------------------------------
-// Shared fixtures
+// Shared fixtures — v5.2 flat fields (NativeAdapter expects root-level power)
 // ---------------------------------------------------------------------------
-const VALID_EVENT: TelemetryEvent = {
+const VALID_EVENT = {
   orgId: "ORG_ENERGIA_001",
   deviceId: "ASSET_SP_001",
   timestamp: "2026-02-20T14:30:00.000Z",
-  metrics: {
-    power: 4.8,
-    voltage: 220.5,
-    current: 21.8,
-  },
+  power: 4.8,
+  voltage: 220.5,
+  current: 21.8,
 };
 
-const VALID_EVENT_WITH_SOC: TelemetryEvent = {
+const VALID_EVENT_WITH_SOC = {
   ...VALID_EVENT,
-  metrics: { ...VALID_EVENT.metrics, soc: 72.5 },
+  soc: 72.5,
 };
 
 // ---------------------------------------------------------------------------
@@ -96,9 +91,9 @@ describe("ingest-telemetry handler", () => {
 
       expect(measureValues).toEqual(
         expect.arrayContaining([
-          { Name: "power", Value: "4.8", Type: "DOUBLE" },
-          { Name: "voltage", Value: "220.5", Type: "DOUBLE" },
-          { Name: "current", Value: "21.8", Type: "DOUBLE" },
+          { Name: "metering.grid_power_kw", Value: "4.8", Type: "DOUBLE" },
+          { Name: "metering.grid_voltage_v", Value: "220.5", Type: "DOUBLE" },
+          { Name: "metering.grid_current_a", Value: "21.8", Type: "DOUBLE" },
         ]),
       );
     });
@@ -111,7 +106,7 @@ describe("ingest-telemetry handler", () => {
 
       expect(measureValues).toEqual(
         expect.arrayContaining([
-          { Name: "soc", Value: "72.5", Type: "DOUBLE" },
+          { Name: "status.battery_soc", Value: "72.5", Type: "DOUBLE" },
         ]),
       );
       expect(measureValues).toHaveLength(4);
@@ -124,7 +119,7 @@ describe("ingest-telemetry handler", () => {
       const measureValues = calls[0].args[0].input.Records![0].MeasureValues;
 
       expect(measureValues).toHaveLength(3);
-      expect(measureValues!.map((m) => m.Name)).not.toContain("soc");
+      expect(measureValues!.map((m) => m.Name)).not.toContain("status.battery_soc");
     });
 
     it("converts timestamp to milliseconds string", async () => {
@@ -170,7 +165,7 @@ describe("ingest-telemetry handler", () => {
   // ---- Validation ---------------------------------------------------------
   describe("validation", () => {
     it("throws when orgId is missing", async () => {
-      const badEvent = { ...VALID_EVENT, orgId: "" } as TelemetryEvent;
+      const badEvent = { ...VALID_EVENT, orgId: "" };
 
       await expect(handler(badEvent)).rejects.toThrow(
         "Missing required field: orgId",
@@ -180,7 +175,7 @@ describe("ingest-telemetry handler", () => {
     });
 
     it("throws when deviceId is missing", async () => {
-      const badEvent = { ...VALID_EVENT, deviceId: "" } as TelemetryEvent;
+      const badEvent = { ...VALID_EVENT, deviceId: "" };
 
       await expect(handler(badEvent)).rejects.toThrow(
         "Missing required field: deviceId",
@@ -227,11 +222,11 @@ describe("ingest-telemetry handler", () => {
         ]),
       );
 
-      // power: 100000 W → 100 kW
+      // power: 100000 W → 100 kW (metering.grid_power_kw)
       expect(record.MeasureValues).toEqual(
         expect.arrayContaining([
-          { Name: "power", Value: "100", Type: "DOUBLE" },
-          { Name: "soc", Value: "85", Type: "DOUBLE" },
+          { Name: "metering.grid_power_kw", Value: "100", Type: "DOUBLE" },
+          { Name: "status.battery_soc", Value: "85", Type: "DOUBLE" },
         ]),
       );
 
@@ -256,8 +251,8 @@ describe("ingest-telemetry handler", () => {
       const measureValues = calls[0].args[0].input.Records![0].MeasureValues;
       expect(measureValues).toEqual(
         expect.arrayContaining([
-          { Name: "power", Value: "5", Type: "DOUBLE" },
-          { Name: "voltage", Value: "220", Type: "DOUBLE" },
+          { Name: "metering.grid_power_kw", Value: "5", Type: "DOUBLE" },
+          { Name: "metering.grid_voltage_v", Value: "220", Type: "DOUBLE" },
         ]),
       );
     });
@@ -275,7 +270,7 @@ describe("ingest-telemetry handler", () => {
       // Simulate Lambda Extension Sidecar unreachable (e.g. cold-start race)
       mockFetch.mockRejectedValueOnce(new Error("fetch failed: Connection refused"));
 
-      // System must NOT crash — VALID_EVENT is handled by Legacy fallback
+      // System must NOT crash — VALID_EVENT is handled by NativeAdapter fallback
       const result = await handler(VALID_EVENT);
       expect(result.success).toBe(true);
       expect(result.recordsWritten).toBe(1);
@@ -301,10 +296,10 @@ describe("ingest-telemetry handler", () => {
       expect(result.success).toBe(true);
       expect(result.recordsWritten).toBe(1);
 
-      // Power value still correctly written
+      // Power value still correctly written via NativeAdapter
       const calls = tsMock.commandCalls(WriteRecordsCommand);
       const mvs = calls[0].args[0].input.Records![0].MeasureValues;
-      const power = mvs?.find((mv) => mv.Name === "power");
+      const power = mvs?.find((mv) => mv.Name === "metering.grid_power_kw");
       expect(power?.Value).toBe("4.8");
     });
 
@@ -334,19 +329,30 @@ describe("ingest-telemetry handler", () => {
       expect(result.recordsWritten).toBe(1);
     });
 
-    it("falls back to Legacy TelemetryEvent when AppConfig unavailable AND ACL adapter not found", async () => {
-      // AppConfig down + event has no recognized vendor signature → Legacy fallback
+    it("falls back to generic-rest telemetry when AppConfig unavailable AND ACL adapter not found", async () => {
+      // AppConfig down + event has no recognized vendor signature → ultimate fallback
       mockFetch.mockRejectedValueOnce(new Error("timeout"));
 
-      // VALID_EVENT_WITH_SOC uses the legacy metrics.* shape
-      const result = await handler(VALID_EVENT_WITH_SOC);
+      // Event with no top-level 'power' number or 'devSn' → no adapter matches
+      const unrecognizedEvent = {
+        orgId: "ORG_ENERGIA_001",
+        deviceId: "ASSET_SP_001",
+        timestamp: "2026-02-20T14:30:00.000Z",
+        customField: "some_value",
+      };
+
+      const result = await handler(unrecognizedEvent);
       expect(result.success).toBe(true);
       expect(result.recordsWritten).toBe(1);
 
+      // No metering/status → heartbeat added
       const calls = tsMock.commandCalls(WriteRecordsCommand);
       const mvs = calls[0].args[0].input.Records![0].MeasureValues;
-      const soc = mvs?.find((mv) => mv.Name === "soc");
-      expect(soc?.Value).toBe("72.5");
+      expect(mvs).toEqual(
+        expect.arrayContaining([
+          { Name: "metering.heartbeat", Value: "1", Type: "DOUBLE" },
+        ]),
+      );
     });
   });
 
@@ -392,10 +398,10 @@ describe("ingest-telemetry handler", () => {
       expect(result.success).toBe(true);
       expect(result.recordsWritten).toBe(1);
 
-      // Verify dynamic mapping was applied: power should be 5000 * 0.001 = 5 kW
+      // Verify dynamic mapping: power → status.power (all dynamic values go to status)
       const calls = tsMock.commandCalls(WriteRecordsCommand);
       const measureValues = calls[0].args[0].input.Records![0].MeasureValues;
-      const powerValue = measureValues?.find((mv) => mv.Name === "power");
+      const powerValue = measureValues?.find((mv) => mv.Name === "status.power");
       expect(Number(powerValue?.Value)).toBeCloseTo(5, 1);
     });
   });

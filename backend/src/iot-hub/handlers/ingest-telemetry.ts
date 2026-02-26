@@ -15,13 +15,13 @@ import {
   WriteRecordsCommand,
   type _Record,
   type MeasureValue,
-} from '@aws-sdk/client-timestream-write';
+} from "@aws-sdk/client-timestream-write";
 import {
   EventBridgeClient,
   PutEventsCommand,
-} from '@aws-sdk/client-eventbridge';
-import { resolveAdapter } from '../parsers/AdapterRegistry';
-import { type StandardTelemetry } from '../parsers/StandardTelemetry';
+} from "@aws-sdk/client-eventbridge";
+import { resolveAdapter } from "../parsers/AdapterRegistry";
+import { type StandardTelemetry } from "../parsers/StandardTelemetry";
 
 interface IngestResult {
   success: true;
@@ -35,7 +35,10 @@ interface IngestResult {
 
 interface ParserRule {
   readonly mappingRule: Record<string, string>;
-  readonly unitConversions?: Record<string, { factor: number; offset?: number }>;
+  readonly unitConversions?: Record<
+    string,
+    { factor: number; offset?: number }
+  >;
 }
 
 interface ParserRulesConfig {
@@ -49,16 +52,19 @@ interface ParserRulesConfig {
 const tsClient = new TimestreamWriteClient({});
 const ebClient = new EventBridgeClient({});
 
-const APPCONFIG_BASE = process.env.APPCONFIG_BASE_URL ?? 'http://localhost:2772';
-const APPCONFIG_APP  = process.env.APPCONFIG_APP      ?? 'solfacil-vpp-dev';
-const APPCONFIG_ENV  = process.env.APPCONFIG_ENV      ?? 'dev';
-const EVENT_BUS_NAME = process.env.EVENT_BUS_NAME     ?? '';
+const APPCONFIG_BASE =
+  process.env.APPCONFIG_BASE_URL ?? "http://localhost:2772";
+const APPCONFIG_APP = process.env.APPCONFIG_APP ?? "solfacil-vpp-dev";
+const APPCONFIG_ENV = process.env.APPCONFIG_ENV ?? "dev";
+const EVENT_BUS_NAME = process.env.EVENT_BUS_NAME ?? "";
 
 // ---------------------------------------------------------------------------
 // AppConfig 获取器
 // ---------------------------------------------------------------------------
 
-async function fetchParserRules(orgId: string): Promise<Record<string, ParserRule>> {
+async function fetchParserRules(
+  orgId: string,
+): Promise<Record<string, ParserRule>> {
   try {
     const url = `${APPCONFIG_BASE}/applications/${APPCONFIG_APP}/environments/${APPCONFIG_ENV}/configurations/parser-rules`;
     const res = await fetch(url, { signal: AbortSignal.timeout(500) });
@@ -89,8 +95,9 @@ function applyDynamicMapping(
   // 应用单位转换（例如 W → kW：factor = 0.001）
   if (rule.unitConversions) {
     for (const [destField, conv] of Object.entries(rule.unitConversions)) {
-      if (typeof mapped[destField] === 'number') {
-        mapped[destField] = (mapped[destField] as number) * conv.factor + (conv.offset ?? 0);
+      if (typeof mapped[destField] === "number") {
+        mapped[destField] =
+          (mapped[destField] as number) * conv.factor + (conv.offset ?? 0);
       }
     }
   }
@@ -108,19 +115,19 @@ function buildMeasureValues(telemetry: StandardTelemetry): MeasureValue[] {
   // metering — 全部为 DOUBLE 类型
   if (telemetry.metering) {
     for (const [key, val] of Object.entries(telemetry.metering)) {
-      values.push({ Name: key, Value: String(val), Type: 'DOUBLE' });
+      values.push({ Name: key, Value: String(val), Type: "DOUBLE" });
     }
   }
 
   // status — 根据值类型选择 Timestream 类型
   if (telemetry.status) {
     for (const [key, val] of Object.entries(telemetry.status)) {
-      if (typeof val === 'number') {
-        values.push({ Name: key, Value: String(val), Type: 'DOUBLE' });
-      } else if (typeof val === 'boolean') {
-        values.push({ Name: key, Value: String(val), Type: 'BOOLEAN' });
+      if (typeof val === "number") {
+        values.push({ Name: key, Value: String(val), Type: "DOUBLE" });
+      } else if (typeof val === "boolean") {
+        values.push({ Name: key, Value: String(val), Type: "BOOLEAN" });
       } else {
-        values.push({ Name: key, Value: String(val), Type: 'VARCHAR' });
+        values.push({ Name: key, Value: String(val), Type: "VARCHAR" });
       }
     }
   }
@@ -128,10 +135,10 @@ function buildMeasureValues(telemetry: StandardTelemetry): MeasureValue[] {
   // config — 数值为 DOUBLE，字符串为 VARCHAR
   if (telemetry.config) {
     for (const [key, val] of Object.entries(telemetry.config)) {
-      if (typeof val === 'number') {
-        values.push({ Name: key, Value: String(val), Type: 'DOUBLE' });
+      if (typeof val === "number") {
+        values.push({ Name: key, Value: String(val), Type: "DOUBLE" });
       } else {
-        values.push({ Name: key, Value: String(val), Type: 'VARCHAR' });
+        values.push({ Name: key, Value: String(val), Type: "VARCHAR" });
       }
     }
   }
@@ -147,27 +154,25 @@ function dynamicMappedToTelemetry(
   mapped: Record<string, unknown>,
   orgId: string,
 ): StandardTelemetry {
-  const metering: Record<string, number> = {};
+  // TODO: 依赖 M8 Phase 6.2 的 structured parser rule 来决定归属，暂时全放入 status
   const status: Record<string, number | string | boolean> = {};
 
-  // 将动态映射的字段归类到对应容器
   for (const [key, val] of Object.entries(mapped)) {
-    if (key === 'deviceId' || key === 'timestamp') continue;
-    if (typeof val === 'number') {
-      metering[`metering.${key}`] = val;
-    } else if (typeof val === 'boolean') {
-      status[`status.${key}`] = val;
-    } else if (typeof val === 'string') {
+    if (key === "deviceId" || key === "timestamp") continue;
+    if (
+      typeof val === "number" ||
+      typeof val === "string" ||
+      typeof val === "boolean"
+    ) {
       status[`status.${key}`] = val;
     }
   }
 
   return {
     orgId,
-    deviceId: (mapped.deviceId as string) ?? '',
+    deviceId: (mapped.deviceId as string) ?? "",
     timestamp: (mapped.timestamp as string) ?? new Date().toISOString(),
-    source: 'generic-rest',
-    metering: Object.keys(metering).length > 0 ? metering : undefined,
+    source: "generic-rest",
     status: Object.keys(status).length > 0 ? status : undefined,
   };
 }
@@ -183,7 +188,7 @@ export async function handler(event: unknown): Promise<IngestResult> {
 
   // --- 验证（orgId 始终在顶层，由 IoT Rule 注入）----------------------------
   if (!orgId) {
-    throw new Error('Missing required field: orgId');
+    throw new Error("Missing required field: orgId");
   }
 
   // --- ACL：规范化厂商专属负载 -----------------------------------------------
@@ -191,7 +196,7 @@ export async function handler(event: unknown): Promise<IngestResult> {
 
   // 优先尝试 AppConfig 动态解析规则
   const parserRules = await fetchParserRules(orgId);
-  const manufacturer = (raw.manufacturer as string | undefined) ?? 'native';
+  const manufacturer = (raw.manufacturer as string | undefined) ?? "native";
   const rule = parserRules[manufacturer];
 
   if (rule && Object.keys(rule.mappingRule).length > 0) {
@@ -206,18 +211,19 @@ export async function handler(event: unknown): Promise<IngestResult> {
       // 最终降级：从 raw 构造最小 StandardTelemetry
       telemetry = {
         orgId,
-        deviceId: (raw.deviceId as string) ?? '',
+        deviceId: (raw.deviceId as string) ?? "",
         timestamp: (raw.timestamp as string) ?? new Date().toISOString(),
-        source: 'generic-rest',
-        metering: typeof raw.power === 'number'
-          ? { 'metering.grid_power_kw': raw.power as number }
-          : undefined,
+        source: "generic-rest",
+        metering:
+          typeof raw.power === "number"
+            ? { "metering.grid_power_kw": raw.power as number }
+            : undefined,
       };
     }
   }
 
   if (!telemetry.deviceId) {
-    throw new Error('Missing required field: deviceId');
+    throw new Error("Missing required field: deviceId");
   }
 
   // --- 构建 MeasureValues（从 Business Trinity 容器迭代）---------------------
@@ -225,21 +231,25 @@ export async function handler(event: unknown): Promise<IngestResult> {
 
   // 至少需要一个 measure 值
   if (measureValues.length === 0) {
-    measureValues.push({ Name: 'metering.heartbeat', Value: '1', Type: 'DOUBLE' });
+    measureValues.push({
+      Name: "metering.heartbeat",
+      Value: "1",
+      Type: "DOUBLE",
+    });
   }
 
   // --- 构建 Timestream 记录 -------------------------------------------------
   const records: _Record[] = [
     {
       Dimensions: [
-        { Name: 'orgId', Value: orgId },
-        { Name: 'deviceId', Value: telemetry.deviceId },
+        { Name: "orgId", Value: orgId },
+        { Name: "deviceId", Value: telemetry.deviceId },
       ],
-      MeasureName: 'telemetry',
-      MeasureValueType: 'MULTI',
+      MeasureName: "telemetry",
+      MeasureValueType: "MULTI",
       MeasureValues: measureValues,
       Time: String(new Date(telemetry.timestamp).getTime()),
-      TimeUnit: 'MILLISECONDS',
+      TimeUnit: "MILLISECONDS",
     },
   ];
 
@@ -254,33 +264,39 @@ export async function handler(event: unknown): Promise<IngestResult> {
 
   // --- 发布包含 traceId 的 TelemetryIngested 事件 ---------------------------
   if (EVENT_BUS_NAME) {
-    await ebClient.send(new PutEventsCommand({
-      Entries: [{
-        EventBusName: EVENT_BUS_NAME,
-        Source: 'solfacil.vpp.iot-hub',
-        DetailType: 'TelemetryIngested',
-        Detail: JSON.stringify({
-          orgId,
-          deviceId: telemetry.deviceId,
-          timestamp: telemetry.timestamp,
-          metering: telemetry.metering,
-          status: telemetry.status,
-          traceId,
-        }),
-      }],
-    }));
+    await ebClient.send(
+      new PutEventsCommand({
+        Entries: [
+          {
+            EventBusName: EVENT_BUS_NAME,
+            Source: "solfacil.vpp.iot-hub",
+            DetailType: "TelemetryIngested",
+            Detail: JSON.stringify({
+              orgId,
+              deviceId: telemetry.deviceId,
+              timestamp: telemetry.timestamp,
+              metering: telemetry.metering,
+              status: telemetry.status,
+              traceId,
+            }),
+          },
+        ],
+      }),
+    );
   }
 
-  console.info(JSON.stringify({
-    level: 'INFO',
-    traceId,
-    module: 'M1',
-    action: 'telemetry_ingested',
-    orgId,
-    deviceId: telemetry.deviceId,
-    metering: telemetry.metering,
-    status: telemetry.status,
-  }));
+  console.info(
+    JSON.stringify({
+      level: "INFO",
+      traceId,
+      module: "M1",
+      action: "telemetry_ingested",
+      orgId,
+      deviceId: telemetry.deviceId,
+      metering: telemetry.metering,
+      status: telemetry.status,
+    }),
+  );
 
   return { success: true, recordsWritten: records.length, traceId };
 }
