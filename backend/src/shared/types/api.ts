@@ -136,3 +136,22 @@ export interface AdminItemResponse<T> {
   readonly data: T;
   readonly orgId: string;
 }
+
+// ==========================================
+// M1 Dynamic Parser Engine 类型定义
+// ==========================================
+
+export interface ParserRuleMapping {
+  readonly domain: "metering" | "status" | "config";
+  readonly sourcePath: string; // e.g. "properties.bat_soc"
+  readonly valueType: "number" | "string" | "boolean";
+}
+
+export interface ParserRule {
+  readonly parserType: "dynamic";
+  readonly iterator?: string; // e.g. "data.batList" — split one message into N StandardTelemetry
+  readonly deviceIdPath?: string; // path inside each iterator item, e.g. "id"
+  readonly mappings: {
+    readonly [fieldId: string]: ParserRuleMapping;
+  };
+}

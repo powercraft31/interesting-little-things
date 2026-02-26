@@ -22,6 +22,8 @@ import {
 } from "@aws-sdk/client-eventbridge";
 import { resolveAdapter } from "../parsers/AdapterRegistry";
 import { type StandardTelemetry } from "../parsers/StandardTelemetry";
+import { DynamicAdapter } from "../parsers/DynamicAdapter";
+import { type ParserRule as DynamicParserRule } from "../../shared/types/api";
 
 interface IngestResult {
   success: true;
@@ -33,7 +35,7 @@ interface IngestResult {
 // AppConfig 类型定义
 // ---------------------------------------------------------------------------
 
-interface ParserRule {
+interface LegacyParserRule {
   readonly mappingRule: Record<string, string>;
   readonly unitConversions?: Record<
     string,
@@ -41,8 +43,10 @@ interface ParserRule {
   >;
 }
 
+type ConfigParserRule = LegacyParserRule | DynamicParserRule;
+
 interface ParserRulesConfig {
-  readonly [orgId: string]: Record<string, ParserRule>; // orgId → manufacturer → rule
+  readonly [orgId: string]: Record<string, ConfigParserRule>; // orgId → manufacturer → rule
 }
 
 // ---------------------------------------------------------------------------
@@ -64,7 +68,7 @@ const EVENT_BUS_NAME = process.env.EVENT_BUS_NAME ?? "";
 
 async function fetchParserRules(
   orgId: string,
-): Promise<Record<string, ParserRule>> {
+): Promise<Record<string, ConfigParserRule>> {
   try {
     const url = `${APPCONFIG_BASE}/applications/${APPCONFIG_APP}/environments/${APPCONFIG_ENV}/configurations/parser-rules`;
     const res = await fetch(url, { signal: AbortSignal.timeout(500) });
@@ -82,7 +86,7 @@ async function fetchParserRules(
 
 function applyDynamicMapping(
   raw: Record<string, unknown>,
-  rule: ParserRule,
+  rule: LegacyParserRule,
 ): Record<string, unknown> {
   const mapped: Record<string, unknown> = {};
 
@@ -178,6 +182,70 @@ function dynamicMappedToTelemetry(
 }
 
 // ---------------------------------------------------------------------------
+// Dynamic Parser 辅助函数 — Timestream / EventBridge 写入
+// ---------------------------------------------------------------------------
+
+async function writeTelemetryToTimestream(
+  telemetry: StandardTelemetry,
+): Promise<number> {
+  const measureValues = buildMeasureValues(telemetry);
+  if (measureValues.length === 0) {
+    measureValues.push({
+      Name: "metering.heartbeat",
+      Value: "1",
+      Type: "DOUBLE",
+    });
+  }
+  const records: _Record[] = [
+    {
+      Dimensions: [
+        { Name: "orgId", Value: telemetry.orgId },
+        { Name: "deviceId", Value: telemetry.deviceId },
+      ],
+      MeasureName: "telemetry",
+      MeasureValueType: "MULTI",
+      MeasureValues: measureValues,
+      Time: String(new Date(telemetry.timestamp).getTime()),
+      TimeUnit: "MILLISECONDS",
+    },
+  ];
+  await tsClient.send(
+    new WriteRecordsCommand({
+      DatabaseName: process.env.TS_DATABASE_NAME,
+      TableName: process.env.TS_TABLE_NAME,
+      Records: records,
+    }),
+  );
+  return records.length;
+}
+
+async function sendTelemetryToEventBridge(
+  telemetry: StandardTelemetry,
+  traceId: string,
+): Promise<void> {
+  if (!EVENT_BUS_NAME) return;
+  await ebClient.send(
+    new PutEventsCommand({
+      Entries: [
+        {
+          EventBusName: EVENT_BUS_NAME,
+          Source: "solfacil.vpp.iot-hub",
+          DetailType: "TelemetryIngested",
+          Detail: JSON.stringify({
+            orgId: telemetry.orgId,
+            deviceId: telemetry.deviceId,
+            timestamp: telemetry.timestamp,
+            metering: telemetry.metering,
+            status: telemetry.status,
+            traceId,
+          }),
+        },
+      ],
+    }),
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Handler
 // ---------------------------------------------------------------------------
 
@@ -199,7 +267,45 @@ export async function handler(event: unknown): Promise<IngestResult> {
   const manufacturer = (raw.manufacturer as string | undefined) ?? "native";
   const rule = parserRules[manufacturer];
 
-  if (rule && Object.keys(rule.mappingRule).length > 0) {
+  // ── 新：Dynamic Parser Engine（Phase 6.4）────────────────────────────────
+  if (rule && "parserType" in rule && rule.parserType === "dynamic") {
+    const adapter = new DynamicAdapter();
+    const telemetryList = adapter.parse(raw, rule, orgId);
+
+    const recordCounts = await Promise.all(
+      telemetryList.map(async (t) => {
+        const [count] = await Promise.all([
+          writeTelemetryToTimestream(t),
+          sendTelemetryToEventBridge(t, traceId),
+        ]);
+        return count;
+      }),
+    );
+
+    console.info(
+      JSON.stringify({
+        level: "INFO",
+        traceId,
+        module: "M1",
+        action: "dynamic_telemetry_ingested",
+        orgId,
+        deviceCount: telemetryList.length,
+      }),
+    );
+
+    return {
+      success: true,
+      recordsWritten: recordCounts.reduce((a, b) => a + b, 0),
+      traceId,
+    };
+  }
+
+  // ── Legacy：AppConfig 旧式映射规则 ──────────────────────────────────────
+  if (
+    rule &&
+    "mappingRule" in rule &&
+    Object.keys(rule.mappingRule).length > 0
+  ) {
     const mapped = applyDynamicMapping(raw, rule);
     telemetry = dynamicMappedToTelemetry(mapped, orgId);
   } else {
