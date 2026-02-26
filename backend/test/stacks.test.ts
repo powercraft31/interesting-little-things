@@ -175,22 +175,22 @@ describe("AdminControlPlaneStack — IaC compliance", () => {
     template.resourceCountIs("AWS::AppConfig::ConfigurationProfile", 7);
   });
 
-  test("creates 4 Lambda Functions (CRUD handlers)", () => {
-    template.resourceCountIs("AWS::Lambda::Function", 4);
+  test("creates 7 Lambda Functions (4 CRUD + 3 dictionary handlers)", () => {
+    template.resourceCountIs("AWS::Lambda::Function", 7);
   });
 
   test("creates HTTP API Gateway (count = 1)", () => {
     template.resourceCountIs("AWS::ApiGatewayV2::Api", 1);
   });
 
-  test("all 4 Lambdas have X-Ray tracing Active", () => {
+  test("all 7 Lambdas have X-Ray tracing Active", () => {
     const templateJson = template.toJSON();
     const resources = templateJson.Resources as Record<string, any>;
     const lambdas = Object.values(resources).filter(
       (r: any) => r.Type === "AWS::Lambda::Function",
     );
 
-    expect(lambdas).toHaveLength(4);
+    expect(lambdas).toHaveLength(7);
     for (const fn of lambdas) {
       expect((fn as any).Properties.TracingConfig).toEqual({
         Mode: "Active",
