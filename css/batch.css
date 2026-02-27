@@ -667,7 +667,7 @@
    Collapsible Financial Section
    ============================================ */
 .financial-collapsible {
-    border-top: 1px solid rgba(255, 255, 255, 0.08);
+    border-top: 1px solid var(--color-border, #e2e8f0);
     margin-top: 0.5rem;
 }
 
@@ -675,16 +675,19 @@
     display: flex;
     align-items: center;
     justify-content: space-between;
+    width: 100%;
     padding: 0.4rem 0.75rem;
+    background: transparent;
+    border: none;
     cursor: pointer;
     font-size: 0.75rem;
-    color: var(--text-muted, #9ca3af);
+    color: var(--color-text-muted, #64748b);
     user-select: none;
     transition: color 0.2s;
 }
 
 .financial-toggle:hover {
-    color: var(--text-primary, #f1f5f9);
+    color: var(--color-text-primary, #1e293b);
 }
 
 .financial-toggle-icon {
