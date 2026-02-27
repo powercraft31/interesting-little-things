@@ -11,10 +11,10 @@
 | # | 文件名 | 路徑 | 說明 |
 |---|--------|------|------|
 | 00 | **MASTER_ARCHITECTURE** | `00_MASTER_ARCHITECTURE_v5.2.md` | 系統總控藍圖（本文件） |
-| 01 | **SHARED_LAYER** | [01_SHARED_LAYER_v5.2.md](./01_SHARED_LAYER_v5.2.md) | 公共型別定義、API 契約、EventSchema、目錄結構 |
-| 02 | **BFF_MODULE (M5)** | [02_BFF_MODULE_v5.2.md](./02_BFF_MODULE_v5.2.md) | Frontend BFF — 聚合 API、Cognito 授權、中間件鏈 |
-| 03 | **IOT_HUB_MODULE (M1)** | [03_IOT_HUB_MODULE_v5.2.md](./03_IOT_HUB_MODULE_v5.2.md) | IoT Hub — MQTT 接入、動態解析器、Asset Shadow |
-| 04 | **ADMIN_CONTROL_MODULE (M8)** | [04_ADMIN_CONTROL_MODULE_v5.2.md](./04_ADMIN_CONTROL_MODULE_v5.2.md) | Admin Control Plane — 全局控制面、Data Dictionary、AppConfig |
+| 01 | **SHARED_LAYER** | [01_SHARED_LAYER_v5.3.md](./01_SHARED_LAYER_v5.3.md) | 公共型別定義、API 契約、EventSchema、目錄結構 |
+| 02 | **BFF_MODULE (M5)** | [02_BFF_MODULE_v5.3.md](./02_BFF_MODULE_v5.3.md) | Frontend BFF — 聚合 API、Cognito 授權、中間件鏈 |
+| 03 | **IOT_HUB_MODULE (M1)** | [03_IOT_HUB_MODULE_v5.3.md](./03_IOT_HUB_MODULE_v5.3.md) | IoT Hub — MQTT 接入、動態解析器、Asset Shadow |
+| 04 | **ADMIN_CONTROL_MODULE (M8)** | [04_ADMIN_CONTROL_MODULE_v5.3.md](./04_ADMIN_CONTROL_MODULE_v5.3.md) | Admin Control Plane — 全局控制面、Data Dictionary、AppConfig |
 | 05 | **DR_DISPATCHER_MODULE (M3)** | [05_DR_DISPATCHER_MODULE_v5.2.md](./05_DR_DISPATCHER_MODULE_v5.2.md) | DR Dispatcher — 調度指令、SQS 逾時、狀態追蹤 |
 | 06 | **OPTIMIZATION_ENGINE_MODULE (M2)** | [06_OPTIMIZATION_ENGINE_MODULE_v5.2.md](./06_OPTIMIZATION_ENGINE_MODULE_v5.2.md) | Optimization Engine — 4 種策略演算法、排程最佳化 |
 | 07 | **MARKET_BILLING_MODULE (M4)** | [07_MARKET_BILLING_MODULE_v5.2.md](./07_MARKET_BILLING_MODULE_v5.2.md) | Market & Billing — 電價計費、收益計算、PostgreSQL schema |
@@ -152,14 +152,19 @@ SOLFACIL is building a **B2B SaaS Virtual Power Plant (VPP)** platform that aggr
 
 | 模組 ID | 模組名稱 | 當前版本 | 文件 | 主要技術 |
 |---------|---------|---------|------|---------|
-| M1 | IoT Hub | v5.2 | [03_IOT_HUB](./03_IOT_HUB_MODULE_v5.2.md) | Lambda + IoT Core + DynamoDB |
+| M1 | IoT Hub | **v5.3** | [03_IOT_HUB](./03_IOT_HUB_MODULE_v5.3.md) | Lambda + IoT Core + DynamoDB |
 | M2 | Optimization Engine | v5.2 | [06_OPTIMIZATION_ENGINE](./06_OPTIMIZATION_ENGINE_MODULE_v5.2.md) | Lambda + AppConfig |
 | M3 | DR Dispatcher | v5.2 | [05_DR_DISPATCHER](./05_DR_DISPATCHER_MODULE_v5.2.md) | Lambda + EventBridge + MQTT |
 | M4 | Market & Billing | v5.2 | [07_MARKET_BILLING](./07_MARKET_BILLING_MODULE_v5.2.md) | Lambda + DynamoDB |
-| M5 | BFF | v5.2 | [02_BFF](./02_BFF_MODULE_v5.2.md) | Lambda + API Gateway |
+| M5 | BFF | **v5.3** | [02_BFF](./02_BFF_MODULE_v5.3.md) | Lambda + API Gateway |
 | M6 | Identity | v5.2 | [09_IDENTITY](./09_IDENTITY_MODULE_v5.2.md) | Lambda + Cognito |
 | M7 | Open API | v5.2 | [08_OPEN_API](./08_OPEN_API_MODULE_v5.2.md) | Lambda + API Gateway |
-| M8 | Admin Control | v5.2 | [04_ADMIN_CONTROL](./04_ADMIN_CONTROL_MODULE_v5.2.md) | Lambda + DynamoDB + AppConfig |
+| M8 | Admin Control | **v5.3** | [04_ADMIN_CONTROL](./04_ADMIN_CONTROL_MODULE_v5.3.md) | Lambda + DynamoDB + AppConfig |
+
+> **v5.2 → v5.3 連鎖升版說明（2026-02-27）**
+> 觸發原因：前端 v2.1 HEMS 單戶場景轉型，移除 `unidades`，引入 `capacity_kwh`。
+> 依據 §2「最高架構憲法：連鎖升級法」，所有依賴 AssetRecord 的模組同步升版。
+> M2/M3/M4/M6/M7 未直接依賴 capacity_kwh 欄位，版本維持 v5.2。
 
 ### Architecture Overview Diagram
 
@@ -604,6 +609,7 @@ export class SharedStack extends cdk.Stack {
 | v5.0 | 2026-02-21 | Grand Fusion: Control Plane vs Data Plane |
 | v5.1 | 2026-02-21 | Cloud-Native Upgrade: AppConfig + X-Ray |
 | v5.2 | 2026-02-25 | Runtime Schema Evolution & Global Data Dictionary |
+| v5.3 | 2026-02-27 | HEMS 單戶場景對齊：移除 unidades，新增 capacity_kwh，連鎖升版 Shared/M5/M1/M8 |
 
 ---
 
