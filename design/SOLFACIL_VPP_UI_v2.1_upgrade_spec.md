@@ -1,8 +1,9 @@
-# 《Solfacil Pilot: 邊緣遙測與 VPP 批量調度完整設計方案 (v2.0)》
+# 《Solfacil Pilot: 邊緣遙測與 VPP 批量調度完整設計方案 (v2.1)》
 
-> **版本**: v2.0（完整獨立版本，取代 v1.0）
+> **版本**: v2.1（UAT 驗收對齊版）
 > **日期**: 2026-02-27
-> **說明**: 本文件包含 v1.0 全部內容並整合四大升級決策，無需參照任何其他文件
+> **說明**: 本文件包含 v1.0 全部內容並整合四大升級決策，無需參照任何其他文件。
+> v2.1 為 UAT 驗收後的代碼對齊版本，4 個逆向同步點已回寫至本規格書。
 
 ---
 
@@ -12,6 +13,7 @@
 |------|------|------|---------|
 | v1.0 | 2026-02-15 | 架構團隊 | 初版：批量模式選擇與下發 UI/UX 設計，含 batchState 邏輯、三種運行模式、確認/進度/結果彈窗 |
 | v2.0 | 2026-02-27 | 架構委員會 | 完整升級版：整合四大決策 —— ①Dashboard 信任 KPI（VPP Dispatch Accuracy + DR Response Latency）；②System Health 區塊（Gateway Uptime / 72h Offline Test / 微動態 Dispatch Success Rate）；③資產卡片重構為菱形能量流圖（Diamond Energy Flow）+ 設備健康行 + 財務折疊區；④mockData 擴充 metering/status/config 三層結構，對齊巴西 HEMS 規模與能量守恆公式 |
+| v2.1 | 2026-02-27 | 架構委員會 | UAT 驗收對齊版（Code to Spec Alignment）—— 4 個逆向同步點：①移除 `unidades` 字段，補入 `capacity_kwh`（對齊 HEMS 單戶場景）；②Diamond Grid 結構升級為 5-column × 5-row，連線節點獨立定位（響應式不斷裂）；③心跳演算法引入錨點機制（`_baseMetering` 唯讀快照），消除 Random Walk 累積漂移；④System Health 明確標註「淺色系面板」設計原則，禁止暗色背景 |
 
 ---
 
@@ -43,7 +45,7 @@
 #### 1.1.3 現有資產數據結構
 
 ```javascript
-// app.js:628-693 - mockData.assets[] 中每個資產
+// app.js:628-693 - mockData.assets[] 中每個資產（v1.0 原始結構，供對比參考）
 {
     id: 'ASSET_SP_001',
     name: 'São Paulo - Casa Verde',
@@ -51,7 +53,9 @@
     status: 'operando',        // 'operando' | 'carregando'
     investimento: 4200000,
     capacidade: 5.2,           // MWh
-    unidades: 948,
+    // unidades: 948,          // ⚠️ [v2.1 已移除] 原聚合器字段（VPP 管理多戶時才有意義）
+                               //    Demo 重新定位為「單一家庭 HEMS」後，此字段與場景矛盾
+                               //    已由 capacity_kwh 取代（見 §3.3）
     socMedio: 65,              // %
     receitaHoje: 18650,
     receitaMes: 412300,
@@ -565,7 +569,11 @@ const batchState = {
     status: 'operando',
     investimento: 4200000,
     capacidade: 5.2,           // MWh
-    unidades: 948,
+    // unidades 已移除 — v2.1 對齊 HEMS 單戶場景（見下方 capacity_kwh）
+    capacity_kwh: 13.5,        // kWh — [v2.1 新增] 電池系統裝機容量
+                               //   對齊 HEMS 單戶場景：SP_001=13.5, RJ_002=10.0,
+                               //   MG_003=11.5, PR_004=14.0（典型家用 10-15 kWh 範圍）
+                               //   取代原 unidades（聚合器字段）以正確反映單一家庭定位
     socMedio: 65,              // %
     receitaHoje: 18650,
     receitaMes: 412300,
@@ -768,35 +776,85 @@ function renderEnergyFlow(asset) {
     // 線條粗細計算（2px-6px 根據功率）
     // CSS 變量: --pv-line-width, --bat-line-width, --grid-line-width
 
-    return `
-    <div class="energy-flow-panel"
-         style="--pv-line-w:${lineWidth(m.pv_power)}px;
-                --bat-line-w:${lineWidth(Math.abs(m.battery_power))}px;
-                --grid-line-w:${lineWidth(Math.abs(m.grid_power_kw))}px;">
-        <div class="ef-node ef-node-pv">
-            ☀️ <span class="ef-value">${m.pv_power.toFixed(1)} kW</span>
-        </div>
-        <div class="ef-line ef-line-pv"></div>
-        <div class="ef-node ef-node-bat">
-            🔋 ${s.battery_soc}% ${batIcon}
-            <span class="ef-value">${Math.abs(m.battery_power).toFixed(1)} kW</span>
-        </div>
-        <div class="ef-center"></div>
-        <div class="ef-node ef-node-load">
-            🏠 <span class="ef-value">${m.load_power.toFixed(1)} kW</span>
-        </div>
-        <div class="ef-line ef-line-bat ${s.bat_work_status}"></div>
-        <div class="ef-line ef-line-grid ${gridClass}"></div>
-        <div class="ef-node ef-node-grid ${gridClass}">
-            🔌 <span class="ef-value">${Math.abs(m.grid_power_kw).toFixed(1)} kW</span>
-            <span class="grid-direction-label">${gridLabel}</span>
-        </div>
-    </div>`;
-}
+    // ─────────────────────────────────────────────────────────────
+    // [v2.1 更新] Diamond Energy Flow Grid 結構設計說明
+    //
+    // 舊方案（v2.0）：3×3 grid，連線 div 與節點 div 混排，
+    //   在響應式收縮時連線元素尺寸計算失效，導致線段斷裂。
+    //
+    // 新方案（v2.1）：5-column × 5-row grid
+    //   grid-template-columns: 1fr 28px 1fr 28px 1fr
+    //   grid-template-rows:    auto 28px auto 28px auto
+    //
+    //   各節點定位（奇數欄/行）：
+    //     .ef-pv      → col 3, row 1（上方光伏）
+    //     .ef-battery → col 1, row 3（左側電池）
+    //     .ef-center  → col 3, row 3（中心匯聚點）
+    //     .ef-load    → col 5, row 3（右側負載）
+    //     .ef-grid    → col 3, row 5（下方電網）
+    //
+    //   連線元素（偶數欄/行，28px 固定寬/高）：
+    //     .ef-line-top    → col 3, row 2（PV ↔ Center 垂直線）
+    //     .ef-line-left   → col 2, row 3（Battery ↔ Center 水平線）
+    //     .ef-line-right  → col 4, row 3（Center ↔ Load 水平線）
+    //     .ef-line-bottom → col 3, row 4（Center ↔ Grid 垂直線）
+    //
+    //   優點：連線 div 的尺寸由固定 28px grid track 保證，
+    //   不受節點內容撐大影響，響應式下線段永不斷裂。
+    // ─────────────────────────────────────────────────────────────
 
-function lineWidth(powerKw) {
-    // 2px min, 6px max, 線性映射 0-10kW
-    return Math.max(2, Math.min(6, 2 + (powerKw / 10) * 4));
+    return `
+    <div class="energy-flow-panel">
+      <div class="energy-flow-diamond">
+
+        <!-- PV（上，col 3 row 1） -->
+        <div class="ef-node ef-pv">
+          <span class="ef-node-icon">☀️</span>
+          <span class="ef-node-label">${t("ef_pv")}</span>
+          <span class="ef-node-value">${pvPower.toFixed(1)} kW</span>
+          <span class="ef-node-sub">${t("daily_yield_label")} ${pvDaily.toFixed(1)} kWh</span>
+        </div>
+
+        <!-- 上方連線（col 3 row 2）→ 以 .ef-line-vertical 類做動畫 -->
+        <div class="ef-line-top ef-line ef-line-vertical"></div>
+
+        <!-- Battery（左，col 1 row 3） -->
+        <div class="ef-node ef-battery ${batClass}">
+          <span class="ef-node-icon">🔋</span>
+          <span class="ef-node-label">${t("ef_battery")}</span>
+          <span class="ef-node-value">${Math.abs(batPower).toFixed(1)} kW</span>
+          <span class="ef-node-sub">${batStatusLabel}</span>
+        </div>
+
+        <!-- 左側連線（col 2 row 3）→ 以 .ef-line 類做動畫 -->
+        <div class="ef-line-left ef-line"></div>
+
+        <!-- 中心匯聚點（col 3 row 3） -->
+        <div class="ef-center"><div class="ef-center-hub"></div></div>
+
+        <!-- 右側連線（col 4 row 3）→ 以 .ef-line 類做動畫 -->
+        <div class="ef-line-right ef-line"></div>
+
+        <!-- Load（右，col 5 row 3） -->
+        <div class="ef-node ef-load">
+          <span class="ef-node-icon">🏠</span>
+          <span class="ef-node-label">${t("ef_load")}</span>
+          <span class="ef-node-value">${loadPower.toFixed(1)} kW</span>
+        </div>
+
+        <!-- 下方連線（col 3 row 4）→ 以 .ef-line-vertical 類做動畫 -->
+        <div class="ef-line-bottom ef-line ef-line-vertical"></div>
+
+        <!-- Grid（下，col 3 row 5） -->
+        <div class="ef-node ef-grid ${gridClass}">
+          <span class="ef-node-icon">⚡</span>
+          <span class="ef-node-label">${t("ef_grid")}</span>
+          <span class="ef-node-value">${gridPower.toFixed(1)} kW</span>
+          <span class="ef-node-sub">${gridLabel}</span>
+        </div>
+
+      </div>
+    </div>`;
 }
 ```
 
@@ -1156,6 +1214,68 @@ function updateSystemHealth() {
 
 ### 3.9 實時更新擴充
 
+#### 3.9.1 錨點機制 (Anchor Mechanism) — [v2.1 新增，關鍵設計]
+
+> **問題根因**：v2.0 原始設計採用「隨機遊走 (Random Walk)」演算法——
+> 每個 tick 在當前值上疊加隨機 delta（`m.pv_power += random * 0.4`）。
+> 這會導致功率值隨時間單調漂移，數小時後出現物理上不合理的數值
+> （如 load_power 從 5.2 kW 漂移至 8.6 kW）。
+>
+> **v2.1 解法：錨點機制**
+> 初始化時，為每個 asset 的 metering 快照一份唯讀基準值 `_baseMetering`。
+> 每次 heartbeat tick 的波動，均基於此**固定錨點**加上隨機偏移量，
+> 而非疊加在「上一次的值」上。確保功率值永遠圍繞 mockData 設定的基準值振盪，
+> 徹底消除累積漂移現象。
+
+```javascript
+// ============================================================
+// _baseMetering：唯讀錨點 Map（asset.id → metering 快照）
+// 在 populateAssets() 完成後，呼叫 initLiveMetering() 初始化
+// ============================================================
+const _baseMetering = new Map();   // { assetId: { pv_power, load_power, ... } }
+const _liveMetering = new Map();   // { assetId: { pv_power, load_power, ... } } ← 可變
+
+function initLiveMetering(assets) {
+    assets.forEach(asset => {
+        const base = { ...asset.metering };   // 深拷貝初始值作為錨點
+        _baseMetering.set(asset.id, Object.freeze(base));  // 凍結，不可修改
+        _liveMetering.set(asset.id, { ...base });          // 可變副本供 tick 更新
+    });
+}
+
+function startHeartbeat() {
+    return setInterval(heartbeatTick, 4000);  // 4 秒間隔
+}
+
+function heartbeatTick() {
+    _liveMetering.forEach((live, assetId) => {
+        const base = _baseMetering.get(assetId);   // ← 每次都從錨點讀取
+        if (!base) return;
+
+        // [核心差異] 新值 = 錨點基準值 + 隨機偏移量（±0.2kW）
+        // 絕對不是：live.pv_power += random（Random Walk，會漂移）
+        live.pv_power   = Math.max(0, base.pv_power   + (Math.random() - 0.5) * 0.4);
+        live.load_power = Math.max(0, base.load_power + (Math.random() - 0.5) * 0.4);
+
+        // 維護能量守恆（grid 根據 pv/load 計算，battery 由 bat_work_status 決定方向）
+        live.grid_power_kw = live.load_power
+            + Math.max(live.battery_power ?? base.battery_power, 0)
+            - live.pv_power
+            - Math.max(-(live.battery_power ?? base.battery_power), 0);
+
+        // 四捨五入
+        live.pv_power      = Math.round(live.pv_power * 10) / 10;
+        live.load_power    = Math.round(live.load_power * 10) / 10;
+        live.grid_power_kw = Math.round(live.grid_power_kw * 10) / 10;
+    });
+
+    // 增量 DOM 更新（不重新渲染整個卡片，避免 checkbox 狀態丟失）
+    refreshEnergyFlowValues();
+}
+```
+
+#### 3.9.2 startRealTimeUpdates（原 Portfolio 更新保留）
+
 ```javascript
 function startRealTimeUpdates() {
     // 現有: 每 5 秒更新 Portfolio 數據
@@ -1163,40 +1283,12 @@ function startRealTimeUpdates() {
     setInterval(() => {
         // ... 現有 Portfolio 更新邏輯 ...
 
-        // v2.0 新增: 如果 Ativos section 可見, 更新 metering 數據
-        if (document.getElementById('ativos')?.classList.contains('active')) {
-            mockData.assets.forEach(asset => {
-                if (!asset.status.is_online) return;
-
-                const m = asset.metering;
-
-                // 隨機遊走 PV 功率 (±0.2kW)
-                m.pv_power = Math.max(0, m.pv_power + (Math.random() - 0.5) * 0.4);
-
-                // 隨機遊走 Battery 功率 (±0.2kW)
-                m.battery_power = m.battery_power + (Math.random() - 0.5) * 0.4;
-
-                // 維護能量守恆: 調整 grid_power_kw 以補償
-                // grid = load + max(bat_charging, 0) - pv - max(bat_discharging, 0)
-                m.grid_power_kw = m.load_power
-                    + Math.max(m.battery_power, 0)
-                    - m.pv_power
-                    - Math.max(-m.battery_power, 0);
-
-                // 四捨五入到 1 位小數
-                m.pv_power = Math.round(m.pv_power * 10) / 10;
-                m.battery_power = Math.round(m.battery_power * 10) / 10;
-                m.grid_power_kw = Math.round(m.grid_power_kw * 10) / 10;
-            });
-
-            // 增量刷新: 僅更新功率數值 (不做完整卡片重新渲染)
-            refreshEnergyFlowValues();
-        }
-
         // System Health: Gateway Uptime 和 72h Offline Test → STATIC (不動畫)
         // Dispatch Success Rate → 僅在 executeBatchDispatch 成功後更新
 
     }, 5000);
+    // 注意: Ativos 頁面的 metering 心跳已獨立為 startHeartbeat()（§3.9.1）
+    //       不再在此 interval 中處理，避免兩個 timer 疊加
 }
 
 function refreshEnergyFlowValues() {
@@ -1369,14 +1461,30 @@ function refreshEnergyFlowValues() {
 
 #### b. System Health Block
 
+> **[v2.1 設計原則] 淺色系面板 (Light-theme Panel)**
+> System Health 區塊必須使用**淺色系樣式**，與全局白底卡片主題保持一致。
+> 嚴禁使用深色背景（如 `#1e293b`、`rgba(0,0,0,0.15)` 等暗色主題殘留值），
+> 否則會在白色 Dashboard 上形成違和的深色島嶼。
+> 所有顏色值應優先使用 `css/variables.css` 中定義的 CSS 變量：
+> `--color-bg-card: #ffffff`、`--color-text-primary: #1e293b`、
+> `--color-border: #e2e8f0`、`--shadow-sm: 0 1px 3px rgba(0,0,0,0.08)`。
+
 ```css
+/* [v2.1] System Health Block — 淺色系面板，與白底卡片主題一致 */
 .system-health-block {
-    background: white;
+    background: var(--color-bg-card, #ffffff);   /* ← 必須白底，不可用暗色 */
     border-radius: 12px;
     padding: 1.25rem 1.5rem;
-    box-shadow: 0 1px 3px rgba(0, 0, 0, 0.08);
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.08));
     margin-bottom: 1.5rem;
-    border: 1px solid #e2e8f0;
+    border: 1px solid var(--color-border, #e2e8f0);
+}
+
+/* [v2.1] device-health-row — 移除原 rgba(0,0,0,0.1) 深色背景 */
+/* 改為極淡品牌色底，與整體卡片視覺融合 */
+.device-health-row {
+    background: rgba(55, 48, 163, 0.04);
+    border: 1px solid rgba(55, 48, 163, 0.12);
 }
 
 .sh-title {
