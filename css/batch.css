@@ -491,7 +491,7 @@
    ============================================ */
 .energy-flow-panel {
     padding: 0.75rem;
-    background: rgba(0, 0, 0, 0.15);
+    background: transparent;
     border-radius: 0.5rem;
     margin: 0.5rem 0;
 }
@@ -513,8 +513,8 @@
     gap: 0.1rem;
     padding: 0.4rem 0.6rem;
     border-radius: 0.5rem;
-    background: rgba(255, 255, 255, 0.06);
-    border: 1px solid rgba(255, 255, 255, 0.1);
+    background: rgba(55, 48, 163, 0.04);
+    border: 1px solid rgba(55, 48, 163, 0.15);
     min-width: 70px;
     text-align: center;
 }
@@ -553,15 +553,15 @@
     width: 10px;
     height: 10px;
     border-radius: 50%;
-    background: rgba(255, 255, 255, 0.3);
+    background: rgba(55, 48, 163, 0.3);
     position: relative;
 }
 
 .ef-line {
     background: repeating-linear-gradient(
         90deg,
-        rgba(255, 255, 255, 0.4) 0px,
-        rgba(255, 255, 255, 0.4) 6px,
+        rgba(55, 48, 163, 0.6) 0px,
+        rgba(55, 48, 163, 0.6) 6px,
         transparent 6px,
         transparent 12px
     );
@@ -572,8 +572,8 @@
 .ef-line-vertical {
     background: repeating-linear-gradient(
         180deg,
-        rgba(255, 255, 255, 0.4) 0px,
-        rgba(255, 255, 255, 0.4) 6px,
+        rgba(55, 48, 163, 0.6) 0px,
+        rgba(55, 48, 163, 0.6) 6px,
         transparent 6px,
         transparent 12px
     );
