@@ -9,12 +9,14 @@ import {
   requireRole,
   apiError,
 } from "../middleware/tenant-context";
+import { queryWithOrg } from "../../shared/db";
 
 /**
  * GET /dashboard
  * 返回 VPP 仪表盘的聚合 KPI：
- * - 算法 KPI（alpha、mape、selfConsumption）
- * - 收入分布（环形图数据）
+ * - 資產統計（totalAssets, onlineAssets, avgSoc, totalPowerKw, totalPvKw）
+ * - 算法 KPI（alpha、mape、selfConsumption）— Stage 5 優化引擎上線後補齊
+ * - 財務 KPI — Stage 4 接 revenue_daily 後補齊
  */
 export async function handler(
   event: APIGatewayProxyEventV2,
@@ -33,52 +35,52 @@ export async function handler(
     return apiError(e.statusCode ?? 500, e.message ?? "Error");
   }
 
-  const baseAlpha = 76.3;
-  const deltaAlpha = parseFloat(((Math.random() - 0.5) * 2).toFixed(1));
+  // ── 從 DB 聚合（assets JOIN device_state）──────────────────────
+  const isAdmin = ctx.role === Role.SOLFACIL_ADMIN;
+  const rlsOrgId = isAdmin ? null : ctx.orgId;
 
-  const baseMape = 18.5;
-  const deltaMape = parseFloat(((Math.random() - 0.5) * 1).toFixed(1));
+  const { rows } = await queryWithOrg(
+    `SELECT
+       COUNT(a.asset_id)::int                                      AS total_assets,
+       COUNT(d.is_online) FILTER (WHERE d.is_online = true)::int   AS online_assets,
+       COALESCE(AVG(d.battery_soc), 0)                             AS avg_soc,
+       COALESCE(SUM(d.load_power), 0)                              AS total_load_kw,
+       COALESCE(SUM(d.pv_power), 0)                                AS total_pv_kw
+     FROM assets a
+     LEFT JOIN device_state d ON d.asset_id = a.asset_id
+     WHERE a.is_active = true`,
+    [],
+    rlsOrgId,
+  );
 
-  const baseSelfCon = 98.2;
-  const deltaSelfCon = parseFloat(((Math.random() - 0.5) * 0.5).toFixed(1));
-
-  const dispatchBase = 156;
-  const dispatchTotal = 160;
-  const dispatchDelta = Math.floor((Math.random() - 0.5) * 4);
+  const agg = rows[0] as Record<string, unknown>;
 
   const body = ok({
-    // === 原有 KPI（保留）===
-    alpha: {
-      value: (baseAlpha + deltaAlpha).toFixed(1),
-      delta: deltaAlpha.toFixed(1),
-    },
-    mape: {
-      value: (baseMape + deltaMape).toFixed(1),
-      delta: (-deltaMape).toFixed(1),
-    },
-    selfConsumption: {
-      value: (baseSelfCon + deltaSelfCon).toFixed(1),
-      delta: deltaSelfCon.toFixed(1),
-    },
-    revenueBreakdown: {
-      values: [32450, 12385, 3400],
-      colors: ["#3730a3", "#059669", "#d97706"],
-    },
-    // === v5.3 新增 KPI（DashboardMetrics）===
-    totalAssets: 4,
-    onlineAssets: 3,
-    avgSoc: 57.3,
-    totalPowerKw: 18.4,
-    dailyRevenueReais: 52450,
-    monthlyRevenueReais: 1235000,
-    vppDispatchAccuracy: parseFloat(
-      (95.1 + (Math.random() - 0.5) * 1.5).toFixed(1),
-    ),
-    drResponseLatency: parseFloat(
-      (1.94 + (Math.random() - 0.5) * 0.3).toFixed(2),
-    ),
+    // === DB 真實聚合 ===
+    totalAssets: agg.total_assets as number,
+    onlineAssets: agg.online_assets as number,
+    avgSoc: Math.round(parseFloat(String(agg.avg_soc))),
+    totalPowerKw: parseFloat(String(agg.total_load_kw)).toFixed(1),
+    totalPvKw: parseFloat(String(agg.total_pv_kw)).toFixed(1),
+
+    // === 財務 KPI — Stage 4 接 revenue_daily 後補齊（暫時 0）===
+    dailyRevenueReais: 0,
+    monthlyRevenueReais: 0,
+
+    // === 演算法 KPI — Stage 5 優化引擎資料上線後補齊（暫時靜態）===
+    alpha: { value: "76.3", delta: "0.0" },
+    mape: { value: "18.5", delta: "0.0" },
+    selfConsumption: { value: "98.2", delta: "0.0" },
+    dispatchSuccessCount: 156,
+    dispatchTotalCount: 160,
+    systemHealthBlock: "OPTIMAL",
+
+    // === 其他維持格式相容（前端 DOM ID 依賴）===
+    vppDispatchAccuracy: 97.5,
+    drResponseLatency: 1.8,
     gatewayUptime: 99.9,
-    dispatchSuccessRate: `${dispatchBase + dispatchDelta}/${dispatchTotal}`,
+    dispatchSuccessRate: "156/160",
+
     _tenant: { orgId: ctx.orgId, role: ctx.role },
   });
 
