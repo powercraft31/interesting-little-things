@@ -3,6 +3,7 @@ import type {
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import { handler } from "../../src/bff/handlers/get-assets";
+import { closePool } from "../../src/shared/db";
 
 // ---------------------------------------------------------------------------
 // Fetch mock for AppConfig feature-flags
@@ -88,6 +89,19 @@ describe("GET /assets handler", () => {
       ]),
     );
 
+    // 向下相容性防呆：capacity_kwh 欄位必須存在且為數字（Stage 3 後改為讀取真實 DB）
+    const firstAsset = body.data.assets[0];
+    expect(firstAsset).toHaveProperty("capacity_kwh");
+    expect(typeof firstAsset.capacity_kwh).toBe("number");
+    expect(firstAsset.capacity_kwh).toBeGreaterThan(0);
+
+    // 三層嵌套結構完整性（v5.3 API contract）
+    expect(firstAsset).toHaveProperty("metering");
+    expect(firstAsset).toHaveProperty("status");
+    expect(firstAsset).toHaveProperty("config");
+    expect(firstAsset.status).toHaveProperty("battery_soc");
+    expect(firstAsset.status).toHaveProperty("is_online");
+
     // Deep assert: _tenant envelope reflects the caller's identity
     expect(body.data._tenant).toEqual({
       orgId: "SOLFACIL",
@@ -119,6 +133,18 @@ describe("GET /assets handler", () => {
     );
     expect(ids).not.toContain("ASSET_MG_003");
     expect(ids).not.toContain("ASSET_PR_004");
+
+    // RLS 驗證：每筆資料的 capacity_kwh 必須是合法數值（來自真實 DB）
+    body.data.assets.forEach(
+      (asset: { capacity_kwh: number; assetId: string }) => {
+        expect(asset.capacity_kwh).toBeGreaterThan(0);
+      },
+    );
+    // SP_001=13.5, RJ_002=10.0（來自 seed data）
+    const capacities = body.data.assets
+      .map((a: { capacity_kwh: number }) => a.capacity_kwh)
+      .sort((x: number, y: number) => x - y);
+    expect(capacities).toEqual([10, 13.5]);
 
     // Deep assert: _tenant envelope matches caller's orgId and role
     expect(body.data._tenant).toEqual({
@@ -221,5 +247,9 @@ describe("GET /assets handler", () => {
       makeAdminEvent(),
     )) as APIGatewayProxyStructuredResultV2;
     expect(result.statusCode).toBe(200);
+  });
+
+  afterAll(async () => {
+    await closePool();
   });
 });
