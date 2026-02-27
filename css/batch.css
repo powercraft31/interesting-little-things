@@ -558,27 +558,15 @@
 }
 
 .ef-line {
-    background: repeating-linear-gradient(
-        90deg,
-        rgba(55, 48, 163, 0.6) 0px,
-        rgba(55, 48, 163, 0.6) 6px,
-        transparent 6px,
-        transparent 12px
-    );
-    height: 2px;
-    animation: flow-line 1.5s linear infinite;
+    background: rgba(55, 48, 163, 0.45);
+    height: 3px;
+    border-radius: 2px;
 }
 
 .ef-line-vertical {
-    background: repeating-linear-gradient(
-        180deg,
-        rgba(55, 48, 163, 0.6) 0px,
-        rgba(55, 48, 163, 0.6) 6px,
-        transparent 6px,
-        transparent 12px
-    );
-    width: 2px;
-    animation: flow-line-v 1.5s linear infinite;
+    background: rgba(55, 48, 163, 0.45);
+    width: 3px;
+    border-radius: 2px;
 }
 
 @keyframes flow-line {
@@ -609,7 +597,8 @@
     display: flex;
     gap: 0.5rem;
     padding: 0.5rem 0.75rem;
-    background: rgba(0, 0, 0, 0.1);
+    background: rgba(55, 48, 163, 0.04);
+    border: 1px solid rgba(55, 48, 163, 0.12);
     border-radius: 0.375rem;
     margin: 0.25rem 0;
     flex-wrap: wrap;
