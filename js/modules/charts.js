@@ -286,7 +286,10 @@ function initializeRevenueBreakdownChart() {
   const ctx = document.getElementById("revenueBreakdownChart");
   if (!ctx) return;
 
-  const breakdownData = getRevenueBreakdown();
+  const breakdownData = getRevenueBreakdown() ?? {
+    values: [32450, 12385, 3400],
+    colors: ["#3730a3", "#059669", "#d97706"],
+  };
 
   revenueBreakdownChart = new Chart(ctx, {
     type: "doughnut",

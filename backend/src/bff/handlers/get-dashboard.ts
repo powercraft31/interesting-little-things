@@ -81,6 +81,12 @@ export async function handler(
     gatewayUptime: 99.9,
     dispatchSuccessRate: "156/160",
 
+    // === Revenue Breakdown（圓環圖）— 與前端 MOCK_DASHBOARD 值一致 ===
+    revenueBreakdown: {
+      values: [32450, 12385, 3400],
+      colors: ["#3730a3", "#059669", "#d97706"],
+    },
+
     _tenant: { orgId: ctx.orgId, role: ctx.role },
   });
 
