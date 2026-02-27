@@ -234,10 +234,100 @@ All async communication flows through the shared EventBridge bus `solfacil-vpp-e
 | `ConfigUpdated` | `solfacil.admin-control-plane` | ConfigUpdated | M8 | M1-M7 | On config change |
 | `SchemaEvolved` | `vpp.m8.admin` | SchemaEvolved | M8 | M1-M7 | On field add/update/remove |
 
-### Inter-Module Communication Flow
+### 圖一：業務事件流向圖 (Business Event Flow)
+
+> 展示核心調度循環與報告/展示層的事件依賴關係。
+> 帶圈數字 ①②③ 標示主業務流程的關鍵路徑。
+
+```mermaid
+flowchart LR
+    Device(["⚡ Edge Devices\nInverters / BESS"])
+
+    subgraph Core ["核心調度循環"]
+        direction TB
+        M1["**M1** IoT Hub\nMQTT Ingestion · Dynamic Parser\nAsset Shadow · traceId 生成"]
+        M2["**M2** Optimization Engine\n4-Strategy Algorithm\nAppConfig Profiles"]
+        M3["**M3** DR Dispatcher\nMQTT Command · SQS Timeout\nDispatch State Machine"]
+    end
+
+    subgraph Reporting ["報告與展示層"]
+        direction TB
+        M4["**M4** Market & Billing\nTOU Tariff · ROI Calculation\nPostgreSQL + RLS"]
+        M5["**M5** BFF\nDashboard API · Cognito Auth\nData Aggregation"]
+        M7["**M7** Open API\nWebhook Delivery · M2M Gateway\nWAF · Rate Limiting"]
+    end
+
+    Ext(["🌐 Third-party\nSystems"])
+
+    Device -->|"MQTT/TLS"| M1
+    M1 -->|"① TelemetryReceived"| M2
+    M2 -->|"② ScheduleGenerated"| M3
+    M3 -->|"MQTT Dispatch"| Device
+
+    M1 -->|"DeviceStatusChanged"| M4
+    M1 -->|"DeviceStatusChanged"| M5
+    M1 -->|"DeviceStatusChanged · AlertTriggered"| M7
+
+    M2 -->|"ScheduleGenerated"| M4
+    M2 -->|"ForecastUpdated"| M5
+
+    M4 -->|"TariffUpdated"| M2
+    M4 -->|"TariffUpdated"| M3
+    M4 -->|"ProfitCalculated · InvoiceGenerated"| M5
+    M4 -->|"InvoiceGenerated"| M7
+
+    M5 -->|"③ DRCommandIssued\n(user override)"| M3
+
+    M3 -->|"DRDispatchCompleted · AssetModeChanged"| M4
+    M3 -->|"DRDispatchCompleted"| M5
+    M3 -->|"DRDispatchCompleted · AssetModeChanged"| M7
+
+    M7 -->|"Webhook"| Ext
+```
+
+---
+
+### 圖二：控制面廣播圖 (Control Plane Broadcast)
+
+> M6 (Identity) 與 M8 (Admin Control) 是橫切關注點（Cross-cutting Concerns），
+> 不參與業務循環，但其事件對所有業務模組具有全域影響力。
+> 此圖說明 Breaking Change 的最壞情況：修改 M8 廣播的 SchemaEvolved 結構，
+> 將強制觸發 **全部 7 個模組** 的連鎖升版。
+
+```mermaid
+flowchart LR
+    M6["**M6** Identity / IAM\nCognito · RBAC\nMulti-tenant Provisioning"]
+    M8["**M8** Admin Control Plane\nData Dictionary · AppConfig\nCanary Deploy"]
+
+    subgraph Business ["業務模組 M1–M7（全部受影響）"]
+        direction TB
+        M1["M1 IoT Hub"]
+        M2["M2 Optimization"]
+        M3["M3 DR Dispatcher"]
+        M4["M4 Billing"]
+        M5["M5 BFF"]
+        M6r["M6 Identity"]
+        M7["M7 Open API"]
+    end
+
+    M6 -->|"OrgProvisioned"| M1
+    M6 -->|"OrgProvisioned"| M4
+
+    M8 -->|"ConfigUpdated\nSchemaEvolved"| M1
+    M8 -->|"ConfigUpdated\nSchemaEvolved"| M2
+    M8 -->|"ConfigUpdated\nSchemaEvolved"| M3
+    M8 -->|"ConfigUpdated\nSchemaEvolved"| M4
+    M8 -->|"ConfigUpdated\nSchemaEvolved"| M5
+    M8 -->|"ConfigUpdated\nSchemaEvolved"| M6r
+    M8 -->|"ConfigUpdated\nSchemaEvolved"| M7
+```
+
+---
+
+### Inter-Module Communication Flow（文字摘要）
 
 ```
-M1 (IoT Hub)          ──publishes──►  TelemetryReceived, DeviceStatusChanged
+M1 (IoT Hub)          ──publishes──►  TelemetryReceived, DeviceStatusChanged, AlertTriggered
 M2 (Algorithm Engine)  ──publishes──►  ScheduleGenerated, ForecastUpdated
 M3 (DR Dispatcher)     ──publishes──►  DRDispatchCompleted, AssetModeChanged
 M4 (Market & Billing)  ──publishes──►  ProfitCalculated, InvoiceGenerated, TariffUpdated
