@@ -44,6 +44,7 @@ import {
   retryFailedItems,
   startDRTest,
   setDrilldownCallback,
+  startHeartbeat,
 } from "./modules/batch-ops.js";
 import {
   initData,
@@ -217,6 +218,7 @@ async function init() {
   setCurrentDate();
   initAllCharts();
   populateAssets();
+  startHeartbeat();
   initBatchToolbar();
   populateTrades();
   setupTradeModal();

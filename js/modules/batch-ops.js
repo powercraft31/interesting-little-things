@@ -252,6 +252,11 @@ export function populateAssets() {
 
     grid.appendChild(card);
   });
+
+  // Re-init live metering after DOM is rebuilt
+  if (typeof initLiveMetering === "function") {
+    initLiveMetering();
+  }
 }
 
 export function refreshAssets() {
@@ -567,6 +572,14 @@ export async function executeBatchDispatch() {
   // Show result
   showDispatchResult(batchState.dispatchResults);
 
+  // ── System Health Linkage ──
+  // Count successful dispatches from this batch run
+  const successCount = batchState.dispatchResults.filter(
+    (r) => r.success,
+  ).length;
+  const totalCount = batchState.dispatchResults.length;
+  updateDispatchSuccessCount(successCount, totalCount);
+
   // Refresh asset cards
   refreshAssets();
   updateBatchUI();
@@ -666,6 +679,38 @@ function updateOverallProgress(total) {
 
   if (overallBar) overallBar.style.width = `${(completed / total) * 100}%`;
   if (overallText) overallText.textContent = `${completed} / ${total}`;
+}
+
+/**
+ * Update the System Health dispatch success counter after a batch run.
+ * Adds successCount to the current displayed number, with a flash animation.
+ * @param {number} successCount - Number of successfully dispatched assets
+ * @param {number} totalCount   - Total assets attempted in this batch
+ */
+function updateDispatchSuccessCount(successCount, totalCount) {
+  if (successCount === 0) return;
+
+  const successEl = document.getElementById("dispatchSuccessCount");
+  const totalEl = document.getElementById("dispatchTotalCount");
+  if (!successEl || !totalEl) return;
+
+  // Parse current values
+  const currentSuccess = parseInt(successEl.textContent, 10) || 0;
+  const currentTotal = parseInt(totalEl.textContent, 10) || 0;
+
+  // Update numbers
+  successEl.textContent = currentSuccess + successCount;
+  totalEl.textContent = currentTotal + totalCount;
+
+  // Flash green animation on the whole sh-metric row
+  const metricRow = successEl.closest(".sh-metric");
+  if (metricRow) {
+    metricRow.style.transition = "background 0.3s ease";
+    metricRow.style.background = "rgba(16, 185, 129, 0.15)"; // green flash
+    setTimeout(() => {
+      metricRow.style.background = "";
+    }, 1500);
+  }
 }
 
 function showDispatchResult(results) {
@@ -860,3 +905,117 @@ export function toggleFinancialDetails(panelId) {
 
 // Expose to global scope for inline onclick handlers
 window.toggleFinancialDetails = toggleFinancialDetails;
+
+// ============================================
+// Real-time Telemetry Heartbeat
+// Simulates MQTT edge gateway data fluctuation
+// ============================================
+
+// Runtime store: asset-id → current metering values (mutable, not from mockData)
+const _liveMetering = new Map();
+
+/**
+ * Initialize live metering values from rendered asset data.
+ * Must be called after populateAssets() renders the DOM.
+ */
+export function initLiveMetering() {
+  const assets = getAssets();
+  assets.forEach((asset) => {
+    const m = asset.metering || {};
+    _liveMetering.set(asset.id, {
+      pv_power: m.pv_power ?? 0,
+      load_power: m.load_power ?? 0,
+      grid_power_kw: m.grid_power_kw ?? 0,
+    });
+  });
+}
+
+/**
+ * Apply a ±delta fluctuation to a value, clamped to [min, max].
+ */
+function fluctuate(value, delta = 0.2, min = 0, max = 50) {
+  const change = (Math.random() * 2 - 1) * delta; // -delta … +delta
+  return Math.max(min, Math.min(max, value + change));
+}
+
+/**
+ * Tick: update one card's EF node textContent without re-rendering.
+ * Uses querySelector on the specific card element for precision.
+ */
+function heartbeatTick() {
+  _liveMetering.forEach((live, assetId) => {
+    const card = document.querySelector(
+      `.site-card[data-asset-id="${assetId}"]`,
+    );
+    if (!card) return;
+
+    // Fluctuate PV (always positive, max ~10 kW)
+    live.pv_power = fluctuate(live.pv_power, 0.2, 0, 10);
+
+    // Fluctuate Load (always positive, max ~15 kW)
+    live.load_power = fluctuate(live.load_power, 0.15, 0, 15);
+
+    // Fluctuate Grid (can be negative = exporting, range -10 … +10)
+    live.grid_power_kw = fluctuate(live.grid_power_kw, 0.1, -10, 10);
+
+    // ── PV node ──
+    const pvNode = card.querySelector(".ef-pv .ef-node-value");
+    if (pvNode) {
+      pvNode.textContent = `${live.pv_power.toFixed(1)} kW`;
+    }
+
+    // ── Load node ──
+    const loadNode = card.querySelector(".ef-load .ef-node-value");
+    if (loadNode) {
+      loadNode.textContent = `${live.load_power.toFixed(1)} kW`;
+    }
+
+    // ── Grid node: update value + direction class + sub-label ──
+    const gridWrapper = card.querySelector(".ef-grid");
+    const gridValueNode = card.querySelector(".ef-grid .ef-node-value");
+    const gridSubNode = card.querySelector(".ef-grid .ef-node-sub");
+    if (gridValueNode) {
+      gridValueNode.textContent = `${Math.abs(live.grid_power_kw).toFixed(1)} kW`;
+    }
+    if (gridWrapper) {
+      gridWrapper.classList.remove("importing", "exporting");
+      if (live.grid_power_kw > 0.05) {
+        gridWrapper.classList.add("importing");
+        if (gridSubNode) gridSubNode.textContent = "▲ 買電";
+      } else if (live.grid_power_kw < -0.05) {
+        gridWrapper.classList.add("exporting");
+        if (gridSubNode) gridSubNode.textContent = "▼ 賣電";
+      } else {
+        if (gridSubNode) gridSubNode.textContent = "≈ 0";
+      }
+    }
+  });
+}
+
+// Internal timer reference
+let _heartbeatTimer = null;
+
+/**
+ * Start the heartbeat timer.
+ * Interval: random 3000–5000 ms per tick.
+ * Safe to call multiple times (clears existing timer first).
+ */
+export function startHeartbeat() {
+  if (_heartbeatTimer) {
+    clearInterval(_heartbeatTimer);
+    _heartbeatTimer = null;
+  }
+  initLiveMetering();
+  // Use a fixed 4-second interval (within the 3–5s spec)
+  _heartbeatTimer = setInterval(heartbeatTick, 4000);
+}
+
+/**
+ * Stop the heartbeat timer.
+ */
+export function stopHeartbeat() {
+  if (_heartbeatTimer) {
+    clearInterval(_heartbeatTimer);
+    _heartbeatTimer = null;
+  }
+}
