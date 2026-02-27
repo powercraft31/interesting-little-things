@@ -1,0 +1,29 @@
+[Unit]
+Description=Solfacil VPP BFF Server (TypeScript Express)
+After=network.target postgresql.service
+Wants=postgresql.service
+
+[Service]
+Type=simple
+User=root
+WorkingDirectory=/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend
+
+# ts-node 用絕對路徑（systemd 沒有完整 PATH）
+ExecStart=/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend/node_modules/.bin/ts-node scripts/local-server.ts
+
+# 環境變數
+Environment=NODE_ENV=production
+Environment=PORT=3000
+Environment=DATABASE_URL=postgresql://solfacil_app:solfacil_vpp_2026@localhost:5432/solfacil_vpp
+
+# 崩潰自動重啟
+Restart=always
+RestartSec=5
+
+# 輸出導向 journal（用 journalctl -u solfacil-bff 查看）
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=solfacil-bff
+
+[Install]
+WantedBy=multi-user.target
