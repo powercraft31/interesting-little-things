@@ -45,12 +45,11 @@ export function populateAssets() {
     card.className = "site-card";
     card.setAttribute("data-asset-id", asset.id);
 
-    const statusClass =
-      asset.status === "operando" ? "status-online" : "status-charging";
-    const statusText =
-      asset.status === "operando" ? t("sell_operation") : t("charging");
-    const statusIcon =
-      asset.status === "operando" ? "trending_up" : "battery_charging_full";
+    const isOnline =
+      asset.operationalStatus === "operando" || asset.status?.is_online;
+    const statusClass = isOnline ? "status-online" : "status-charging";
+    const statusText = isOnline ? t("sell_operation") : t("charging");
+    const statusIcon = isOnline ? "trending_up" : "battery_charging_full";
 
     const modeConfig = OPERATION_MODES[asset.operationMode];
     const isSelected = batchState.selectedAssets.has(asset.id);
@@ -58,6 +57,57 @@ export function populateAssets() {
     if (isSelected) {
       card.classList.add("selected");
     }
+
+    // ── 讀取 metering & status 數據 ──
+    const m = asset.metering || {};
+    const s = asset.status || {};
+
+    const pvPower = m.pv_power ?? 0;
+    const batPower = Math.abs(m.battery_power ?? 0);
+    const loadPower = m.load_power ?? 0;
+    const gridPower = Math.abs(m.grid_power_kw ?? 0);
+
+    // 電網方向：grid_power_kw > 0 = 進口(importing)，< 0 = 出口(exporting)，= 0 = neutral
+    const gridClass =
+      (m.grid_power_kw ?? 0) > 0
+        ? "importing"
+        : (m.grid_power_kw ?? 0) < 0
+          ? "exporting"
+          : "";
+    const gridLabel =
+      gridClass === "importing"
+        ? "▲ 買電"
+        : gridClass === "exporting"
+          ? "▼ 賣電"
+          : "≈ 0";
+
+    // 電池方向：用 bat_work_status 作為權威來源
+    const batStatus = s.bat_work_status ?? "idle";
+    const batClass =
+      batStatus === "charging"
+        ? "charging"
+        : batStatus === "discharging"
+          ? "discharging"
+          : "";
+    const batLabel =
+      batClass === "charging"
+        ? "⬆ 充電"
+        : batClass === "discharging"
+          ? "⬇ 放電"
+          : "─ 待機";
+
+    // SOC
+    const soc = s.battery_soc ?? 0;
+    const socBarClass =
+      soc > 40 ? "soc-high" : soc > 20 ? "soc-medium" : "soc-low";
+
+    // 財務（原有欄位）
+    const lucroHoje = asset.lucroHoje ?? 0;
+    const roi = asset.roi ?? 0;
+    const investimento = asset.investimento ?? 0;
+    const payback = asset.payback ?? "-";
+    const unidades = asset.unidades ?? 0;
+    const pvDaily = m.pv_daily_energy ?? 0;
 
     card.innerHTML = `
             <div class="site-header">
@@ -81,40 +131,101 @@ export function populateAssets() {
                 <span class="material-icons tiny-icon">${modeConfig.icon}</span>
                 ${t("current_mode")}: ${t("mode_" + asset.operationMode)}
             </div>
-            <div class="site-metrics">
-                <div class="metric">
-                    <span class="metric-label"><span class="material-icons tiny-icon">payments</span> ${t("today_profit")}</span>
-                    <span class="metric-value profit-text">R$ ${asset.lucroHoje.toLocaleString("pt-BR")}</span>
+            <div class="energy-flow-panel">
+              <div class="energy-flow-diamond">
+
+                <!-- PV (top) -->
+                <div class="ef-node ef-pv">
+                  <span class="ef-node-icon">\u2600\uFE0F</span>
+                  <span class="ef-node-label">光伏</span>
+                  <span class="ef-node-value">${pvPower.toFixed(1)} kW</span>
+                  <span class="ef-node-sub">日發 ${pvDaily.toFixed(1)} kWh</span>
                 </div>
-                <div class="metric">
-                    <span class="metric-label"><span class="material-icons tiny-icon">trending_up</span> ${t("monthly_roi")}</span>
-                    <span class="metric-value">${asset.roi}%</span>
+
+                <!-- Battery (left) -->
+                <div class="ef-node ef-battery ${batClass}">
+                  <span class="ef-node-icon">\uD83D\uDD0B</span>
+                  <span class="ef-node-label">儲能</span>
+                  <span class="ef-node-value">${batPower.toFixed(1)} kW</span>
+                  <span class="ef-node-sub">${batLabel}</span>
                 </div>
-                <div class="metric">
-                    <span class="metric-label"><span class="material-icons tiny-icon">savings</span> ${t("investment")}</span>
-                    <span class="metric-value">R$ ${(asset.investimento / 1000000).toFixed(1)}M</span>
+
+                <!-- Center hub -->
+                <div class="ef-center">
+                  <div class="ef-center-hub"></div>
                 </div>
-                <div class="metric">
-                    <span class="metric-label"><span class="material-icons tiny-icon">battery_std</span> ${t("soc")} ${t("average")}</span>
-                    <span class="metric-value">${asset.socMedio}%</span>
+
+                <!-- Load (right) -->
+                <div class="ef-node ef-load">
+                  <span class="ef-node-icon">\uD83C\uDFE0</span>
+                  <span class="ef-node-label">負載</span>
+                  <span class="ef-node-value">${loadPower.toFixed(1)} kW</span>
                 </div>
-                <div class="metric">
-                    <span class="metric-label"><span class="material-icons tiny-icon">devices</span> ${t("units")}</span>
-                    <span class="metric-value">${asset.unidades.toLocaleString("pt-BR")}</span>
+
+                <!-- Grid (bottom) -->
+                <div class="ef-node ef-grid ${gridClass}">
+                  <span class="ef-node-icon">\u26A1</span>
+                  <span class="ef-node-label">電網</span>
+                  <span class="ef-node-value">${gridPower.toFixed(1)} kW</span>
+                  <span class="ef-node-sub">${gridLabel}</span>
                 </div>
-                <div class="metric">
-                    <span class="metric-label"><span class="material-icons tiny-icon">update</span> ${t("payback")}</span>
-                    <span class="metric-value">${asset.payback} ${t("years")}</span>
-                </div>
+
+              </div>
             </div>
-            <div class="asset-footer">
-                <div class="asset-progress">
-                    <span class="asset-progress-label">${t("daily_progress")} ${t("vs_target")}</span>
-                    <div class="progress-bar">
-                        <div class="progress-fill" style="width: ${Math.min(100, (asset.receitaHoje / 20000) * 100)}%"></div>
-                    </div>
-                    <span class="asset-progress-text">R$ ${asset.receitaHoje.toLocaleString("pt-BR")} / R$ 20.000</span>
+
+            <!-- Device Health Row -->
+            <div class="device-health-row">
+              <div class="health-metric">
+                <span class="health-metric-label">SOC</span>
+                <div class="soc-bar-wrapper">
+                  <div class="soc-bar-fill ${socBarClass}" style="width: ${soc}%"></div>
                 </div>
+                <span class="health-metric-value ${soc > 40 ? "good" : soc > 20 ? "caution" : "warning"}">${soc}%</span>
+              </div>
+              <div class="health-metric">
+                <span class="health-metric-label">SOH</span>
+                <span class="health-metric-value ${(s.bat_soh ?? 100) > 80 ? "good" : "caution"}">${s.bat_soh ?? "-"}%</span>
+              </div>
+              <div class="health-metric">
+                <span class="health-metric-label">溫度</span>
+                <span class="health-metric-value ${(s.inverter_temp ?? 0) > 50 ? "warning" : "good"}">${s.inverter_temp ?? "-"}\u00B0C</span>
+              </div>
+              <div class="health-metric">
+                <span class="health-metric-label">循環</span>
+                <span class="health-metric-value">${s.bat_cycle_count ?? "-"}</span>
+              </div>
+            </div>
+
+            <!-- Financial Collapsible -->
+            <div class="financial-collapsible" id="fin-${asset.id}">
+              <button class="financial-toggle" onclick="window.toggleFinancialDetails('fin-${asset.id}')">
+                <span>財務數據</span>
+                <span class="material-icons financial-toggle-icon">expand_more</span>
+              </button>
+              <div class="financial-details">
+                <div class="financial-details-inner">
+                  <div class="metric">
+                    <span class="metric-label"><span class="material-icons tiny-icon">payments</span> 今日利潤</span>
+                    <span class="metric-value profit-text">R$ ${lucroHoje.toLocaleString("pt-BR")}</span>
+                  </div>
+                  <div class="metric">
+                    <span class="metric-label"><span class="material-icons tiny-icon">trending_up</span> 月 ROI</span>
+                    <span class="metric-value">${roi}%</span>
+                  </div>
+                  <div class="metric">
+                    <span class="metric-label"><span class="material-icons tiny-icon">savings</span> 投資額</span>
+                    <span class="metric-value">R$ ${(investimento / 1000000).toFixed(1)}M</span>
+                  </div>
+                  <div class="metric">
+                    <span class="metric-label"><span class="material-icons tiny-icon">update</span> 回收期</span>
+                    <span class="metric-value">${payback} 年</span>
+                  </div>
+                  <div class="metric">
+                    <span class="metric-label"><span class="material-icons tiny-icon">devices</span> 用戶數</span>
+                    <span class="metric-value">${unidades.toLocaleString("pt-BR")}</span>
+                  </div>
+                </div>
+              </div>
             </div>
         `;
 
@@ -731,3 +842,21 @@ export async function retryFailedItems() {
   refreshAssets();
   updateBatchUI();
 }
+
+// ============================================
+// Financial Collapsible Toggle
+// ============================================
+
+/**
+ * Toggle the financial details collapsible section on a site card.
+ * @param {string} panelId - The id attribute of the .financial-collapsible element
+ */
+export function toggleFinancialDetails(panelId) {
+  const panel = document.getElementById(panelId);
+  if (panel) {
+    panel.classList.toggle("open");
+  }
+}
+
+// Expose to global scope for inline onclick handlers
+window.toggleFinancialDetails = toggleFinancialDetails;
