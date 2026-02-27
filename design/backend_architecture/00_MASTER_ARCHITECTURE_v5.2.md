@@ -63,7 +63,77 @@ SOLFACIL is building a **B2B SaaS Virtual Power Plant (VPP)** platform that aggr
 
 ---
 
-## 2. 8 大模組邊界與職責
+## 2. 最高架構憲法：接口契約鎖定與變更法則 (API Contract Governance)
+
+> ⚖️ **本章節具有最高優先級。所有模組開發者在動任何接口定義之前，必須先閱讀並遵守以下兩條鐵律。**
+
+微服務模組之間的數據傳遞，必須視同**實體硬體的物理接口（PCB 腳位）**。接頭與插座一旦量產出廠，任何單方面的改動都將導致整個電路板短路崩潰。本系統採用相同原則對待所有 API 契約。
+
+---
+
+### ⚙️ 鐵律一：向下相容的「擴充許可」(Open for Extension, Closed for Modification)
+
+所有模組的輸入規格（Request Schema）與輸出規格（Response / Event Payload），均定義於 [`01_SHARED_LAYER_v5.2.md`](./01_SHARED_LAYER_v5.2.md)，一旦版本發佈，視同**鎖死的硬體腳位**，不得單方面修改。
+
+| 操作 | 允許與否 | 說明 |
+|------|---------|------|
+| ✅ 新增選填欄位 | **允許** | 等同多焊幾個新腳位，舊模組忽略新欄位，不受影響 |
+| ✅ 新增必填欄位（含 default 值） | **允許（有條件）** | 必須確保所有現有呼叫方均提供 default 值，不可靜默失敗 |
+| ❌ 重新命名既有欄位 | **嚴格禁止** | 相當於更改腳位定義，所有下游模組立即讀到空值或型別錯誤 |
+| ❌ 改變欄位資料型態 | **嚴格禁止** | 例如 `bat_soc: number` 改為 `bat_soc: string`，下游運算立即崩潰 |
+| ❌ 刪除既有欄位 | **嚴格禁止** | 下游依賴該欄位的模組將讀到 `undefined`，引發靜默 bug |
+| ❌ 改變事件的 `detail-type` 字串 | **嚴格禁止** | EventBridge 訂閱規則基於此字串，改動導致事件無法路由，模組靜默失聯 |
+
+**根本原則**：對既有接口，只可加，不可改，不可刪。
+
+---
+
+### 🔗 鐵律二：破壞性變更的「連鎖升級法」(Cascading Updates)
+
+若因業務不可抗力，確實必須執行上表中「嚴格禁止」的 Breaking Change，須嚴格遵守以下流程，**嚴禁單模組偷偷修改**：
+
+#### 步驟一：影響範圍盤點
+
+修改者須查閱本文件 **§3 EventBus 核心事件流** 與各模組文件的「模組依賴關係」段落，列出所有直接或間接依賴該接口的上下游模組。
+
+例如，若修改 `AssetRecord`（M1 產出，定義於 Shared Layer）：
+
+```
+影響範圍：
+  直接下游 → M2 (Optimization Engine) 讀取 AssetRecord 觸發演算
+  直接下游 → M3 (DR Dispatcher) 讀取 AssetRecord 產生調度指令
+  間接下游 → M5 (BFF) 彙總 AssetRecord 回傳 Dashboard
+  間接下游 → M4 (Billing) 讀取 AssetRecord 計費
+```
+
+#### 步驟二：同步升版（Synchronized Version Bump）
+
+所有受影響的模組**必須同步升級版本號**，確保「接頭與插座」同時替換，不留下版本不一致的夾縫地帶。
+
+```
+正確做法（示例）：Breaking Change 導致 v5.2 → v6.0
+  ✅ Shared Layer    : v5.2 → v6.0
+  ✅ M1 (IoT Hub)    : v5.2 → v6.0  （修改來源）
+  ✅ M2 (Engine)     : v5.2 → v6.0  （直接依賴）
+  ✅ M3 (Dispatcher) : v5.2 → v6.0  （直接依賴）
+  ✅ M4 (Billing)    : v5.2 → v6.0  （間接依賴）
+  ✅ M5 (BFF)        : v5.2 → v6.0  （間接依賴）
+  
+  ❌ 錯誤做法：只升級 M1，讓 M2/M3 繼續使用 v5.2 接口
+     → 系統在執行時而非編譯時才爆炸，且難以追蹤根因
+```
+
+#### 步驟三：更新模組版本矩陣
+
+完成連鎖升版後，**必須更新本文件（§ 模組版本矩陣）中所有受影響模組的版本號**，確保矩陣始終反映系統的真實狀態，作為下次 Breaking Change 的基準。
+
+---
+
+> 📌 **記住**：微服務架構的最大優勢是模組獨立演進。但這個優勢的前提，是接口契約的嚴格不變性。破壞接口契約，不是修改了一個模組，而是同時破壞了所有依賴它的模組——只是它們不會立刻告訴你。
+
+---
+
+## 3. 8 大模組邊界與職責
 
 ### Module Responsibility Matrix
 
@@ -140,7 +210,7 @@ SOLFACIL is building a **B2B SaaS Virtual Power Plant (VPP)** platform that aggr
 
 ---
 
-## 3. EventBus 核心事件流
+## 4. EventBus 核心事件流
 
 All async communication flows through the shared EventBridge bus `solfacil-vpp-events`.
 
@@ -181,7 +251,7 @@ M8 (Admin Control)     ──publishes──►  ConfigUpdated, SchemaEvolved
 
 ---
 
-## 4. 跨模組通訊機制
+## 5. 跨模組通訊機制
 
 ### 4.1 traceId 傳播規範
 
@@ -238,7 +308,7 @@ M8 → AppConfig → Lambda Extension → M1-M7：
 
 ---
 
-## 5. Core Event Flow Examples
+## 6. Core Event Flow Examples
 
 ### 5.1 DR Test Command Flow (Frontend → Edge Device)
 
@@ -290,7 +360,7 @@ M3 publishes DRDispatchCompleted → EventBridge rule (org-scoped)
 
 ---
 
-## 6. 關鍵架構決策摘要
+## 7. 關鍵架構決策摘要
 
 ### ADR-1: Control Plane vs. Data Plane Separation
 
@@ -319,7 +389,7 @@ M3 publishes DRDispatchCompleted → EventBridge rule (org-scoped)
 
 ---
 
-## 7. Unified CDK Deployment Plan
+## 8. Unified CDK Deployment Plan
 
 ### Deployment Phase Order
 
@@ -371,7 +441,7 @@ export class SharedStack extends cdk.Stack {
 
 ---
 
-## 8. Cost Estimation
+## 9. Cost Estimation
 
 ### Pilot Scale (4 assets, ~3,000 devices, ~1M telemetry points/day)
 
@@ -402,7 +472,7 @@ export class SharedStack extends cdk.Stack {
 
 ---
 
-## 9. Security Posture Summary
+## 10. Security Posture Summary
 
 ### Zero-Trust Checklist
 
@@ -431,7 +501,7 @@ export class SharedStack extends cdk.Stack {
 
 ---
 
-## 10. Document History
+## 11. Document History
 
 | Version | Date | Summary |
 |---------|------|---------|
