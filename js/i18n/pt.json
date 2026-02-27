@@ -237,5 +237,16 @@
     "bat_health": "Saúde da Bateria",
     "today_financial": "Finanças de Hoje",
     "today_saved": "Economia Hoje",
-    "self_use_rate": "Taxa de Autoconsumo"
+    "self_use_rate": "Taxa de Autoconsumo",
+    "ef_pv": "Solar",
+    "ef_battery": "Bateria",
+    "ef_load": "Carga",
+    "ef_grid": "Rede",
+    "grid_neutral": "Balanceado",
+    "temperature": "Temp",
+    "cycle_count": "Ciclos",
+    "daily_yield_label": "Diário",
+    "financial_data": "Financeiro",
+    "system_capacity": "Capacidade",
+    "capacity_unit": "kWh"
 }

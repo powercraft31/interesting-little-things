@@ -498,12 +498,12 @@
 
 .energy-flow-diamond {
     display: grid;
-    grid-template-columns: 1fr 1fr 1fr;
-    grid-template-rows: auto auto auto;
-    gap: 0.25rem;
+    grid-template-columns: 1fr 28px 1fr 28px 1fr;
+    grid-template-rows: auto 28px auto 28px auto;
+    gap: 0;
     align-items: center;
     justify-items: center;
-    min-height: 130px;
+    min-height: 150px;
 }
 
 .ef-node {
@@ -525,11 +525,17 @@
 .ef-node-sub   { font-size: 0.65rem; color: var(--text-muted, #9ca3af); }
 
 /* Grid positioning */
-.ef-pv       { grid-column: 2; grid-row: 1; }
-.ef-battery  { grid-column: 1; grid-row: 2; }
-.ef-center   { grid-column: 2; grid-row: 2; display: flex; align-items: center; justify-content: center; }
-.ef-load     { grid-column: 3; grid-row: 2; }
-.ef-grid     { grid-column: 2; grid-row: 3; }
+.ef-pv       { grid-column: 3; grid-row: 1; }
+.ef-battery  { grid-column: 1; grid-row: 3; }
+.ef-center   { grid-column: 3; grid-row: 3; display: flex; align-items: center; justify-content: center; }
+.ef-load     { grid-column: 5; grid-row: 3; }
+.ef-grid     { grid-column: 3; grid-row: 5; }
+
+/* Connecting line cells */
+.ef-line-top    { grid-column: 3; grid-row: 2; width: 2px; height: 100%; align-self: stretch; justify-self: center; }
+.ef-line-left   { grid-column: 2; grid-row: 3; height: 2px; width: 100%; justify-self: stretch; align-self: center; }
+.ef-line-right  { grid-column: 4; grid-row: 3; height: 2px; width: 100%; justify-self: stretch; align-self: center; }
+.ef-line-bottom { grid-column: 3; grid-row: 4; width: 2px; height: 100%; align-self: stretch; justify-self: center; }
 
 /* Node color themes */
 .ef-pv       .ef-node-value { color: var(--ef-pv); }

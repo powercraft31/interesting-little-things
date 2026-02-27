@@ -71,20 +71,20 @@ export function populateAssets() {
     const gridClass = getGridClass(m.grid_power_kw ?? 0);
     const gridLabel =
       gridClass === "importing"
-        ? "▲ 買電"
+        ? `▲ ${t("grid_importing")}`
         : gridClass === "exporting"
-          ? "▼ 賣電"
-          : "≈ 0";
+          ? `▼ ${t("grid_exporting")}`
+          : t("grid_neutral");
 
     // 電池方向：用 bat_work_status 作為權威來源
     const batStatus = s.bat_work_status ?? "idle";
     const batClass = getBatClass(batStatus);
     const batLabel =
       batClass === "charging"
-        ? "⬆ 充電"
+        ? `⬆ ${t("bat_status_charging")}`
         : batClass === "discharging"
-          ? "⬇ 放電"
-          : "─ 待機";
+          ? `⬇ ${t("bat_status_discharging")}`
+          : `─ ${t("bat_status_idle")}`;
 
     // SOC
     const soc = s.battery_soc ?? 0;
@@ -95,7 +95,7 @@ export function populateAssets() {
     const roi = asset.roi ?? 0;
     const investimento = asset.investimento ?? 0;
     const payback = asset.payback ?? "-";
-    const unidades = asset.unidades ?? 0;
+    const capacityKwh = asset.capacity_kwh ?? 0;
     const pvDaily = m.pv_daily_energy ?? 0;
 
     card.innerHTML = `
@@ -123,18 +123,24 @@ export function populateAssets() {
             <div class="energy-flow-panel">
               <div class="energy-flow-diamond">
 
+                <!-- Connecting lines -->
+                <div class="ef-line-vertical ef-line-top"></div>
+                <div class="ef-line ef-line-left"></div>
+                <div class="ef-line ef-line-right"></div>
+                <div class="ef-line-vertical ef-line-bottom"></div>
+
                 <!-- PV (top) -->
                 <div class="ef-node ef-pv">
                   <span class="ef-node-icon">\u2600\uFE0F</span>
-                  <span class="ef-node-label">光伏</span>
+                  <span class="ef-node-label">${t("ef_pv")}</span>
                   <span class="ef-node-value">${pvPower.toFixed(1)} kW</span>
-                  <span class="ef-node-sub">日發 ${pvDaily.toFixed(1)} kWh</span>
+                  <span class="ef-node-sub">${t("daily_yield_label")} ${pvDaily.toFixed(1)} kWh</span>
                 </div>
 
                 <!-- Battery (left) -->
                 <div class="ef-node ef-battery ${batClass}">
                   <span class="ef-node-icon">\uD83D\uDD0B</span>
-                  <span class="ef-node-label">儲能</span>
+                  <span class="ef-node-label">${t("ef_battery")}</span>
                   <span class="ef-node-value">${batPower.toFixed(1)} kW</span>
                   <span class="ef-node-sub">${batLabel}</span>
                 </div>
@@ -147,14 +153,14 @@ export function populateAssets() {
                 <!-- Load (right) -->
                 <div class="ef-node ef-load">
                   <span class="ef-node-icon">\uD83C\uDFE0</span>
-                  <span class="ef-node-label">負載</span>
+                  <span class="ef-node-label">${t("ef_load")}</span>
                   <span class="ef-node-value">${loadPower.toFixed(1)} kW</span>
                 </div>
 
                 <!-- Grid (bottom) -->
                 <div class="ef-node ef-grid ${gridClass}">
                   <span class="ef-node-icon">\u26A1</span>
-                  <span class="ef-node-label">電網</span>
+                  <span class="ef-node-label">${t("ef_grid")}</span>
                   <span class="ef-node-value">${gridPower.toFixed(1)} kW</span>
                   <span class="ef-node-sub">${gridLabel}</span>
                 </div>
@@ -176,42 +182,42 @@ export function populateAssets() {
                 <span class="health-metric-value ${(s.bat_soh ?? 100) > 80 ? "good" : "caution"}">${s.bat_soh ?? "-"}%</span>
               </div>
               <div class="health-metric">
-                <span class="health-metric-label">溫度</span>
+                <span class="health-metric-label">${t("temperature")}</span>
                 <span class="health-metric-value ${(s.inverter_temp ?? 0) > 50 ? "warning" : "good"}">${s.inverter_temp ?? "-"}\u00B0C</span>
               </div>
               <div class="health-metric">
-                <span class="health-metric-label">循環</span>
+                <span class="health-metric-label">${t("cycle_count")}</span>
                 <span class="health-metric-value">${s.bat_cycle_count ?? "-"}</span>
               </div>
             </div>
 
             <!-- Financial Collapsible -->
             <div class="financial-collapsible" id="fin-${asset.id}">
-              <button class="financial-toggle" onclick="window.toggleFinancialDetails('fin-${asset.id}')">
-                <span>財務數據</span>
+              <button class="financial-toggle" onclick="event.stopPropagation(); window.toggleFinancialDetails('fin-${asset.id}')">
+                <span>${t("financial_data")}</span>
                 <span class="material-icons financial-toggle-icon">expand_more</span>
               </button>
               <div class="financial-details">
                 <div class="financial-details-inner">
                   <div class="metric">
-                    <span class="metric-label"><span class="material-icons tiny-icon">payments</span> 今日利潤</span>
+                    <span class="metric-label"><span class="material-icons tiny-icon">payments</span> ${t("today_profit")}</span>
                     <span class="metric-value profit-text">R$ ${lucroHoje.toLocaleString("pt-BR")}</span>
                   </div>
                   <div class="metric">
-                    <span class="metric-label"><span class="material-icons tiny-icon">trending_up</span> 月 ROI</span>
+                    <span class="metric-label"><span class="material-icons tiny-icon">trending_up</span> ${t("monthly_roi")}</span>
                     <span class="metric-value">${roi}%</span>
                   </div>
                   <div class="metric">
-                    <span class="metric-label"><span class="material-icons tiny-icon">savings</span> 投資額</span>
+                    <span class="metric-label"><span class="material-icons tiny-icon">savings</span> ${t("investment")}</span>
                     <span class="metric-value">R$ ${(investimento / 1000000).toFixed(1)}M</span>
                   </div>
                   <div class="metric">
-                    <span class="metric-label"><span class="material-icons tiny-icon">update</span> 回收期</span>
+                    <span class="metric-label"><span class="material-icons tiny-icon">update</span> ${t("payback")}</span>
                     <span class="metric-value">${payback} 年</span>
                   </div>
                   <div class="metric">
-                    <span class="metric-label"><span class="material-icons tiny-icon">devices</span> 用戶數</span>
-                    <span class="metric-value">${unidades.toLocaleString("pt-BR")}</span>
+                    <span class="metric-label"><span class="material-icons tiny-icon">battery_full</span> ${t("system_capacity")}</span>
+                    <span class="metric-value">${asset.capacity_kwh ?? "-"} ${t("capacity_unit")}</span>
                   </div>
                 </div>
               </div>
@@ -447,10 +453,10 @@ function showConfirmModal(assetsToChange) {
   const list = document.getElementById("batchChangeList");
   const impact = document.getElementById("batchImpactBox");
 
-  let totalUnits = 0;
+  let totalCapacity = 0;
   list.innerHTML = assetsToChange
     .map((asset) => {
-      totalUnits += asset.unidades;
+      totalCapacity += asset.capacity_kwh ?? 0;
       const fromMode = t("mode_" + asset.operationMode);
       const toMode = t("mode_" + batchState.targetMode);
       return `
@@ -469,7 +475,7 @@ function showConfirmModal(assetsToChange) {
         <span class="material-icons">warning</span>
         <span>${t("batch_impact_warning")}</span>
         <span style="margin-left:auto; font-weight:700;">
-            ${assetsToChange.length} ${t("affected_sites")} / ${totalUnits.toLocaleString("pt-BR")} ${t("affected_units")}
+            ${assetsToChange.length} ${t("affected_sites")} / ${totalCapacity} kWh
         </span>
     `;
 
@@ -520,7 +526,7 @@ export async function executeBatchDispatch() {
                 <span class="material-icons progress-status-icon status-waiting">hourglass_empty</span>
                 <div class="dispatch-item-info">
                     <div class="dispatch-item-name">${asset.name}</div>
-                    <div class="dispatch-item-detail">${toMode} (${asset.unidades} ${t("affected_units")})</div>
+                    <div class="dispatch-item-detail">${toMode} · ${asset.capacity_kwh ?? "-"} kWh</div>
                 </div>
                 <div class="dispatch-item-progress">
                     <div class="progress-bar">
@@ -599,7 +605,7 @@ function simulateAssetModeChange(asset, newMode) {
           toMode: newMode,
           success,
           error: success ? null : "communication_timeout",
-          units: asset.unidades,
+          capacity_kwh: asset.capacity_kwh,
           timestamp: new Date().toISOString(),
           responseLatency: parseFloat((1.5 + Math.random() * 3.5).toFixed(2)),
           requestedPower,
@@ -939,6 +945,7 @@ window.toggleFinancialDetails = toggleFinancialDetails;
 
 // Runtime store: asset-id → current metering values (mutable, not from mockData)
 const _liveMetering = new Map();
+const _baseMetering = new Map(); // Read-only anchor for fluctuation
 
 /**
  * Initialize live metering values from rendered asset data.
@@ -948,11 +955,13 @@ export function initLiveMetering() {
   const assets = getAssets();
   assets.forEach((asset) => {
     const m = asset.metering || {};
-    _liveMetering.set(asset.id, {
+    const base = {
       pv_power: m.pv_power ?? 0,
       load_power: m.load_power ?? 0,
       grid_power_kw: m.grid_power_kw ?? 0,
-    });
+    };
+    _liveMetering.set(asset.id, { ...base });
+    _baseMetering.set(asset.id, { ...base }); // immutable anchor
   });
 }
 
@@ -975,14 +984,17 @@ function heartbeatTick() {
     );
     if (!card) return;
 
-    // Fluctuate PV (always positive, max ~10 kW)
-    live.pv_power = fluctuate(live.pv_power, 0.2, 0, 10);
+    const base = _baseMetering.get(assetId);
+    if (!base) return;
 
-    // Fluctuate Load (always positive, max ~15 kW)
-    live.load_power = fluctuate(live.load_power, 0.15, 0, 15);
-
-    // Fluctuate Grid (can be negative = exporting, range -10 … +10)
-    live.grid_power_kw = fluctuate(live.grid_power_kw, 0.1, -10, 10);
+    // Fluctuate around base values (no cumulative drift)
+    const delta = (v, maxD) => v + (Math.random() * 2 - 1) * maxD;
+    live.pv_power = Math.max(0, Math.min(10, delta(base.pv_power, 0.2)));
+    live.load_power = Math.max(0, Math.min(15, delta(base.load_power, 0.15)));
+    live.grid_power_kw = Math.max(
+      -10,
+      Math.min(10, delta(base.grid_power_kw, 0.1)),
+    );
 
     // ── PV node ──
     const pvNode = card.querySelector(".ef-pv .ef-node-value");
@@ -1010,10 +1022,10 @@ function heartbeatTick() {
       if (gridSubNode) {
         gridSubNode.textContent =
           newGridClass === "importing"
-            ? "▲ 買電"
+            ? `▲ ${t("grid_importing")}`
             : newGridClass === "exporting"
-              ? "▼ 賣電"
-              : "≈ 0";
+              ? `▼ ${t("grid_exporting")}`
+              : t("grid_neutral");
       }
     }
   });

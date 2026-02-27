@@ -237,5 +237,16 @@
     "bat_health": "Battery Health",
     "today_financial": "Today Financials",
     "today_saved": "Today Saved",
-    "self_use_rate": "Self-use Rate"
+    "self_use_rate": "Self-use Rate",
+    "ef_pv": "Solar",
+    "ef_battery": "Battery",
+    "ef_load": "Load",
+    "ef_grid": "Grid",
+    "grid_neutral": "Balanced",
+    "temperature": "Temp",
+    "cycle_count": "Cycles",
+    "daily_yield_label": "Daily",
+    "financial_data": "Financial",
+    "system_capacity": "Capacity",
+    "capacity_unit": "kWh"
 }

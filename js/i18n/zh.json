@@ -237,5 +237,16 @@
     "bat_health": "電池健康",
     "today_financial": "今日財務",
     "today_saved": "今日節省",
-    "self_use_rate": "自用率"
+    "self_use_rate": "自用率",
+    "ef_pv": "光伏",
+    "ef_battery": "儲能",
+    "ef_load": "負載",
+    "ef_grid": "電網",
+    "grid_neutral": "≈ 0",
+    "temperature": "溫度",
+    "cycle_count": "循環",
+    "daily_yield_label": "日發",
+    "financial_data": "財務數據",
+    "system_capacity": "系統容量",
+    "capacity_unit": "kWh"
 }

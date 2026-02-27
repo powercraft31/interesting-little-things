@@ -1039,12 +1039,12 @@ tr:hover {
    System Health Block
    ============================================ */
 .system-health-block {
-    background: var(--bg-card, #1e293b);
-    border: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.15));
+    background: var(--color-bg-card, #ffffff);
+    border: 1px solid var(--color-border, #e2e8f0);
     border-radius: 0.75rem;
     padding: 0.85rem 1rem;
     margin: 1rem 0;
-    box-shadow: 0 1px 4px rgba(0, 0, 0, 0.12);
+    box-shadow: var(--shadow-sm, 0 1px 3px rgba(0, 0, 0, 0.08));
 }
 
 .sh-header {
@@ -1053,12 +1053,12 @@ tr:hover {
     gap: 0.35rem;
     margin-bottom: 0.65rem;
     padding-bottom: 0.5rem;
-    border-bottom: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.1));
+    border-bottom: 1px solid var(--color-border, #e2e8f0);
 }
 
 .sh-header .material-icons {
     font-size: 1rem;
-    color: var(--color-text-lighter, #94a3b8);
+    color: var(--color-text-muted, #64748b);
 }
 
 .sh-header-label {
@@ -1066,7 +1066,7 @@ tr:hover {
     font-weight: 600;
     text-transform: uppercase;
     letter-spacing: 0.06em;
-    color: var(--color-text-lighter, #94a3b8);
+    color: var(--color-text-muted, #64748b);
 }
 
 .sh-metrics {
@@ -1083,7 +1083,7 @@ tr:hover {
 }
 
 .sh-metric + .sh-metric {
-    border-left: 1px solid var(--border-subtle, rgba(148, 163, 184, 0.1));
+    border-left: 1px solid var(--color-border, #e2e8f0);
 }
 
 .sh-metric-icon {
@@ -1110,7 +1110,7 @@ tr:hover {
 .sh-metric-value {
     font-size: 0.95rem;
     font-weight: 600;
-    color: var(--text-primary, #f1f5f9);
+    color: var(--color-text-primary, #1e293b);
     line-height: 1.3;
 }
 
