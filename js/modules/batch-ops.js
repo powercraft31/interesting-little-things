@@ -68,12 +68,7 @@ export function populateAssets() {
     const gridPower = Math.abs(m.grid_power_kw ?? 0);
 
     // 電網方向：grid_power_kw > 0 = 進口(importing)，< 0 = 出口(exporting)，= 0 = neutral
-    const gridClass =
-      (m.grid_power_kw ?? 0) > 0
-        ? "importing"
-        : (m.grid_power_kw ?? 0) < 0
-          ? "exporting"
-          : "";
+    const gridClass = getGridClass(m.grid_power_kw ?? 0);
     const gridLabel =
       gridClass === "importing"
         ? "▲ 買電"
@@ -83,12 +78,7 @@ export function populateAssets() {
 
     // 電池方向：用 bat_work_status 作為權威來源
     const batStatus = s.bat_work_status ?? "idle";
-    const batClass =
-      batStatus === "charging"
-        ? "charging"
-        : batStatus === "discharging"
-          ? "discharging"
-          : "";
+    const batClass = getBatClass(batStatus);
     const batLabel =
       batClass === "charging"
         ? "⬆ 充電"
@@ -98,8 +88,7 @@ export function populateAssets() {
 
     // SOC
     const soc = s.battery_soc ?? 0;
-    const socBarClass =
-      soc > 40 ? "soc-high" : soc > 20 ? "soc-medium" : "soc-low";
+    const socBarClass = getSocBarClass(soc);
 
     // 財務（原有欄位）
     const lucroHoje = asset.lucroHoje ?? 0;
@@ -889,6 +878,43 @@ export async function retryFailedItems() {
 }
 
 // ============================================
+// Pure Logic Helpers (exported for unit testing)
+// ============================================
+
+/**
+ * Determine CSS class for the grid EF node based on power flow direction.
+ * @param {number} gridPowerKw  positive = importing, negative = exporting, ~0 = neutral
+ * @returns {'importing'|'exporting'|''}
+ */
+export function getGridClass(gridPowerKw) {
+  if (gridPowerKw > 0.05) return "importing";
+  if (gridPowerKw < -0.05) return "exporting";
+  return "";
+}
+
+/**
+ * Determine CSS class for the battery EF node.
+ * @param {string} batWorkStatus  'charging' | 'discharging' | anything else
+ * @returns {'charging'|'discharging'|''}
+ */
+export function getBatClass(batWorkStatus) {
+  if (batWorkStatus === "charging") return "charging";
+  if (batWorkStatus === "discharging") return "discharging";
+  return "";
+}
+
+/**
+ * Determine CSS class for the SOC progress bar fill.
+ * @param {number} soc  0–100
+ * @returns {'soc-high'|'soc-medium'|'soc-low'}
+ */
+export function getSocBarClass(soc) {
+  if (soc > 40) return "soc-high";
+  if (soc > 20) return "soc-medium";
+  return "soc-low";
+}
+
+// ============================================
 // Financial Collapsible Toggle
 // ============================================
 
@@ -979,14 +1005,15 @@ function heartbeatTick() {
     }
     if (gridWrapper) {
       gridWrapper.classList.remove("importing", "exporting");
-      if (live.grid_power_kw > 0.05) {
-        gridWrapper.classList.add("importing");
-        if (gridSubNode) gridSubNode.textContent = "▲ 買電";
-      } else if (live.grid_power_kw < -0.05) {
-        gridWrapper.classList.add("exporting");
-        if (gridSubNode) gridSubNode.textContent = "▼ 賣電";
-      } else {
-        if (gridSubNode) gridSubNode.textContent = "≈ 0";
+      const newGridClass = getGridClass(live.grid_power_kw);
+      if (newGridClass) gridWrapper.classList.add(newGridClass);
+      if (gridSubNode) {
+        gridSubNode.textContent =
+          newGridClass === "importing"
+            ? "▲ 買電"
+            : newGridClass === "exporting"
+              ? "▼ 賣電"
+              : "≈ 0";
       }
     }
   });

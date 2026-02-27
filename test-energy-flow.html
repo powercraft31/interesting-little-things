@@ -1,0 +1,110 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <title>SOLFACIL VPP v2.0 — Unit Tests</title>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body {
+      font-family: 'Courier New', monospace;
+      background: #0f172a;
+      color: #e2e8f0;
+      padding: 2rem;
+      min-height: 100vh;
+    }
+    h1 { font-size: 1.2rem; color: #94a3b8; margin-bottom: 1.5rem; letter-spacing: 0.1em; }
+    #summary {
+      font-size: 1.4rem;
+      font-weight: bold;
+      margin-bottom: 1.5rem;
+      padding: 1rem 1.5rem;
+      border-radius: 0.5rem;
+      border-left: 4px solid #6366f1;
+      background: rgba(99,102,241,0.1);
+    }
+    #summary.all-pass { border-color: #10b981; background: rgba(16,185,129,0.1); color: #10b981; }
+    #summary.has-fail  { border-color: #ef4444; background: rgba(239,68,68,0.1);  color: #ef4444; }
+    .test-case {
+      display: flex;
+      align-items: flex-start;
+      gap: 0.75rem;
+      padding: 0.4rem 0.75rem;
+      border-radius: 0.25rem;
+      margin-bottom: 0.25rem;
+      font-size: 0.85rem;
+    }
+    .test-case.pass { background: rgba(16,185,129,0.06); }
+    .test-case.fail { background: rgba(239,68,68,0.1); border-left: 3px solid #ef4444; }
+    .badge { font-weight: bold; min-width: 3rem; }
+    .badge.pass { color: #10b981; }
+    .badge.fail { color: #ef4444; }
+    .desc { flex: 1; }
+    .detail { font-size: 0.75rem; color: #64748b; margin-top: 0.15rem; }
+    .fail .detail { color: #f87171; }
+    .section-label {
+      font-size: 0.7rem;
+      text-transform: uppercase;
+      letter-spacing: 0.12em;
+      color: #6366f1;
+      margin: 1.2rem 0 0.5rem;
+      padding-left: 0.75rem;
+      border-left: 2px solid #6366f1;
+    }
+  </style>
+</head>
+<body>
+  <h1>▸ SOLFACIL VPP v2.0 — Developer Unit Tests</h1>
+  <div id="summary">⏳ Running tests...</div>
+  <div id="results"></div>
+
+  <script type="module">
+    import { runAllTests } from './js/test-energy-flow.js';
+
+    const { passed, failed, results } = runAllTests();
+
+    // Summary
+    const summaryEl = document.getElementById('summary');
+    summaryEl.textContent = failed === 0
+      ? `✅ ALL ${passed} TESTS PASSED`
+      : `❌ ${failed} FAILED / ${passed + failed} TOTAL`;
+    summaryEl.className = failed === 0 ? 'all-pass' : 'has-fail';
+
+    // Results
+    const container = document.getElementById('results');
+
+    // Group by suite (detect by description prefix)
+    const suites = [
+      { label: 'Suite 1 — Math.abs() 絕對值轉換', prefix: 'abs(' },
+      { label: 'Suite 2 — Grid Class 狀態類名',   prefix: 'grid' },
+      { label: 'Suite 3 — Battery Class',          prefix: 'bat' },
+      { label: 'Suite 3 — SOC 分級',               prefix: 'SOC' },
+      { label: 'Suite 4 — 能量守恆校驗',           prefix: '[ASSET' },
+    ];
+
+    // Simple render: just iterate results
+    let lastSuiteLabel = '';
+    results.forEach((r) => {
+      // Detect section
+      const suite = suites.find(s => r.description.toLowerCase().startsWith(s.prefix.toLowerCase()));
+      if (suite && suite.label !== lastSuiteLabel) {
+        lastSuiteLabel = suite.label;
+        const label = document.createElement('div');
+        label.className = 'section-label';
+        label.textContent = suite.label;
+        container.appendChild(label);
+      }
+
+      const row = document.createElement('div');
+      row.className = `test-case ${r.pass ? 'pass' : 'fail'}`;
+      row.innerHTML = `
+        <span class="badge ${r.pass ? 'pass' : 'fail'}">${r.pass ? '[PASS]' : '[FAIL]'}</span>
+        <div>
+          <div class="desc">${r.description}</div>
+          ${!r.pass ? `<div class="detail">Expected: ${JSON.stringify(r.expected)} | Got: ${JSON.stringify(r.actual)}</div>` : ''}
+        </div>
+      `;
+      container.appendChild(row);
+    });
+  </script>
+</body>
+</html>
