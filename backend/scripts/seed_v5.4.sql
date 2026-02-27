@@ -149,4 +149,55 @@ WHERE NOT EXISTS (
     AND schedule_name = 'ANEEL TOU 2025 - MG/PR Residencial'
 );
 
+-- ── Schema 擴充（Stage 5）── 安全：ADD COLUMN IF NOT EXISTS
+ALTER TABLE assets
+  ADD COLUMN IF NOT EXISTS investimento_brl  DECIMAL(14,2),
+  ADD COLUMN IF NOT EXISTS roi_pct           DECIMAL(5,2),
+  ADD COLUMN IF NOT EXISTS payback_str       VARCHAR(10),
+  ADD COLUMN IF NOT EXISTS receita_mes_brl   DECIMAL(12,2);
+
+ALTER TABLE device_state
+  ADD COLUMN IF NOT EXISTS pv_daily_energy      DECIMAL(10,3) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS bat_charged_today    DECIMAL(10,3) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS bat_discharged_today DECIMAL(10,3) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS grid_import_kwh      DECIMAL(10,3) DEFAULT 0,
+  ADD COLUMN IF NOT EXISTS grid_export_kwh      DECIMAL(10,3) DEFAULT 0;
+
+-- ── Assets 商業指標（Stage 5）──
+UPDATE assets SET investimento_brl=4200000, roi_pct=19.2, payback_str='3,8', receita_mes_brl=412300 WHERE asset_id='ASSET_SP_001';
+UPDATE assets SET investimento_brl=3800000, roi_pct=17.8, payback_str='4,1', receita_mes_brl=378500 WHERE asset_id='ASSET_RJ_002';
+UPDATE assets SET investimento_brl=2900000, roi_pct=16.4, payback_str='4,5', receita_mes_brl=298400 WHERE asset_id='ASSET_MG_003';
+UPDATE assets SET investimento_brl=1500000, roi_pct=15.1, payback_str='4,8', receita_mes_brl=145800 WHERE asset_id='ASSET_PR_004';
+
+-- ── Device State 日累計能量（Stage 5）──
+UPDATE device_state SET pv_daily_energy=22.4, bat_charged_today=8.1,  bat_discharged_today=12.3, grid_import_kwh=0.0,  grid_export_kwh=0.0  WHERE asset_id='ASSET_SP_001';
+UPDATE device_state SET pv_daily_energy=28.6, bat_charged_today=14.2, bat_discharged_today=0.0,  grid_import_kwh=0.0,  grid_export_kwh=8.6  WHERE asset_id='ASSET_RJ_002';
+UPDATE device_state SET pv_daily_energy=18.9, bat_charged_today=5.4,  bat_discharged_today=10.8, grid_import_kwh=0.0,  grid_export_kwh=0.0  WHERE asset_id='ASSET_MG_003';
+UPDATE device_state SET pv_daily_energy=24.1, bat_charged_today=9.8,  bat_discharged_today=0.0,  grid_import_kwh=12.4, grid_export_kwh=0.0  WHERE asset_id='ASSET_PR_004';
+
+-- ── Revenue Daily 今日結算（Stage 5）──
+INSERT INTO revenue_daily (asset_id, date, pv_energy_kwh, grid_export_kwh, grid_import_kwh, bat_discharged_kwh, revenue_reais, cost_reais, profit_reais, calculated_at)
+VALUES
+  ('ASSET_SP_001', CURRENT_DATE, 22.4, 0.0, 0.0,  12.3, 18650, 4250, 14400, NOW()),
+  ('ASSET_RJ_002', CURRENT_DATE, 28.6, 8.6, 0.0,  0.0,  16420, 3890, 12530, NOW()),
+  ('ASSET_MG_003', CURRENT_DATE, 18.9, 0.0, 0.0,  10.8, 11280, 2680, 8600,  NOW()),
+  ('ASSET_PR_004', CURRENT_DATE, 24.1, 0.0, 12.4, 0.0,  6100,  1895, 4205,  NOW())
+ON CONFLICT (asset_id, date) DO UPDATE SET
+  revenue_reais=EXCLUDED.revenue_reais, cost_reais=EXCLUDED.cost_reais,
+  profit_reais=EXCLUDED.profit_reais, calculated_at=NOW();
+
+-- ── RLS admin-bypass for revenue_daily（Stage 5）──
+DO $$
+BEGIN
+  IF NOT EXISTS (
+    SELECT 1 FROM pg_policy WHERE polname = 'rls_revenue_daily_admin'
+      AND polrelid = 'revenue_daily'::regclass
+  ) THEN
+    EXECUTE 'CREATE POLICY rls_revenue_daily_admin ON revenue_daily FOR SELECT
+      USING (current_setting(''app.current_org_id'', true) = ''''
+             OR current_setting(''app.current_org_id'', true) IS NULL)';
+  END IF;
+END
+$$;
+
 COMMIT;

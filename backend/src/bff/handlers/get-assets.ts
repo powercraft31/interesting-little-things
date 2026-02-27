@@ -28,7 +28,9 @@ interface FeatureFlags {
   };
 }
 
-const DEFAULT_FLAGS: FeatureFlags = {};
+const DEFAULT_FLAGS: FeatureFlags = {
+  "show-roi-metrics": { isEnabled: true },
+};
 
 async function fetchFeatureFlags(): Promise<FeatureFlags> {
   try {
@@ -130,9 +132,13 @@ export async function handler(
        a.org_id,
        a.name,
        a.region,
-       a.capacidade_kw    AS capacidade,
+       a.capacidade_kw          AS capacidade,
        a.capacity_kwh,
        a.operation_mode,
+       a.investimento_brl,
+       a.roi_pct,
+       a.payback_str,
+       a.receita_mes_brl,
        d.battery_soc,
        d.bat_soh,
        d.bat_work_status,
@@ -144,9 +150,18 @@ export async function handler(
        d.load_power,
        d.inverter_temp,
        d.is_online,
-       d.grid_frequency
+       d.grid_frequency,
+       d.pv_daily_energy,
+       d.bat_charged_today,
+       d.bat_discharged_today,
+       d.grid_import_kwh,
+       d.grid_export_kwh,
+       r.revenue_reais           AS receita_hoje_brl,
+       r.cost_reais              AS custo_hoje_brl,
+       r.profit_reais            AS lucro_hoje_brl
      FROM assets a
      LEFT JOIN device_state d ON d.asset_id = a.asset_id
+     LEFT JOIN revenue_daily r ON r.asset_id = a.asset_id AND r.date = CURRENT_DATE
      WHERE a.is_active = true
      ORDER BY a.asset_id`,
     [],
@@ -167,26 +182,26 @@ export async function handler(
     capacity_kwh: parseFloat(String(r.capacity_kwh)) || 0,
     socMedio: Math.round(parseFloat(String(r.battery_soc)) || 0),
     operationMode: r.operation_mode as string,
-    // 財務欄位 — Stage 4 接 revenue_daily 後補齊
-    investimento: 0,
-    receitaHoje: 0,
-    receitaMes: 0,
-    roi: null as number | null,
-    custoHoje: 0,
-    lucroHoje: 0,
-    payback: null as string | null,
+    // 財務欄位 — Stage 5: from assets + revenue_daily
+    investimento: parseFloat(String(r.investimento_brl)) || 0,
+    receitaHoje: parseFloat(String(r.receita_hoje_brl)) || 0,
+    receitaMes: parseFloat(String(r.receita_mes_brl)) || 0,
+    roi: r.roi_pct != null ? parseFloat(String(r.roi_pct)) : null,
+    custoHoje: parseFloat(String(r.custo_hoje_brl)) || 0,
+    lucroHoje: parseFloat(String(r.lucro_hoje_brl)) || 0,
+    payback: (r.payback_str as string) ?? null,
     // 遙測（三層嵌套）
     metering: {
       pv_power: parseFloat(String(r.pv_power)) || 0,
       battery_power: parseFloat(String(r.battery_power)) || 0,
       grid_power_kw: parseFloat(String(r.grid_power_kw)) || 0,
       load_power: parseFloat(String(r.load_power)) || 0,
-      // 日累計 — Stage 5 接 telemetry_history 後補齊
-      grid_import_kwh: 0,
-      grid_export_kwh: 0,
-      pv_daily_energy: 0,
-      bat_charged_today: 0,
-      bat_discharged_today: 0,
+      // 日累計 — Stage 5: from device_state
+      grid_import_kwh: parseFloat(String(r.grid_import_kwh)) || 0,
+      grid_export_kwh: parseFloat(String(r.grid_export_kwh)) || 0,
+      pv_daily_energy: parseFloat(String(r.pv_daily_energy)) || 0,
+      bat_charged_today: parseFloat(String(r.bat_charged_today)) || 0,
+      bat_discharged_today: parseFloat(String(r.bat_discharged_today)) || 0,
     },
     status: {
       battery_soc: parseFloat(String(r.battery_soc)) || 0,
