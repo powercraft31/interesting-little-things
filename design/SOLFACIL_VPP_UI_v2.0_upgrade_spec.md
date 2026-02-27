@@ -6,6 +6,15 @@
 
 ---
 
+## 版本歷史
+
+| 版本 | 日期 | 作者 | 變更摘要 |
+|------|------|------|---------|
+| v1.0 | 2026-02-15 | 架構團隊 | 初版：批量模式選擇與下發 UI/UX 設計，含 batchState 邏輯、三種運行模式、確認/進度/結果彈窗 |
+| v2.0 | 2026-02-27 | 架構委員會 | 完整升級版：整合四大決策 —— ①Dashboard 信任 KPI（VPP Dispatch Accuracy + DR Response Latency）；②System Health 區塊（Gateway Uptime / 72h Offline Test / 微動態 Dispatch Success Rate）；③資產卡片重構為菱形能量流圖（Diamond Energy Flow）+ 設備健康行 + 財務折疊區；④mockData 擴充 metering/status/config 三層結構，對齊巴西 HEMS 規模與能量守恆公式 |
+
+---
+
 ## 第一章：項目架構與數據層
 
 ### 1.1 現有架構分析
