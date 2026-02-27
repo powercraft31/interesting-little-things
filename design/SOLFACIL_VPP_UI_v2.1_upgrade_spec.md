@@ -53,9 +53,8 @@
     status: 'operando',        // 'operando' | 'carregando'
     investimento: 4200000,
     capacidade: 5.2,           // MWh
-    // unidades: 948,          // ⚠️ [v2.1 已移除] 原聚合器字段（VPP 管理多戶時才有意義）
-                               //    Demo 重新定位為「單一家庭 HEMS」後，此字段與場景矛盾
-                               //    已由 capacity_kwh 取代（見 §3.3）
+    capacity_kwh: 13.5,        // kWh — 電池系統裝機容量（單一家庭 HEMS）
+                               //   SP_001=13.5, RJ_002=10.0, MG_003=11.5, PR_004=14.0
     socMedio: 65,              // %
     receitaHoje: 18650,
     receitaMes: 412300,
@@ -569,11 +568,9 @@ const batchState = {
     status: 'operando',
     investimento: 4200000,
     capacidade: 5.2,           // MWh
-    // unidades 已移除 — v2.1 對齊 HEMS 單戶場景（見下方 capacity_kwh）
-    capacity_kwh: 13.5,        // kWh — [v2.1 新增] 電池系統裝機容量
-                               //   對齊 HEMS 單戶場景：SP_001=13.5, RJ_002=10.0,
-                               //   MG_003=11.5, PR_004=14.0（典型家用 10-15 kWh 範圍）
-                               //   取代原 unidades（聚合器字段）以正確反映單一家庭定位
+    capacity_kwh: 13.5,        // kWh — 電池系統裝機容量（單一家庭 HEMS）
+                               //   SP_001=13.5, RJ_002=10.0, MG_003=11.5, PR_004=14.0
+                               //   典型家用 10-15 kWh 範圍
     socMedio: 65,              // %
     receitaHoje: 18650,
     receitaMes: 412300,
@@ -1055,7 +1052,7 @@ function simulateAssetModeChange(asset, newMode) {
                     toMode: newMode,
                     success: success,
                     error: success ? null : 'communication_timeout',
-                    units: asset.unidades,
+                    capacity_kwh: asset.capacity_kwh,
                     timestamp: new Date().toISOString()
                 });
             }
