@@ -145,6 +145,63 @@
                         <span class="kpi-delta positive" id="kpiSelfConDelta">+0.0%</span>
                     </div>
                 </div>
+                <div class="kpi-card kpi-dispatch">
+                    <div class="kpi-icon"><span class="material-icons">gps_fixed</span></div>
+                    <div class="kpi-content">
+                        <span class="kpi-label" data-translate="vpp_dispatch_accuracy">VPP Dispatch Accuracy</span>
+                        <span class="kpi-value" id="kpiDispatchValue">87.3%</span>
+                        <span class="kpi-delta positive" id="kpiDispatchDelta">+2.1% vs last week</span>
+                        <span class="kpi-target" data-translate="target_dispatch">Target: &gt;85%</span>
+                    </div>
+                </div>
+                <div class="kpi-card kpi-latency">
+                    <div class="kpi-icon"><span class="material-icons">speed</span></div>
+                    <div class="kpi-content">
+                        <span class="kpi-label" data-translate="dr_response_latency">DR Response Latency</span>
+                        <span class="kpi-value" id="kpiLatencyValue">12s avg</span>
+                        <span class="kpi-delta positive" id="kpiLatencyDelta">-3s vs last week</span>
+                        <span class="kpi-target" data-translate="target_latency">Target: &lt;15 min ✅</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- System Health Block -->
+            <div class="system-health-block" id="systemHealthBlock">
+                <div class="sh-header">
+                    <span class="material-icons">shield</span>
+                    <span data-translate="system_health">System Health</span>
+                </div>
+                <div class="sh-metrics">
+                    <div class="sh-metric">
+                        <span class="sh-metric-icon material-icons">signal_wifi_statusbar_connected_no_internet_4</span>
+                        <div class="sh-metric-body">
+                            <span class="sh-metric-label" data-translate="gateway_uptime">Gateway Uptime</span>
+                            <span class="sh-metric-value" id="shUptime">99.7%</span>
+                            <span class="sh-metric-sub">Last 30 days</span>
+                        </div>
+                        <span class="sh-badge sh-badge-green">● Operational</span>
+                    </div>
+                    <div class="sh-metric">
+                        <span class="sh-metric-icon material-icons">wifi_off</span>
+                        <div class="sh-metric-body">
+                            <span class="sh-metric-label" data-translate="offline_test_passed">72h Offline Test</span>
+                            <span class="sh-metric-value" id="shOfflineTest">✅ PASSED</span>
+                            <span class="sh-metric-sub">Resumed in 4m 23s</span>
+                        </div>
+                        <span class="sh-badge sh-badge-green">● Verified</span>
+                    </div>
+                    <div class="sh-metric">
+                        <span class="sh-metric-icon material-icons">task_alt</span>
+                        <div class="sh-metric-body">
+                            <span class="sh-metric-label" data-translate="dispatch_success_rate">Dispatch Success Rate</span>
+                            <span class="sh-metric-value">
+                                <span id="dispatchSuccessCount">156</span> / <span id="dispatchTotalCount">160</span>
+                            </span>
+                            <span class="sh-metric-sub">This month · 97.5%</span>
+                        </div>
+                        <span class="sh-badge sh-badge-green">● On Track</span>
+                    </div>
+                </div>
             </div>
 
             <!-- Main Charts -->

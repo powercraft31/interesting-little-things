@@ -26,6 +26,35 @@ const MOCK_ASSETS = [
     lucroHoje: 14400,
     payback: "3,8",
     operationMode: "peak_valley_arbitrage",
+    metering: {
+      pv_power: 4.8,
+      battery_power: 1.6,
+      grid_power_kw: 2.0,
+      load_power: 5.2,
+      grid_import_kwh: 3.2,
+      grid_export_kwh: 0.0,
+      pv_daily_energy: 18.4,
+      bat_charged_today: 8.1,
+      bat_discharged_today: 0.0,
+    },
+    status: {
+      battery_soc: 65,
+      bat_soh: 96,
+      bat_work_status: "charging",
+      battery_voltage: 384,
+      bat_cycle_count: 284,
+      inverter_temp: 38,
+      is_online: true,
+      grid_frequency: 60,
+    },
+    config: {
+      target_mode: "peak_valley_arbitrage",
+      min_soc: 20,
+      max_charge_rate: 5.0,
+      charge_window_start: "22:00",
+      charge_window_end: "06:00",
+      discharge_window_start: "18:00",
+    },
   },
   {
     id: "ASSET_RJ_002",
@@ -43,6 +72,35 @@ const MOCK_ASSETS = [
     lucroHoje: 12530,
     payback: "4,1",
     operationMode: "self_consumption",
+    metering: {
+      pv_power: 5.5,
+      battery_power: -2.1,
+      grid_power_kw: 0.0,
+      load_power: 7.4,
+      grid_import_kwh: 0.1,
+      grid_export_kwh: 0.0,
+      pv_daily_energy: 21.2,
+      bat_charged_today: 4.2,
+      bat_discharged_today: 6.8,
+    },
+    status: {
+      battery_soc: 72,
+      bat_soh: 94,
+      bat_work_status: "discharging",
+      battery_voltage: 396,
+      bat_cycle_count: 312,
+      inverter_temp: 35,
+      is_online: true,
+      grid_frequency: 60,
+    },
+    config: {
+      target_mode: "self_consumption",
+      min_soc: 15,
+      max_charge_rate: 4.8,
+      charge_window_start: "11:00",
+      charge_window_end: "16:00",
+      discharge_window_start: "17:00",
+    },
   },
   {
     id: "ASSET_MG_003",
@@ -60,6 +118,35 @@ const MOCK_ASSETS = [
     lucroHoje: 8600,
     payback: "4,5",
     operationMode: "peak_valley_arbitrage",
+    metering: {
+      pv_power: 1.2,
+      battery_power: -4.5,
+      grid_power_kw: -2.5,
+      load_power: 3.2,
+      grid_import_kwh: 0.0,
+      grid_export_kwh: 11.4,
+      pv_daily_energy: 9.8,
+      bat_charged_today: 10.2,
+      bat_discharged_today: 14.8,
+    },
+    status: {
+      battery_soc: 58,
+      bat_soh: 91,
+      bat_work_status: "discharging",
+      battery_voltage: 372,
+      bat_cycle_count: 447,
+      inverter_temp: 41,
+      is_online: true,
+      grid_frequency: 60,
+    },
+    config: {
+      target_mode: "peak_valley_arbitrage",
+      min_soc: 20,
+      max_charge_rate: 4.5,
+      charge_window_start: "23:00",
+      charge_window_end: "06:00",
+      discharge_window_start: "17:30",
+    },
   },
   {
     id: "ASSET_PR_004",
@@ -77,6 +164,35 @@ const MOCK_ASSETS = [
     lucroHoje: 4205,
     payback: "4,8",
     operationMode: "peak_shaving",
+    metering: {
+      pv_power: 0.3,
+      battery_power: -3.0,
+      grid_power_kw: 4.8,
+      load_power: 8.1,
+      grid_import_kwh: 22.1,
+      grid_export_kwh: 0.0,
+      pv_daily_energy: 2.4,
+      bat_charged_today: 0.0,
+      bat_discharged_today: 9.3,
+    },
+    status: {
+      battery_soc: 34,
+      bat_soh: 88,
+      bat_work_status: "discharging",
+      battery_voltage: 348,
+      bat_cycle_count: 521,
+      inverter_temp: 44,
+      is_online: true,
+      grid_frequency: 60,
+    },
+    config: {
+      target_mode: "peak_shaving",
+      min_soc: 20,
+      max_charge_rate: 3.0,
+      charge_window_start: "01:00",
+      charge_window_end: "05:00",
+      discharge_window_start: "07:00",
+    },
   },
 ];
 
@@ -229,7 +345,9 @@ export async function initData() {
       // BFF /assets returns { assets: [...], _tenant: {...} } after RBAC upgrade
       workingAssets = deepCopy(Array.isArray(assets) ? assets : assets.assets);
       revenueTrendData = revenueTrend;
-      tradesData = Array.isArray(trades) ? deepCopy(trades) : deepCopy(trades.trades ?? trades);
+      tradesData = Array.isArray(trades)
+        ? deepCopy(trades)
+        : deepCopy(trades.trades ?? trades);
       console.log("[SOLFACIL] Data loaded from BFF");
       return;
     } catch (err) {
