@@ -64,6 +64,19 @@ function wrapHandler(handler: LambdaHandler, method: string, path: string) {
 
 const app = express();
 
+// Demo mode: inject default auth context if no Authorization header is provided
+// Allows frontend to call the API without a login flow during local testing
+app.use((req, _res, next) => {
+  if (!req.headers.authorization) {
+    req.headers.authorization = JSON.stringify({
+      userId: 'demo-user',
+      orgId: 'ORG_SOLFACIL',
+      role: 'SOLFACIL_ADMIN',  // demo: see all 4 assets across orgs
+    });
+  }
+  next();
+});
+
 app.use(cors({
   origin: (origin, callback) => {
     if (!origin || /^https?:\/\/(localhost|152\.42\.235\.155)(:\d+)?$/.test(origin)) {
