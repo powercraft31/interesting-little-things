@@ -131,6 +131,13 @@ CREATE TABLE device_state (
 CREATE TABLE telemetry_history (
   id             BIGSERIAL,
   asset_id       VARCHAR(50)  NOT NULL,
+  -- ⚠️  架構決策：此欄位刻意不建立 REFERENCES assets(asset_id) 的外鍵約束。
+  -- 原因：telemetry_history 是高併發寫入的時序表（每 5 分鐘 × 全量設備）。
+  -- 外鍵約束在每次 INSERT 時會觸發對 assets 表的鎖定檢查，在高峰期將嚴重
+  -- 降低寫入吞吐量，並可能導致鎖競爭（Lock Contention）。
+  -- 資料完整性由 M1 IoT Hub 業務層保證：僅允許已在 assets 表中登記的
+  -- asset_id 寫入遙測資料，未知設備會在 M1 的設備驗證層被攔截。
+  -- ❌ 禁止後續工程師「好意」補上 FK — 此決策不可逆，改動前必須評估效能影響。
   recorded_at    TIMESTAMPTZ  NOT NULL,
   battery_soc    DECIMAL(5,2),
   pv_power       DECIMAL(8,3),
@@ -151,6 +158,13 @@ CREATE TABLE telemetry_history_2026_02
 CREATE TABLE telemetry_history_2026_03
   PARTITION OF telemetry_history
   FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
+
+-- Default Partition：安全網。當定時 Job 未能提前建立當月分區時，
+-- 資料會落入此表而非導致 INSERT 報錯崩潰。
+-- 運維告警：若 telemetry_history_default 中出現資料，表示分區維護 Job 失敗，
+-- 需立即排查並手動將資料遷移至正確的月份分區。
+CREATE TABLE telemetry_history_default
+  PARTITION OF telemetry_history DEFAULT;
 
 CREATE INDEX idx_telemetry_asset_time
   ON telemetry_history (asset_id, recorded_at DESC);
@@ -289,6 +303,57 @@ CREATE TABLE feature_flags (
   updated_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   UNIQUE (flag_name, COALESCE(org_id, ''))
 );
+
+-- ═══════════════════════════════════════════════════════════════════
+-- §RLS  Row-Level Security — 租戶隔離
+-- ═══════════════════════════════════════════════════════════════════
+-- 說明：每張含 org_id 的業務表均啟用 RLS，確保跨租戶資料隔離。
+--       App 連線時需先執行 SET app.current_org_id = '<org_id>';
+--       以設定當前會話的租戶上下文。
+
+-- assets
+ALTER TABLE assets ENABLE ROW LEVEL SECURITY;
+CREATE POLICY rls_assets ON assets
+  USING (org_id = current_setting('app.current_org_id', true));
+
+-- tariff_schedules
+ALTER TABLE tariff_schedules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY rls_tariff_schedules ON tariff_schedules
+  USING (org_id = current_setting('app.current_org_id', true));
+
+-- revenue_daily
+ALTER TABLE revenue_daily ENABLE ROW LEVEL SECURITY;
+CREATE POLICY rls_revenue_daily ON revenue_daily
+  USING (org_id = current_setting('app.current_org_id', true));
+
+-- trades
+ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
+CREATE POLICY rls_trades ON trades
+  USING (org_id = current_setting('app.current_org_id', true));
+
+-- dispatch_records
+ALTER TABLE dispatch_records ENABLE ROW LEVEL SECURITY;
+CREATE POLICY rls_dispatch_records ON dispatch_records
+  USING (org_id = current_setting('app.current_org_id', true));
+
+-- vpp_strategies
+ALTER TABLE vpp_strategies ENABLE ROW LEVEL SECURITY;
+CREATE POLICY rls_vpp_strategies ON vpp_strategies
+  USING (org_id = current_setting('app.current_org_id', true));
+
+-- parser_rules（NULL org_id = 全局規則，所有人可見）
+ALTER TABLE parser_rules ENABLE ROW LEVEL SECURITY;
+CREATE POLICY rls_parser_rules ON parser_rules
+  USING (org_id IS NULL OR org_id = current_setting('app.current_org_id', true));
+
+-- feature_flags（NULL org_id = 全局 flag，所有人可見）
+ALTER TABLE feature_flags ENABLE ROW LEVEL SECURITY;
+CREATE POLICY rls_feature_flags ON feature_flags
+  USING (org_id IS NULL OR org_id = current_setting('app.current_org_id', true));
+
+-- ⚠️  注意：SOLFACIL_ADMIN 超管帳號需使用 BYPASSRLS 屬性的 DB role，
+--       或在每次查詢前 SET app.current_org_id = '' 搭配 policy 的 OR TRUE 分支。
+--       具體實作由 M6 Identity Module 的 DB connection pool 負責注入。
 ```
 
 ---

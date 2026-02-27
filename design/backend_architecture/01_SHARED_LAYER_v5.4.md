@@ -191,7 +191,7 @@ export interface AssetRecord {
   readonly assetId: string;
   readonly orgId: string;
   readonly region: string;
-  readonly capacidade: number;           // kW 裝機容量（逆變器額定功率）
+  readonly capacidade_kw: number;        // kW 裝機容量（逆變器額定功率）
   readonly capacity_kwh: number;          // 電池系統裝機容量 (kWh)，取代原 unidades，對齊 HEMS 單戶場景
   readonly operationalStatus: string;     // 運行狀態 'operando' | 'carregando' | 'offline'
   readonly metering: {
