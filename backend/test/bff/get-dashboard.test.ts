@@ -69,7 +69,7 @@ describe("GET /dashboard handler", () => {
     expect(data.avgSoc).toBe(57);
 
     // totalPowerKw 和 totalPvKw 是字串（.toFixed(1)）
-    expect(typeof data.totalPowerKw).toBe('string');
+    expect(typeof data.totalPowerKw).toBe("string");
     expect(parseFloat(data.totalPowerKw)).toBeGreaterThan(0);
   });
 
@@ -110,15 +110,16 @@ describe("GET /dashboard handler", () => {
     const data = body.data;
 
     // API contract fields — 這些欄位不能消失（breaking change 防呆）
-    expect(data).toHaveProperty('totalAssets');
-    expect(data).toHaveProperty('onlineAssets');
-    expect(data).toHaveProperty('avgSoc');
-    expect(data).toHaveProperty('alpha');
-    expect(data).toHaveProperty('mape');
-    expect(data).toHaveProperty('selfConsumption');
-    expect(data).toHaveProperty('dispatchSuccessCount');
-    expect(data).toHaveProperty('dispatchTotalCount');
-    expect(data).toHaveProperty('dispatchSuccessRate');
-    expect(data).toHaveProperty('systemHealthBlock');
+    expect(data).toHaveProperty("totalAssets");
+    expect(data).toHaveProperty("onlineAssets");
+    expect(data).toHaveProperty("avgSoc");
+    expect(data).toHaveProperty("vppDispatchAccuracy");
+    expect(data).toHaveProperty("drResponseLatency");
+    expect(data).toHaveProperty("gatewayUptime");
+    expect(data).toHaveProperty("selfConsumption");
+    expect(data).toHaveProperty("dispatchSuccessCount");
+    expect(data).toHaveProperty("dispatchTotalCount");
+    expect(data).toHaveProperty("dispatchSuccessRate");
+    expect(data).toHaveProperty("systemHealthBlock");
   });
 });

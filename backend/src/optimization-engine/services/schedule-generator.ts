@@ -1,13 +1,13 @@
-import cron from 'node-cron';
-import { Pool } from 'pg';
+import cron from "node-cron";
+import { Pool } from "pg";
 
 export function startScheduleGenerator(pool: Pool): void {
   // 立即執行一次（系統啟動時），然後每小時定期跑
   runScheduleGenerator(pool);
-  cron.schedule('0 * * * *', () => runScheduleGenerator(pool));
+  cron.schedule("0 * * * *", () => runScheduleGenerator(pool));
 }
 
-async function runScheduleGenerator(pool: Pool): Promise<void> {
+export async function runScheduleGenerator(pool: Pool): Promise<void> {
   try {
     // 1. 取得每小時平均 PLD 作為代理電價（因為 pld_horario 只有 Jan 2026 歷史資料）
     const pldResult = await pool.query<{ hora: number; avg_pld: number }>(`
@@ -39,13 +39,16 @@ async function runScheduleGenerator(pool: Pool): Promise<void> {
       const volumeKwh = powerKw * 1; // 1 小時 = volume_kwh
 
       // 3. 刪除此 asset 未來 24 小時內尚未開始的舊排程（避免重複）
-      await pool.query(`
+      await pool.query(
+        `
         DELETE FROM trade_schedules
         WHERE asset_id = $1
           AND status = 'scheduled'
           AND planned_time >= NOW()
           AND planned_time < NOW() + INTERVAL '24 hours'
-      `, [asset.asset_id]);
+      `,
+        [asset.asset_id],
+      );
 
       // 4. 產生未來 24 小時的排程
       const inserts: Array<[string, string, Date, string, number, number]> = [];
@@ -56,30 +59,49 @@ async function runScheduleGenerator(pool: Pool): Promise<void> {
 
         // Mock Rule-based 決策邏輯：
         // 深夜強制充電（00:00-05:00），高電價放電（PLD >= 300），其餘充電
-        let action: 'charge' | 'discharge';
+        let action: "charge" | "discharge";
         if (hora >= 0 && hora < 5) {
-          action = 'charge';
+          action = "charge";
         } else if (pld >= 300) {
-          action = 'discharge';
+          action = "discharge";
         } else {
-          action = 'charge';
+          action = "charge";
         }
 
-        inserts.push([asset.asset_id, asset.org_id, slotTime, action, volumeKwh, pld]);
+        inserts.push([
+          asset.asset_id,
+          asset.org_id,
+          slotTime,
+          action,
+          volumeKwh,
+          pld,
+        ]);
       }
 
       // 5. 批次 INSERT
-      for (const [assetId, orgId, plannedTime, action, volume, pld] of inserts) {
-        await pool.query(`
+      for (const [
+        assetId,
+        orgId,
+        plannedTime,
+        action,
+        volume,
+        pld,
+      ] of inserts) {
+        await pool.query(
+          `
           INSERT INTO trade_schedules
             (asset_id, org_id, planned_time, action, expected_volume_kwh, target_pld_price, status)
           VALUES ($1, $2, $3, $4, $5, $6, 'scheduled')
-        `, [assetId, orgId, plannedTime, action, volume, pld]);
+        `,
+          [assetId, orgId, plannedTime, action, volume, pld],
+        );
       }
     }
 
-    console.log(`[ScheduleGenerator] Generated schedules for ${assetsResult.rows.length} assets at ${new Date().toISOString()}`);
+    console.log(
+      `[ScheduleGenerator] Generated schedules for ${assetsResult.rows.length} assets at ${new Date().toISOString()}`,
+    );
   } catch (err) {
-    console.error('[ScheduleGenerator] Error:', err);
+    console.error("[ScheduleGenerator] Error:", err);
   }
 }
