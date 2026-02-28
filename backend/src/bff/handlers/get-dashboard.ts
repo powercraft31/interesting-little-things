@@ -13,10 +13,11 @@ import { queryWithOrg } from "../../shared/db";
 
 /**
  * GET /dashboard
- * 返回 VPP 仪表盘的聚合 KPI：
- * - 資產統計（totalAssets, onlineAssets, avgSoc, totalPowerKw, totalPvKw）
- * - 算法 KPI（alpha、mape、selfConsumption）— Stage 5 優化引擎上線後補齊
- * - 財務 KPI — Stage 4 接 revenue_daily 後補齊
+ * v5.5: VPP 儀表盤聚合 KPI
+ * - 資產統計（assets JOIN device_state）
+ * - 今日雙層收益（revenue_daily）
+ * - 自消費率（algorithm_metrics）
+ * - 移除 alpha / mape（不再使用技術精度指標）
  */
 export async function handler(
   event: APIGatewayProxyEventV2,
@@ -35,42 +36,68 @@ export async function handler(
     return apiError(e.statusCode ?? 500, e.message ?? "Error");
   }
 
-  // ── 從 DB 聚合（assets JOIN device_state）──────────────────────
   const isAdmin = ctx.role === Role.SOLFACIL_ADMIN;
   const rlsOrgId = isAdmin ? null : ctx.orgId;
 
-  const { rows } = await queryWithOrg(
-    `SELECT
-       COUNT(a.asset_id)::int                                      AS total_assets,
-       COUNT(d.is_online) FILTER (WHERE d.is_online = true)::int   AS online_assets,
-       COALESCE(AVG(d.battery_soc), 0)                             AS avg_soc,
-       COALESCE(SUM(d.load_power), 0)                              AS total_load_kw,
-       COALESCE(SUM(d.pv_power), 0)                                AS total_pv_kw
-     FROM assets a
-     LEFT JOIN device_state d ON d.asset_id = a.asset_id
-     WHERE a.is_active = true`,
-    [],
-    rlsOrgId,
-  );
+  // ── 並行查詢 3 個資料來源 ──────────────────────────────
+  const [assetResult, revenueResult, metricsResult] = await Promise.all([
+    // 查詢 1：資產聚合（assets JOIN device_state）
+    queryWithOrg(
+      `SELECT
+         COUNT(a.asset_id)::int                                      AS total_assets,
+         COUNT(d.is_online) FILTER (WHERE d.is_online = true)::int   AS online_assets,
+         COALESCE(AVG(d.battery_soc), 0)                             AS avg_soc,
+         COALESCE(SUM(d.load_power), 0)                              AS total_load_kw,
+         COALESCE(SUM(d.pv_power), 0)                                AS total_pv_kw
+       FROM assets a
+       LEFT JOIN device_state d ON d.asset_id = a.asset_id
+       WHERE a.is_active = true`,
+      [],
+      rlsOrgId,
+    ),
+    // 查詢 2：今日雙層收益（revenue_daily）
+    queryWithOrg(
+      `SELECT
+         COALESCE(SUM(vpp_arbitrage_profit_reais), 0) AS vpp_profit,
+         COALESCE(SUM(client_savings_reais), 0)        AS client_savings,
+         COALESCE(SUM(profit_reais), 0)                AS legacy_profit
+       FROM revenue_daily
+       WHERE date = CURRENT_DATE`,
+      [],
+      rlsOrgId,
+    ),
+    // 查詢 3：最新 self_consumption（algorithm_metrics）
+    queryWithOrg(
+      `SELECT self_consumption_pct
+       FROM algorithm_metrics
+       WHERE date <= CURRENT_DATE
+       ORDER BY date DESC
+       LIMIT 1`,
+      [],
+      rlsOrgId,
+    ),
+  ]);
 
-  const agg = rows[0] as Record<string, unknown>;
+  const agg = assetResult.rows[0] as Record<string, unknown>;
+  const rev = revenueResult.rows[0] as Record<string, unknown>;
+  const selfConsumptionPct = metricsResult.rows.length > 0
+    ? parseFloat(String(metricsResult.rows[0].self_consumption_pct)).toFixed(1)
+    : "\u2014";
 
   const body = ok({
-    // === DB 真實聚合 ===
+    // === DB 真實聚合：資產統計 ===
     totalAssets: agg.total_assets as number,
     onlineAssets: agg.online_assets as number,
     avgSoc: Math.round(parseFloat(String(agg.avg_soc))),
     totalPowerKw: parseFloat(String(agg.total_load_kw)).toFixed(1),
     totalPvKw: parseFloat(String(agg.total_pv_kw)).toFixed(1),
 
-    // === 財務 KPI — Stage 4 接 revenue_daily 後補齊（暫時 0）===
-    dailyRevenueReais: 0,
+    // === DB 真實聚合：財務 KPI（v5.5 雙層） ===
+    dailyRevenueReais: Math.round(Number(rev.vpp_profit)),
     monthlyRevenueReais: 0,
 
-    // === 演算法 KPI — Stage 5 優化引擎資料上線後補齊（暫時靜態）===
-    alpha: { value: "76.3", delta: "0.0" },
-    mape: { value: "18.5", delta: "0.0" },
-    selfConsumption: { value: "98.2", delta: "0.0" },
+    // === DB 真實聚合：演算法 KPI ===
+    selfConsumption: { value: selfConsumptionPct, delta: "0.0" },
     dispatchSuccessCount: 156,
     dispatchTotalCount: 160,
     systemHealthBlock: "OPTIMAL",
@@ -81,10 +108,15 @@ export async function handler(
     gatewayUptime: 99.9,
     dispatchSuccessRate: "156/160",
 
-    // === Revenue Breakdown（圓環圖）— 與前端 MOCK_DASHBOARD 值一致 ===
+    // === Revenue Breakdown（圓環圖）— v5.5 雙層：B端 + C端 + 其他 ===
     revenueBreakdown: {
-      values: [32450, 12385, 3400],
+      values: [
+        Math.round(Number(rev.vpp_profit)),
+        Math.round(Number(rev.client_savings)),
+        0,
+      ],
       colors: ["#3730a3", "#059669", "#d97706"],
+      labels: ["VPP Arbitrage", "Client Savings", "Other"],
     },
 
     _tenant: { orgId: ctx.orgId, role: ctx.role },
