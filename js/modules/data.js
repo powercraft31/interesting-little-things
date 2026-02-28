@@ -479,6 +479,10 @@ export function getAssetsToChange(selectedIds, targetMode) {
 // Algorithm KPI Data Functions
 // ============================================
 
+export function getDailyRevenueReais() {
+  return dashboardData.dailyRevenueReais ?? 0;
+}
+
 export function getOptimizationAlpha() {
   const base = parseFloat(dashboardData.alpha?.value ?? "76.3");
   const delta = (Math.random() - 0.5) * 2;

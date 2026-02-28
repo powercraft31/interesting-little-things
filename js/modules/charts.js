@@ -220,8 +220,8 @@ function initializeRevenueTrendChart() {
       labels: translatedLabels,
       datasets: [
         {
-          label: t("gross_revenue"),
-          data: trendData.receita,
+          label: t("vpp_arbitrage_profit"),
+          data: trendData.vppArbitrageProfit || trendData.receita,
           backgroundColor: "rgba(55, 48, 163, 0.7)",
           borderRadius: 6,
           order: 2,
@@ -234,8 +234,8 @@ function initializeRevenueTrendChart() {
           order: 2,
         },
         {
-          label: t("net_profit"),
-          data: trendData.lucro,
+          label: t("client_bill_savings"),
+          data: trendData.clientSavings || trendData.lucro,
           type: "line",
           borderColor: "#059669",
           backgroundColor: "rgba(5, 150, 105, 0.1)",
@@ -377,9 +377,9 @@ export function updateChartLabels() {
   if (revenueTrendChart) {
     const weekdays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
     revenueTrendChart.data.labels = weekdays.map((day) => t(day));
-    revenueTrendChart.data.datasets[0].label = t("gross_revenue");
+    revenueTrendChart.data.datasets[0].label = t("vpp_arbitrage_profit");
     revenueTrendChart.data.datasets[1].label = t("cost");
-    revenueTrendChart.data.datasets[2].label = t("net_profit");
+    revenueTrendChart.data.datasets[2].label = t("client_bill_savings");
     revenueTrendChart.update();
   }
 
@@ -494,13 +494,15 @@ export function updateRevenueTrendPeriod(days) {
   if (days === 7) {
     const weekdays = ["mon", "tue", "wed", "thu", "fri", "sat", "sun"];
     revenueTrendChart.data.labels = weekdays.map((day) => t(day));
-    revenueTrendChart.data.datasets[0].data = baseData.receita;
+    revenueTrendChart.data.datasets[0].data =
+      baseData.vppArbitrageProfit || baseData.receita;
     revenueTrendChart.data.datasets[1].data = baseData.custo;
-    revenueTrendChart.data.datasets[2].data = baseData.lucro;
+    revenueTrendChart.data.datasets[2].data =
+      baseData.clientSavings || baseData.lucro;
   } else if (days === 30) {
     // Generate 30-day simulated data grouped by weeks
     const labels = ["S1", "S2", "S3", "S4"];
-    const receita = baseData.receita
+    const receita = (baseData.vppArbitrageProfit || baseData.receita)
       .slice(0, 4)
       .map((v, i) => Math.round(v * (6.5 + i * 0.3)));
     const custo = baseData.custo

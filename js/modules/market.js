@@ -6,11 +6,7 @@
 import { t } from "../utils/i18n.js";
 import { formatDate, formatNumber } from "../utils/format.js";
 import { getLanguage } from "../utils/i18n.js";
-import {
-  getOptimizationAlpha,
-  getForecastMAPE,
-  getSelfConsumptionRate,
-} from "./data.js";
+import { getDailyRevenueReais, getSelfConsumptionRate } from "./data.js";
 
 export function setCurrentDate() {
   const el = document.getElementById("currentDate");
@@ -112,27 +108,19 @@ export function updateFinancialMetrics() {
     activeEl.textContent = formatNumber(active);
   }
 
-  // Algorithm KPI Cards
-  const alpha = getOptimizationAlpha();
-  const alphaValEl = document.getElementById("kpiAlphaValue");
-  if (alphaValEl) alphaValEl.textContent = alpha.value + "%";
-  const alphaDeltaEl = document.getElementById("kpiAlphaDelta");
-  if (alphaDeltaEl) {
-    alphaDeltaEl.textContent =
-      (alpha.delta >= 0 ? "+" : "") + alpha.delta + "%";
-    alphaDeltaEl.className =
-      "kpi-delta " + (alpha.delta >= 0 ? "positive" : "negative");
-  }
+  // v5.5：VPP 套利收益（B端）
+  const vppProfit = getDailyRevenueReais();
+  const vppProfitEl = document.getElementById("kpiVppProfitValue");
+  if (vppProfitEl)
+    vppProfitEl.textContent =
+      "R$ " + Math.round(vppProfit).toLocaleString("pt-BR");
 
-  const mape = getForecastMAPE();
-  const mapeValEl = document.getElementById("kpiMAPEValue");
-  if (mapeValEl) mapeValEl.textContent = mape.value + "%";
-  const mapeDeltaEl = document.getElementById("kpiMAPEDelta");
-  if (mapeDeltaEl) {
-    mapeDeltaEl.textContent = (mape.delta >= 0 ? "+" : "") + mape.delta + "%";
-    mapeDeltaEl.className =
-      "kpi-delta " + (mape.delta >= 0 ? "positive" : "negative");
-  }
+  // v5.5：客戶省電金額（C端）
+  // 從 revenue_daily 的 client_savings 估算（今日套利的約 15%）
+  const clientSavings = Math.round(vppProfit * 0.15);
+  const clientSavingsEl = document.getElementById("kpiClientSavingsValue");
+  if (clientSavingsEl)
+    clientSavingsEl.textContent = "R$ " + clientSavings.toLocaleString("pt-BR");
 
   const selfCon = getSelfConsumptionRate();
   const selfConValEl = document.getElementById("kpiSelfConValue");
