@@ -120,7 +120,7 @@ SELECT
     END
   ) AS vpp_arbitrage_profit_reais
 FROM trade_schedules ts
-JOIN assets a ON ts.asset_id = a.id
+JOIN assets a ON ts.asset_id = a.asset_id
 JOIN pld_horario p ON
   p.submercado = a.submercado AND
   p.mes_referencia = TO_CHAR(ts.planned_time, 'YYYYMM')::INT AND
@@ -141,7 +141,7 @@ SELECT
   SUM(th.solar_kwh_direct) * AVG(a.retail_buy_rate_kwh) AS client_savings_reais,
   (SUM(th.solar_kwh_direct) / NULLIF(SUM(th.solar_kwh_total), 0)) * 100 AS actual_self_consumption_pct
 FROM telemetry_history th
-JOIN assets a ON th.asset_id = a.id
+JOIN assets a ON th.asset_id = a.asset_id
 WHERE th.recorded_at::DATE = CURRENT_DATE - INTERVAL '1 day'
 GROUP BY a.org_id;
 ```

@@ -237,7 +237,7 @@ export interface AssetRecord {
 
 export interface TradeRecord {
   id: string;
-  assetId: number;
+  assetId: string;           // VARCHAR(50)，對應 assets.asset_id
   orgId: string;
   plannedTime: string;           // ISO 8601
   action: 'charge' | 'discharge' | 'idle';
