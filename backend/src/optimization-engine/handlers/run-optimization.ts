@@ -16,7 +16,7 @@
 import {
   EventBridgeClient,
   PutEventsCommand,
-} from '@aws-sdk/client-eventbridge';
+} from "@aws-sdk/client-eventbridge";
 
 // ---------------------------------------------------------------------------
 // 类型定义
@@ -26,10 +26,10 @@ interface OptimizationEvent {
   readonly orgId: string;
   readonly assetId: string;
   readonly soc: number;
-  readonly currentTariffPeriod: 'peak' | 'off-peak' | 'intermediate';
+  readonly currentTariffPeriod: "peak" | "off-peak" | "intermediate";
 }
 
-type TargetMode = 'discharge' | 'charge' | 'idle';
+type TargetMode = "discharge" | "charge" | "idle";
 
 interface OptimizationResult {
   readonly success: true;
@@ -59,14 +59,15 @@ interface VppStrategiesConfig {
 // 环境变量与常量
 // ---------------------------------------------------------------------------
 
-const EVENT_BUS_NAME  = process.env.EVENT_BUS_NAME      ?? '';
-const APPCONFIG_BASE  = process.env.APPCONFIG_BASE_URL   ?? 'http://localhost:2772';
-const APPCONFIG_APP   = process.env.APPCONFIG_APP        ?? 'solfacil-vpp-dev';
-const APPCONFIG_ENV   = process.env.APPCONFIG_ENV        ?? 'dev';
+const EVENT_BUS_NAME = process.env.EVENT_BUS_NAME ?? "";
+const APPCONFIG_BASE =
+  process.env.APPCONFIG_BASE_URL ?? "http://localhost:2772";
+const APPCONFIG_APP = process.env.APPCONFIG_APP ?? "solfacil-vpp-dev";
+const APPCONFIG_ENV = process.env.APPCONFIG_ENV ?? "dev";
 
 const DEFAULT_STRATEGY: VppStrategyConfig = {
-  minSoc:       20,
-  maxSoc:       90,
+  minSoc: 20,
+  maxSoc: 90,
   emergencySoc: 10,
   profitMargin: 0.15,
 };
@@ -97,35 +98,50 @@ async function fetchVppStrategy(orgId: string): Promise<VppStrategyConfig> {
 // Handler
 // ---------------------------------------------------------------------------
 
-export async function handler(event: OptimizationEvent): Promise<OptimizationResult> {
+// TODO: v5.6 — Implement real dual-objective optimization.
+// Current Demo state: revenue_daily uses pre-seeded values (migration_v5.5.sql).
+// Production target: Maximize PLD arbitrage profit subject to:
+//   self_consumption_pct >= vpp_strategies.target_self_consumption_pct
+// Algorithm candidates: Linear Programming (LP) or Model Predictive Control (MPC).
+// Reference: design/backend_architecture/02_OPTIMIZATION_ENGINE_v5.5.md
+export async function handler(
+  event: OptimizationEvent,
+): Promise<OptimizationResult> {
   const traceId = `vpp-${crypto.randomUUID()}`;
   const { orgId, assetId, soc, currentTariffPeriod } = event;
 
   // ── 输入验证 ───────────────────────────────────────────────────────────
   if (!orgId || !assetId) {
-    throw new Error('Missing required field');
+    throw new Error("Missing required field");
   }
   if (soc < 0 || soc > 100) {
-    throw new Error('Invalid SOC value');
+    throw new Error("Invalid SOC value");
   }
 
   // ── 从 AppConfig 获取动态策略 ──────────────────────────────────────────
   const strategy = await fetchVppStrategy(orgId);
 
   // ── 套利决策 ───────────────────────────────────────────────────────────
-  const targetMode = resolveTargetMode(currentTariffPeriod, soc, strategy.minSoc, strategy.maxSoc);
-
-  console.info(JSON.stringify({
-    level: 'INFO',
-    traceId,
-    module: 'M2',
-    action: 'optimization_result',
-    assetId,
-    orgId,
-    targetMode,
+  const targetMode = resolveTargetMode(
+    currentTariffPeriod,
     soc,
-    tariffPeriod: currentTariffPeriod,
-  }));
+    strategy.minSoc,
+    strategy.maxSoc,
+  );
+
+  console.info(
+    JSON.stringify({
+      level: "INFO",
+      traceId,
+      module: "M2",
+      action: "optimization_result",
+      assetId,
+      orgId,
+      targetMode,
+      soc,
+      tariffPeriod: currentTariffPeriod,
+    }),
+  );
 
   // ── 发布到 EventBridge ─────────────────────────────────────────────────
   const dispatchId = crypto.randomUUID();
@@ -136,8 +152,8 @@ export async function handler(event: OptimizationEvent): Promise<OptimizationRes
       Entries: [
         {
           EventBusName: EVENT_BUS_NAME,
-          Source: 'solfacil.optimization-engine',
-          DetailType: 'DRCommandIssued',
+          Source: "solfacil.optimization-engine",
+          DetailType: "DRCommandIssued",
           Detail: JSON.stringify({
             dispatchId,
             assetId,
@@ -153,13 +169,15 @@ export async function handler(event: OptimizationEvent): Promise<OptimizationRes
     }),
   );
 
-  console.info(JSON.stringify({
-    level: 'INFO',
-    traceId,
-    module: 'M2',
-    action: 'event_published',
-    dispatchId,
-  }));
+  console.info(
+    JSON.stringify({
+      level: "INFO",
+      traceId,
+      module: "M2",
+      action: "event_published",
+      dispatchId,
+    }),
+  );
 
   return {
     success: true,
@@ -180,12 +198,12 @@ export async function handler(event: OptimizationEvent): Promise<OptimizationRes
 // ---------------------------------------------------------------------------
 
 function resolveTargetMode(
-  period: 'peak' | 'off-peak' | 'intermediate',
+  period: "peak" | "off-peak" | "intermediate",
   soc: number,
   minSoc: number,
   maxSoc: number,
 ): TargetMode {
-  if (period === 'peak' && soc > minSoc) return 'discharge';
-  if (period === 'off-peak' && soc < maxSoc) return 'charge';
-  return 'idle';
+  if (period === "peak" && soc > minSoc) return "discharge";
+  if (period === "off-peak" && soc < maxSoc) return "charge";
+  return "idle";
 }

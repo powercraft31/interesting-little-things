@@ -71,3 +71,16 @@ CREATE POLICY vpp_strategies_org_isolation ON vpp_strategies
     current_setting('app.current_org_id', TRUE) = 'SOLFACIL' OR
     org_id = current_setting('app.current_org_id', TRUE)
   );
+
+-- ==========================================================================
+-- v5.5 Additions: assets table new columns (applied via migration_v5.5.sql)
+-- ==========================================================================
+-- ALTER TABLE assets
+--     ADD COLUMN IF NOT EXISTS retail_buy_rate_kwh  NUMERIC(8,4),
+--     ADD COLUMN IF NOT EXISTS retail_sell_rate_kwh NUMERIC(8,4),
+--     ADD COLUMN IF NOT EXISTS submercado           TEXT;
+-- ALTER TABLE vpp_strategies
+--     ADD COLUMN IF NOT EXISTS target_self_consumption_pct NUMERIC(5,2) DEFAULT 80.0;
+-- NOTE: These DDLs are commented out as reference only.
+-- The actual migration was applied via backend/scripts/migration_v5.5.sql
+-- DO NOT re-run these statements against the database.

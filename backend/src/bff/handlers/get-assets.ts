@@ -85,6 +85,9 @@ export async function handler(
   const showRoiMetrics = isFlagEnabled(flags, "show-roi-metrics", ctx.orgId);
 
   // ── config 預設值 lookup（vpp_strategies 尚無資料，依 operation_mode 推導）──
+  // TODO: v5.6 — Replace CONFIG_DEFAULTS with real DB query.
+  // JOIN vpp_strategies table using asset.operation_mode as lookup key.
+  // New columns available: target_self_consumption_pct (added in migration_v5.5.sql).
   const CONFIG_DEFAULTS: Record<string, object> = {
     peak_valley_arbitrage: {
       target_mode: "peak_valley_arbitrage",

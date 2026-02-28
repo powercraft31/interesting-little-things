@@ -204,7 +204,7 @@ export interface AssetRecord {
 }
 
 /**
- * DashboardMetrics v5.3
+ * DashboardMetrics v5.5
  * M5 BFF 聚合各模組數據後回傳的儀表板 KPI
  */
 export interface DashboardMetrics {
@@ -219,4 +219,14 @@ export interface DashboardMetrics {
   readonly drResponseLatency?: number; // s DR 響應延遲
   readonly gatewayUptime?: number; // % 閘道器在線率
   readonly dispatchSuccessRate?: string; // e.g. "156/160" 成功/總次數
+  // ── v5.5 Two-Tier Economic Model ────────────────────────────────────────
+  readonly vppArbitrageProfit?: number; // R$ B-side: SOLFACIL wholesale PLD arbitrage
+  readonly clientSavings?: number; // R$ C-side: customer retail bill savings
+  readonly selfConsumption?: number; // % C-side: self-consumption rate (algorithm_metrics)
+  /**
+   * @deprecated 將於 v5.6 移除。
+   * receita/custo/lucro 為 v5.4 舊欄位名，已被 vppArbitrageProfit/clientSavings 取代。
+   * 目前保留於 get-revenue-trend.ts 以維持前端圖表向後相容，v5.6 統一清除。
+   */
+  readonly _legacyRevenueFields?: "receita|custo|lucro preserved in get-revenue-trend.ts until v5.6";
 }

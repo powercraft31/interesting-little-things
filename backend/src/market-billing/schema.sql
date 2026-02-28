@@ -82,3 +82,51 @@ ALTER TABLE organizations  ADD COLUMN IF NOT EXISTS metadata JSONB NOT NULL DEFA
 -- GIN indexes for JSONB queries
 CREATE INDEX IF NOT EXISTS idx_assets_metadata        ON assets        USING GIN(metadata);
 CREATE INDEX IF NOT EXISTS idx_organizations_metadata  ON organizations USING GIN(metadata);
+
+-- ==========================================================================
+-- v5.5 Additions: Two-Tier Economic Model
+-- Applied via migration_v5.5.sql (2026-02-28)
+-- ==========================================================================
+
+-- ALTER revenue_daily: add dual-revenue columns
+-- ALTER TABLE revenue_daily
+--     ADD COLUMN IF NOT EXISTS arbitrage_profit_reais NUMERIC(14,2) DEFAULT 0,
+--     ADD COLUMN IF NOT EXISTS savings_reais           NUMERIC(14,2) DEFAULT 0;
+
+-- New table: pld_horario (CCEE hourly wholesale spot price)
+-- CREATE TABLE IF NOT EXISTS pld_horario (
+--     id              BIGSERIAL PRIMARY KEY,
+--     reference_month INT         NOT NULL,  -- AAAAMM
+--     dia             INT         NOT NULL,  -- 1-31
+--     hora            INT         NOT NULL,  -- 0-23
+--     submercado      TEXT        NOT NULL,  -- SUDESTE/SUL/NORDESTE/NORTE
+--     pld_hora        NUMERIC(10, 2) NOT NULL,
+--     created_at      TIMESTAMPTZ NOT NULL DEFAULT now()
+-- );
+
+-- New table: trade_schedules (M2 optimization output for future dispatch)
+-- CREATE TABLE IF NOT EXISTS trade_schedules (
+--     id              BIGSERIAL PRIMARY KEY,
+--     asset_id        VARCHAR(50)  NOT NULL,
+--     org_id          VARCHAR(50)  NOT NULL,
+--     scheduled_at    TIMESTAMPTZ  NOT NULL,
+--     action          TEXT         NOT NULL,  -- charge/discharge/hold
+--     power_kw        NUMERIC(10,2) NOT NULL,
+--     expected_pld    NUMERIC(10,2),
+--     status          TEXT         NOT NULL DEFAULT 'scheduled',
+--     created_at      TIMESTAMPTZ  NOT NULL DEFAULT now()
+-- );
+
+-- New table: algorithm_metrics (M2 KPI output)
+-- CREATE TABLE IF NOT EXISTS algorithm_metrics (
+--     id                      BIGSERIAL PRIMARY KEY,
+--     asset_id                VARCHAR(50) NOT NULL,
+--     org_id                  VARCHAR(50) NOT NULL,
+--     recorded_date           DATE        NOT NULL,
+--     self_consumption_pct    NUMERIC(5,2),
+--     target_self_consumption_pct NUMERIC(5,2),
+--     created_at              TIMESTAMPTZ NOT NULL DEFAULT now()
+-- );
+-- NOTE: These DDLs are commented out as reference only.
+-- The actual migration was applied via backend/scripts/migration_v5.5.sql
+-- DO NOT re-run these statements against the database.
