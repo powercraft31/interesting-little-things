@@ -40,25 +40,39 @@ export async function handler(
     ctx.role === Role.SOLFACIL_ADMIN ? null : ctx.orgId,
   );
 
-  const trades = rows.map(row => ({
-    // 舊有 field names（前端依賴）
-    time: new Date(row.planned_time as string).toLocaleTimeString('pt-BR', {
-      hour: '2-digit',
-      minute: '2-digit',
-      timeZone: 'America/Sao_Paulo',
-    }),
-    operacao: row.action === 'charge' ? 'buy' : row.action === 'discharge' ? 'sell' : 'hold',
-    volume: parseFloat(String(row.expected_volume_kwh)).toFixed(1),
-    status: new Date(row.planned_time as string) < new Date() ? 'executed' : 'scheduled',
-    // 新增 v5.5 欄位（批發市場視角）
-    assetId: row.asset_id,
-    assetName: row.asset_name,
-    action: row.action,
-    targetPldPrice: row.target_pld_price,
-    preco: row.target_pld_price
-      ? `R$ ${parseFloat(String(row.target_pld_price)).toFixed(0)}/MWh`
-      : '\u2014',
-  }));
+  const trades = rows.map(row => {
+    const plannedTime = new Date(row.planned_time as string);
+    const hour = plannedTime.getHours();
+    const isPeak = hour >= 17 && hour < 20;
+    const isOffPeak = (hour >= 0 && hour < 6) || hour >= 22;
+    const tarifa = isPeak ? 'peak' : isOffPeak ? 'off_peak' : 'intermediate';
+
+    const volKwh = parseFloat(String(row.expected_volume_kwh));
+    const pld = row.target_pld_price ? parseFloat(String(row.target_pld_price)) : 0;
+    const resultReais = (pld / 1000) * volKwh; // R$/MWh ÷ 1000 × kWh = R$
+    const isSell = row.action === 'discharge';
+    const resultFormatted = pld > 0
+      ? (isSell ? '+' : '-') + 'R$ ' + Math.round(isSell ? resultReais : resultReais).toLocaleString('pt-BR')
+      : 'R$ 0';
+
+    return {
+      // 舊有 field names（前端依賴，必須保留）
+      time: plannedTime.toLocaleTimeString('pt-BR', {
+        hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo',
+      }),
+      tarifa,                                                           // ← 補上：前端渲染必需
+      operacao: row.action === 'charge' ? 'buy' : row.action === 'discharge' ? 'sell' : 'hold',
+      preco: pld > 0 ? `R$ ${pld.toFixed(0)}/MWh` : '\u2014',
+      volume: volKwh.toFixed(1),
+      resultado: resultFormatted,                                       // ← 補上：前端結果欄
+      status: plannedTime < new Date() ? 'executed' : 'scheduled',
+      // v5.5 新增（批發市場視角）
+      assetId: row.asset_id,
+      assetName: row.asset_name,
+      action: row.action,
+      targetPldPrice: row.target_pld_price,
+    };
+  });
 
   const body = ok({ trades, _tenant: { orgId: ctx.orgId, role: ctx.role } });
 
