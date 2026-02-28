@@ -9,6 +9,8 @@ import { handler as dashboardHandler } from "../src/bff/handlers/get-dashboard";
 import { handler as assetsHandler } from "../src/bff/handlers/get-assets";
 import { handler as revenueTrendHandler } from "../src/bff/handlers/get-revenue-trend";
 import { handler as tradesHandler } from "../src/bff/handlers/get-trades";
+import { handleCceeWebhook } from "../src/open-api/handlers/ccee-webhook";
+import { handleWeatherWebhook } from "../src/open-api/handlers/weather-webhook";
 
 import { getPool } from "../src/shared/db";
 import { startScheduleGenerator } from "../src/optimization-engine/services/schedule-generator";
@@ -79,6 +81,8 @@ function wrapHandler(handler: LambdaHandler, method: string, path: string) {
 
 const app = express();
 
+app.use(express.json()); // Parse POST body (needed for webhooks)
+
 // Demo mode: inject default auth context if no Authorization header is provided
 // Allows frontend to call the API without a login flow during local testing
 app.use((req, _res, next) => {
@@ -115,6 +119,11 @@ app.get(
 );
 app.get("/trades", wrapHandler(tradesHandler, "GET", "/trades"));
 
+// ── v5.7 Inbound Webhooks ────────────────────────────────────────────────
+app.post("/webhooks/ccee-pld", handleCceeWebhook);
+app.post("/webhooks/weather", handleWeatherWebhook);
+// ────────────────────────────────────────────────────────────────────────
+
 // ── v5.6 System Heartbeat: 啟動自動化管線 ──────────────────────────────
 const pool = getPool();
 startScheduleGenerator(pool); // M2: 每小時生成 trade_schedules
@@ -130,6 +139,8 @@ app.listen(PORT, () => {
   console.log("  GET /assets");
   console.log("  GET /revenue-trend");
   console.log("  GET /trades");
+  console.log("  POST /webhooks/ccee-pld");
+  console.log("  POST /webhooks/weather");
   console.log("");
   console.log("Auth: pass Authorization header as raw JSON, e.g.:");
   console.log(
