@@ -36,7 +36,7 @@ export async function runTimeoutChecker(pool: Pool): Promise<void> {
 
     // 2. Mark dispatch_commands failed
     await client.query(
-      `UPDATE dispatch_commands SET status = 'failed' WHERE id = ANY($1)`,
+      `UPDATE dispatch_commands SET status = 'failed' WHERE id = ANY($1) AND status = 'dispatched'`,
       [ids],
     );
 

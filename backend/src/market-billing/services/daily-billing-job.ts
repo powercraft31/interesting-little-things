@@ -31,7 +31,10 @@ export async function runDailyBilling(pool: Pool): Promise<void> {
        JOIN assets a ON a.asset_id = ahm.asset_id
        LEFT JOIN pld_horario p
          ON p.hora = EXTRACT(HOUR FROM ahm.hour_timestamp)::INT
-         AND DATE(ahm.hour_timestamp AT TIME ZONE 'America/Sao_Paulo') = $1::date
+         AND p.dia = EXTRACT(DAY FROM ahm.hour_timestamp AT TIME ZONE 'America/Sao_Paulo')::INT
+         AND p.mes_referencia = (EXTRACT(YEAR FROM ahm.hour_timestamp AT TIME ZONE 'America/Sao_Paulo') * 100
+                                + EXTRACT(MONTH FROM ahm.hour_timestamp AT TIME ZONE 'America/Sao_Paulo'))::INT
+         AND p.submercado = a.submercado
        WHERE DATE(ahm.hour_timestamp AT TIME ZONE 'America/Sao_Paulo') = $1::date
        GROUP BY ahm.asset_id, a.org_id, a.retail_buy_rate_kwh`,
       [dateStr],
@@ -43,7 +46,9 @@ export async function runDailyBilling(pool: Pool): Promise<void> {
         Math.round(Number(row.arbitrage_profit_reais) * 100) / 100;
       const savings =
         Math.round(
-          Number(row.total_discharge_kwh) * Number(row.retail_buy_rate_kwh) * 100,
+          Number(row.total_discharge_kwh) *
+            Number(row.retail_buy_rate_kwh) *
+            100,
         ) / 100;
 
       await pool.query(

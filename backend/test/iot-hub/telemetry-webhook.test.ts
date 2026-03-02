@@ -6,7 +6,10 @@ import {
 } from "../../src/iot-hub/handlers/telemetry-webhook";
 
 // ── Mock Pool ────────────────────────────────────────────────────────────
-function makeMockPool(): { pool: Pool; queryCalls: { text: string; values: unknown[] }[] } {
+function makeMockPool(): {
+  pool: Pool;
+  queryCalls: { text: string; values: unknown[] }[];
+} {
   const queryCalls: { text: string; values: unknown[] }[] = [];
   const pool = {
     query: jest.fn(async (text: string, values?: unknown[]) => {
@@ -63,7 +66,10 @@ describe("telemetry-webhook handler", () => {
     await handler(req as Request, res as unknown as Response);
 
     expect(res.status).toHaveBeenCalledWith(201);
-    expect(res.json).toHaveBeenCalledWith({ ok: true, asset_id: "ASSET_SP_001" });
+    expect(res.json).toHaveBeenCalledWith({
+      ok: true,
+      asset_id: "ASSET_SP_001",
+    });
 
     // Should have 2 queries: INSERT + UPSERT
     expect(queryCalls).toHaveLength(2);
@@ -84,20 +90,34 @@ describe("telemetry-webhook handler", () => {
     // Second query: UPSERT device_state
     expect(queryCalls[1].text).toContain("INSERT INTO device_state");
     expect(queryCalls[1].text).toContain("ON CONFLICT");
-    expect(queryCalls[1].values).toEqual(["ASSET_SP_001", 65, 3.5]);
+    expect(queryCalls[1].values).toEqual([
+      "ASSET_SP_001",
+      65,
+      3.5,
+      4.2,
+      -1.1,
+      2.8,
+    ]);
   });
 
   it("returns 400 when asset_id is missing", async () => {
     const { pool } = makeMockPool();
     const handler = createTelemetryWebhookHandler(pool);
-    const req = makeReq({ timestamp: "2026-03-01T14:00:00Z", battery_soc: 50, energy_kwh: 0.01 });
+    const req = makeReq({
+      timestamp: "2026-03-01T14:00:00Z",
+      battery_soc: 50,
+      energy_kwh: 0.01,
+    });
     const res = makeRes();
 
     await handler(req as Request, res as unknown as Response);
 
     expect(res.status).toHaveBeenCalledWith(400);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ ok: false, error: "Missing required field: asset_id" }),
+      expect.objectContaining({
+        ok: false,
+        error: "Missing required field: asset_id",
+      }),
     );
   });
 
@@ -118,7 +138,11 @@ describe("telemetry-webhook handler", () => {
   it("returns 400 when battery_soc is missing", async () => {
     const { pool } = makeMockPool();
     const handler = createTelemetryWebhookHandler(pool);
-    const req = makeReq({ asset_id: "A1", timestamp: "2026-03-01T14:00:00Z", energy_kwh: 0.01 });
+    const req = makeReq({
+      asset_id: "A1",
+      timestamp: "2026-03-01T14:00:00Z",
+      energy_kwh: 0.01,
+    });
     const res = makeRes();
 
     await handler(req as Request, res as unknown as Response);
@@ -132,7 +156,11 @@ describe("telemetry-webhook handler", () => {
   it("returns 400 when energy_kwh is missing", async () => {
     const { pool } = makeMockPool();
     const handler = createTelemetryWebhookHandler(pool);
-    const req = makeReq({ asset_id: "A1", timestamp: "2026-03-01T14:00:00Z", battery_soc: 50 });
+    const req = makeReq({
+      asset_id: "A1",
+      timestamp: "2026-03-01T14:00:00Z",
+      battery_soc: 50,
+    });
     const res = makeRes();
 
     await handler(req as Request, res as unknown as Response);

@@ -79,14 +79,24 @@ export function createTelemetryWebhookHandler(pool: Pool) {
 
       // UPSERT device_state
       await pool.query(
-        `INSERT INTO device_state (asset_id, battery_soc, battery_power, is_online, updated_at)
-         VALUES ($1, $2, $3, true, NOW())
+        `INSERT INTO device_state (asset_id, battery_soc, battery_power, pv_power, grid_power_kw, load_power, is_online, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, true, NOW())
          ON CONFLICT (asset_id) DO UPDATE SET
            battery_soc    = EXCLUDED.battery_soc,
            battery_power  = EXCLUDED.battery_power,
+           pv_power       = EXCLUDED.pv_power,
+           grid_power_kw  = EXCLUDED.grid_power_kw,
+           load_power     = EXCLUDED.load_power,
            is_online      = true,
            updated_at     = NOW()`,
-        [data.asset_id, data.battery_soc, data.battery_power],
+        [
+          data.asset_id,
+          data.battery_soc,
+          data.battery_power,
+          data.pv_power ?? null,
+          data.grid_power_kw ?? null,
+          data.load_power ?? null,
+        ],
       );
 
       res.status(201).json({ ok: true, asset_id: data.asset_id });
