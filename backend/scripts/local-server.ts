@@ -11,11 +11,13 @@ import { handler as revenueTrendHandler } from "../src/bff/handlers/get-revenue-
 import { handler as tradesHandler } from "../src/bff/handlers/get-trades";
 import { handleCceeWebhook } from "../src/open-api/handlers/ccee-webhook";
 import { handleWeatherWebhook } from "../src/open-api/handlers/weather-webhook";
+import { createTelemetryWebhookHandler } from "../src/iot-hub/handlers/telemetry-webhook";
 
 import { getPool } from "../src/shared/db";
 import { startScheduleGenerator } from "../src/optimization-engine/services/schedule-generator";
 import { startCommandDispatcher } from "../src/dr-dispatcher/services/command-dispatcher";
 import { startBillingJob } from "../src/market-billing/services/daily-billing-job";
+import { startTelemetryAggregator } from "../src/iot-hub/services/telemetry-aggregator";
 
 type LambdaHandler = (
   event: APIGatewayProxyEventV2,
@@ -124,12 +126,25 @@ app.post("/webhooks/ccee-pld", handleCceeWebhook);
 app.post("/webhooks/weather", handleWeatherWebhook);
 // ────────────────────────────────────────────────────────────────────────
 
-// ── v5.6 System Heartbeat: 啟動自動化管線 ──────────────────────────────
+// ── Shared DB pool ───────────────────────────────────────────────────────
 const pool = getPool();
+
+// ── v5.8 Telemetry Feedback Loop ─────────────────────────────────────────
+app.post("/api/telemetry/mock", createTelemetryWebhookHandler(pool));
+// ────────────────────────────────────────────────────────────────────────
+
+// ── v5.6 System Heartbeat: 啟動自動化管線 ──────────────────────────────
 startScheduleGenerator(pool); // M2: 每小時生成 trade_schedules
 startCommandDispatcher(pool); // M3: 每分鐘推進狀態機 → dispatch_commands
 startBillingJob(pool); // M4: 每天 00:05 結算 revenue_daily
 console.log("[v5.6] System heartbeat started: M2/M3/M4 pipelines active");
+// ────────────────────────────────────────────────────────────────────────
+
+// ── v5.8 Telemetry Aggregator (hourly cron) ──────────────────────────────
+startTelemetryAggregator(pool);
+console.log(
+  "[v5.8] Telemetry aggregator started: hourly rollup to asset_hourly_metrics",
+);
 // ────────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
@@ -141,6 +156,7 @@ app.listen(PORT, () => {
   console.log("  GET /trades");
   console.log("  POST /webhooks/ccee-pld");
   console.log("  POST /webhooks/weather");
+  console.log("  POST /api/telemetry/mock");
   console.log("");
   console.log("Auth: pass Authorization header as raw JSON, e.g.:");
   console.log(
