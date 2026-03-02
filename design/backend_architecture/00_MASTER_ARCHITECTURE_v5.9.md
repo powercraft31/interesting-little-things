@@ -742,6 +742,44 @@ Step 3: 延遲結束後，POST ACK 到 M3
 | `completed` | 90% | 模擬正常設備完成指令 |
 | `failed` | 10% | 模擬設備故障、通信中斷等異常 |
 
+#### 防止重複 ACK 風暴 (Race Condition Prevention)
+
+> **問題根源：** 輪詢每 5 秒執行一次。若某條 dispatch_command 的 ACK 尚未完成（仍在 3-10 秒延遲中），下一輪 5 秒輪詢會再次撈到同一條記錄，觸發第二次延遲+ACK，造成重複回報。
+
+**解決方案：In-memory 指令鎖 (In-flight Set)**
+
+```typescript
+// 腳本頂層宣告（模組級別，跨輪詢持久存在）
+const inFlightDispatchIds = new Set<number>();
+
+// 輪詢邏輯
+async function pollAndAck(pool: Pool, baseUrl: string): Promise<void> {
+  const pending = await queryPendingCommands(pool);
+
+  for (const cmd of pending) {
+    // 過濾：已在處理中的指令直接跳過
+    if (inFlightDispatchIds.has(cmd.id)) continue;
+
+    // 加鎖：進入處理流程前立即標記
+    inFlightDispatchIds.add(cmd.id);
+
+    // 非同步執行，不阻塞下一條指令
+    simulateAndAck(cmd, baseUrl).finally(() => {
+      // 解鎖：ACK POST 完成（無論成功失敗）後釋放
+      inFlightDispatchIds.delete(cmd.id);
+    });
+  }
+}
+```
+
+**鎖的生命週期：**
+1. `pollAndAck()` 撈到 dispatch_id=42 → 立即 `inFlightDispatchIds.add(42)`
+2. 5 秒後下一輪輪詢 → `inFlightDispatchIds.has(42) === true` → 跳過
+3. 7 秒後 ACK POST 完成 → `inFlightDispatchIds.delete(42)`
+4. 下一輪輪詢時 dispatch_commands.status 已為 `completed`，不再出現在查詢結果中
+
+> **注意：** In-memory Set 在進程重啟後清空，但這對 Mock 模擬環境是可接受的。生產環境應改用 Redis SETNX 或 DB-level advisory lock。
+
 #### 端到端回饋循環
 
 ```

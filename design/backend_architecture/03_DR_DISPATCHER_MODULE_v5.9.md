@@ -553,13 +553,68 @@ router.post('/api/dispatch/ack', async (req: Request, res: Response) => {
 export default router;
 ```
 
+### Fix 3 — 獨立逾時檢查器 (Timeout Checker Cron Job)
+
+> **設計原則：** 不能依賴被動觸發。ACK 端點只處理「有設備回報」的情況；若設備完全失聯，沒有任何事件會觸發逾時處理。必須有一支獨立的主動巡邏機制。
+
+#### 新增檔案：`src/dr-dispatcher/handlers/timeout-checker.ts`
+
+```typescript
+// 職責：主動輪詢 dispatch_commands，將逾時未 ACK 的指令強制標記為 failed
+// 觸發：Cron Job，每分鐘執行一次 (* * * * *)
+// 掛載：scripts/local-server.ts → startTimeoutChecker(pool)
+
+export function startTimeoutChecker(pool: Pool): void {
+  cron.schedule('* * * * *', () => runTimeoutChecker(pool));
+}
+
+export async function runTimeoutChecker(pool: Pool): Promise<void> {
+  // 查詢 status='dispatched' 且 dispatched_at 超過 15 分鐘的指令
+  // 批次 UPDATE dispatch_commands.status → 'failed'
+  // 連帶 UPDATE trade_schedules.status → 'failed'（對應 trade_id）
+}
+```
+
+#### SQL 邏輯
+
+```sql
+-- Step 1: 找出逾時指令
+SELECT id, trade_id, asset_id
+FROM dispatch_commands
+WHERE status = 'dispatched'
+  AND dispatched_at < NOW() - INTERVAL '15 minutes';
+
+-- Step 2: 批次標記 failed
+UPDATE dispatch_commands
+SET status = 'failed', updated_at = NOW()
+WHERE id = ANY($timedOutIds);
+
+-- Step 3: 連帶更新 trade_schedules
+UPDATE trade_schedules
+SET status = 'failed'
+WHERE id = ANY($tradeIds)
+  AND status = 'executing';
+```
+
+#### 三元件分工邊界
+
+| 元件 | 職責 |
+|------|------|
+| `command-dispatcher.ts` | 生成 dispatch_commands（status: dispatched）；推進 trade_schedules → executing |
+| `collect-response.ts` (ACK endpoint) | 接收設備主動回報，更新 completed/failed |
+| **`timeout-checker.ts`（v5.9 新增）** | 主動巡邏，處理完全失聯設備；防止 dispatched 記錄永遠懸空 |
+
+> **鐵律：** `command-dispatcher.ts` 不再包含任何自動標記 executed 或 failed 的 SQL；該職責完全由上表後兩個元件負責。
+
+---
+
 ### Acceptance Criteria
 
 | Scenario | Input | Expected Result |
 |----------|-------|-----------------|
 | Happy path ACK | `POST /api/dispatch/ack {dispatch_id:1, status:'completed', asset_id:'ASSET_SP_001'}` | 200 `{ok:true, dispatch_id:1, status:'completed'}`; `dispatch_commands.status = 'completed'`; `trade_schedules.status = 'executed'` |
 | Failed ACK | `POST /api/dispatch/ack {dispatch_id:2, status:'failed', asset_id:'ASSET_SP_002'}` | 200 `{ok:true, dispatch_id:2, status:'failed'}`; `dispatch_commands.status = 'failed'` |
-| Timeout (no ACK) | dispatch_command with `dispatched_at > 15min` | Cron auto-marks `dispatch_commands.status = 'failed'`, `trade_schedules.status = 'failed'` |
+| Timeout (no ACK) | dispatch_command with `dispatched_at > 15min` | `timeout-checker.ts` cron auto-marks `dispatch_commands.status = 'failed'`, `trade_schedules.status = 'failed'` |
 | Not found | `POST /api/dispatch/ack {dispatch_id:999, ...}` | 404 `{ok:false, error:'dispatch_id not found'}` |
 | Already terminal | `POST /api/dispatch/ack {dispatch_id:1, status:'completed', ...}` (second call) | 409 `{ok:false, error:'dispatch already in terminal status', current_status:'completed'}` |
 | Missing fields | `POST /api/dispatch/ack {}` | 400 `{ok:false, error:'missing required fields'}` |
