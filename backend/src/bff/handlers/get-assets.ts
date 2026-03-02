@@ -84,37 +84,6 @@ export async function handler(
   const flags = await fetchFeatureFlags();
   const showRoiMetrics = isFlagEnabled(flags, "show-roi-metrics", ctx.orgId);
 
-  // ── config 預設值 lookup（vpp_strategies 尚無資料，依 operation_mode 推導）──
-  // TODO: v5.6 — Replace CONFIG_DEFAULTS with real DB query.
-  // JOIN vpp_strategies table using asset.operation_mode as lookup key.
-  // New columns available: target_self_consumption_pct (added in migration_v5.5.sql).
-  const CONFIG_DEFAULTS: Record<string, object> = {
-    peak_valley_arbitrage: {
-      target_mode: "peak_valley_arbitrage",
-      min_soc: 20,
-      max_charge_rate: 3.3,
-      charge_window_start: "23:00",
-      charge_window_end: "05:00",
-      discharge_window_start: "17:00",
-    },
-    self_consumption: {
-      target_mode: "self_consumption",
-      min_soc: 15,
-      max_charge_rate: 3.3,
-      charge_window_start: "22:00",
-      charge_window_end: "06:00",
-      discharge_window_start: "07:00",
-    },
-    peak_shaving: {
-      target_mode: "peak_shaving",
-      min_soc: 10,
-      max_charge_rate: 5.0,
-      charge_window_start: "01:00",
-      charge_window_end: "06:00",
-      discharge_window_start: "09:00",
-    },
-  };
-
   function deriveOperationalStatus(row: {
     is_online: boolean;
     bat_work_status: string;
@@ -161,10 +130,20 @@ export async function handler(
        d.grid_export_kwh,
        r.revenue_reais           AS receita_hoje_brl,
        r.cost_reais              AS custo_hoje_brl,
-       r.profit_reais            AS lucro_hoje_brl
+       r.profit_reais            AS lucro_hoje_brl,
+       vs.min_soc                AS vs_min_soc,
+       vs.max_soc                AS vs_max_soc,
+       vs.max_charge_rate_kw,
+       vs.charge_window_start,
+       vs.charge_window_end,
+       vs.discharge_window_start,
+       vs.target_self_consumption_pct
      FROM assets a
      LEFT JOIN device_state d ON d.asset_id = a.asset_id
      LEFT JOIN revenue_daily r ON r.asset_id = a.asset_id AND r.date = CURRENT_DATE
+     LEFT JOIN vpp_strategies vs ON vs.org_id = a.org_id
+       AND vs.target_mode = a.operation_mode
+       AND vs.is_active = true
      WHERE a.is_active = true
      ORDER BY a.asset_id`,
     [],
@@ -220,8 +199,20 @@ export async function handler(
       grid_frequency: parseFloat(String(r.grid_frequency)) || 0,
     },
     config:
-      CONFIG_DEFAULTS[r.operation_mode as string] ??
-      CONFIG_DEFAULTS["peak_valley_arbitrage"],
+      r.vs_min_soc != null
+        ? {
+            target_mode: r.operation_mode as string,
+            min_soc: parseFloat(String(r.vs_min_soc)),
+            max_soc: parseFloat(String(r.vs_max_soc)),
+            max_charge_rate: parseFloat(String(r.max_charge_rate_kw)) || 3.3,
+            charge_window_start: (r.charge_window_start as string) || "23:00",
+            charge_window_end: (r.charge_window_end as string) || "05:00",
+            discharge_window_start:
+              (r.discharge_window_start as string) || "17:00",
+            target_self_consumption_pct:
+              parseFloat(String(r.target_self_consumption_pct)) || 80,
+          }
+        : null, // null when no strategy configured for this asset
   }));
 
   // RLS already filters by org for non-admin; no additional JS filter needed.

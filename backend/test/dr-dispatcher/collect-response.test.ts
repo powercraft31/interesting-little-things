@@ -1,190 +1,137 @@
-import { mockClient } from "aws-sdk-client-mock";
-import { DynamoDBDocumentClient, UpdateCommand } from "@aws-sdk/lib-dynamodb";
-import {
-  EventBridgeClient,
-  PutEventsCommand,
-} from "@aws-sdk/client-eventbridge";
+import { getPool, closePool } from "../../src/shared/db";
+import { createAckHandler } from "../../src/dr-dispatcher/handlers/collect-response";
+import { Pool } from "pg";
+import type { Request, Response } from "express";
+
+jest.mock("node-cron", () => ({
+  schedule: jest.fn(),
+}));
 
 // ---------------------------------------------------------------------------
-// Mock SDK clients BEFORE importing handler
+// Express mock helpers
 // ---------------------------------------------------------------------------
 
-const ddbMock = mockClient(DynamoDBDocumentClient);
-const ebMock = mockClient(EventBridgeClient);
+function mockRes(): Response {
+  const res: Partial<Response> = {};
+  res.status = jest.fn().mockReturnValue(res);
+  res.json = jest.fn().mockReturnValue(res);
+  return res as Response;
+}
 
-// Set env vars before importing handler
-process.env.TABLE_NAME = "dispatch_tracker";
-process.env.EVENT_BUS_NAME = "SolfacilVpp-dev-EventBus";
-
-import { handler } from "../../src/dr-dispatcher/handlers/collect-response";
-
-// ---------------------------------------------------------------------------
-// Test event factory
-// ---------------------------------------------------------------------------
-
-function makeDeviceResponseEvent(
-  overrides: Partial<{
-    dispatchId: string;
-    assetId: string;
-    orgId: string;
-    status: "COMPLETED" | "ERROR";
-    errorCode: string;
-  }> = {},
-) {
-  return {
-    dispatchId: overrides.dispatchId ?? "dispatch-001",
-    assetId: overrides.assetId ?? "ASSET_SP_001",
-    orgId: overrides.orgId ?? "ORG_ENERGIA_001",
-    status: overrides.status ?? "COMPLETED",
-    ...(overrides.errorCode ? { errorCode: overrides.errorCode } : {}),
-  };
+function mockReq(body: Record<string, unknown>): Request {
+  return { body } as unknown as Request;
 }
 
 // ---------------------------------------------------------------------------
 // Tests
 // ---------------------------------------------------------------------------
 
-describe("collect-response handler", () => {
-  beforeEach(() => {
-    ddbMock.reset();
-    ebMock.reset();
-    jest.spyOn(console, "info").mockImplementation(() => {});
-    jest.spyOn(console, "error").mockImplementation(() => {});
+describe("collect-response ACK handler (v5.9)", () => {
+  let pool: Pool;
+  let handler: (req: Request, res: Response) => Promise<void>;
+  let testTradeId: number;
+  let testDispatchId: number;
+
+  beforeAll(() => {
+    pool = getPool();
+    handler = createAckHandler(pool);
   });
 
-  afterEach(() => {
-    jest.restoreAllMocks();
+  beforeEach(async () => {
+    // Insert a trade_schedule in 'executing' state
+    const tradeResult = await pool.query<{ id: number }>(`
+      INSERT INTO trade_schedules
+        (asset_id, org_id, planned_time, action, expected_volume_kwh, target_pld_price, status)
+      VALUES
+        ('ASSET_SP_001', 'ORG_ENERGIA_001', NOW() - INTERVAL '2 minutes', 'discharge', 5.0, 350.00, 'executing')
+      RETURNING id
+    `);
+    testTradeId = tradeResult.rows[0].id;
+
+    // Insert a dispatch_command in 'dispatched' state
+    const dispatchResult = await pool.query<{ id: number }>(`
+      INSERT INTO dispatch_commands
+        (trade_id, asset_id, org_id, action, volume_kwh, status, m1_boundary)
+      VALUES
+        ($1, 'ASSET_SP_001', 'ORG_ENERGIA_001', 'discharge', 5.0, 'dispatched', true)
+      RETURNING id
+    `, [testTradeId]);
+    testDispatchId = dispatchResult.rows[0].id;
   });
 
-  it("happy path: UpdateCommand succeeds → PutEvents succeeds", async () => {
-    ddbMock.on(UpdateCommand).resolves({});
-    ebMock.on(PutEventsCommand).resolves({});
-
-    await expect(handler(makeDeviceResponseEvent())).resolves.toBeUndefined();
-
-    // Verify DynamoDB UpdateCommand was called with correct condition
-    const updateCalls = ddbMock.commandCalls(UpdateCommand);
-    expect(updateCalls).toHaveLength(1);
-    expect(updateCalls[0].args[0].input.ConditionExpression).toBe(
-      "#s = :executing",
-    );
-    expect(
-      updateCalls[0].args[0].input.ExpressionAttributeValues,
-    ).toMatchObject({
-      ":status": "COMPLETED",
-      ":executing": "EXECUTING",
-    });
-
-    // Verify EventBridge PutEvents was called
-    const ebCalls = ebMock.commandCalls(PutEventsCommand);
-    expect(ebCalls).toHaveLength(1);
-    const entry = ebCalls[0].args[0].input.Entries![0];
-    expect(entry.DetailType).toBe("DRDispatchCompleted");
-    expect(entry.Source).toBe("solfacil.vpp.dr-dispatcher");
-    expect(entry.EventBusName).toBe("SolfacilVpp-dev-EventBus");
-
-    const detail = JSON.parse(entry.Detail!);
-    expect(detail).toMatchObject({
-      dispatchId: "dispatch-001",
-      assetId: "ASSET_SP_001",
-      orgId: "ORG_ENERGIA_001",
-      status: "COMPLETED",
-    });
+  afterEach(async () => {
+    await pool.query(`DELETE FROM dispatch_commands WHERE trade_id = $1`, [testTradeId]);
+    await pool.query(`DELETE FROM trade_schedules WHERE id = $1`, [testTradeId]);
   });
 
-  it("handles ERROR status from device", async () => {
-    ddbMock.on(UpdateCommand).resolves({});
-    ebMock.on(PutEventsCommand).resolves({});
-
-    await expect(
-      handler(
-        makeDeviceResponseEvent({
-          status: "ERROR",
-          errorCode: "BATT_OVERHEAT",
-        }),
-      ),
-    ).resolves.toBeUndefined();
-
-    const updateCalls = ddbMock.commandCalls(UpdateCommand);
-    expect(
-      updateCalls[0].args[0].input.ExpressionAttributeValues,
-    ).toMatchObject({
-      ":status": "ERROR",
-    });
+  afterAll(async () => {
+    await closePool();
   });
 
-  it("idempotency: ConditionalCheckFailedException → silently returns (no throw)", async () => {
-    const conditionalError = new Error("The conditional request failed");
-    conditionalError.name = "ConditionalCheckFailedException";
-    ddbMock.on(UpdateCommand).rejects(conditionalError);
+  it("valid ACK (completed) → 200, dispatch marked completed, trade marked executed", async () => {
+    const req = mockReq({ dispatch_id: testDispatchId, status: "completed", asset_id: "ASSET_SP_001" });
+    const res = mockRes();
 
-    // Should NOT throw
-    await expect(handler(makeDeviceResponseEvent())).resolves.toBeUndefined();
+    await handler(req, res);
 
-    // EventBridge should NOT be called (early return)
-    expect(ebMock.commandCalls(PutEventsCommand)).toHaveLength(0);
-  });
-
-  it("non-conditional DynamoDB error → throws", async () => {
-    ddbMock.on(UpdateCommand).rejects(new Error("Internal server error"));
-
-    await expect(handler(makeDeviceResponseEvent())).rejects.toThrow(
-      "Internal server error",
+    expect(res.status).toHaveBeenCalledWith(200);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: true, dispatch_id: testDispatchId, status: "completed" }),
     );
 
-    // EventBridge should NOT be called
-    expect(ebMock.commandCalls(PutEventsCommand)).toHaveLength(0);
+    // Verify DB state
+    const dispatch = await pool.query(`SELECT status FROM dispatch_commands WHERE id = $1`, [testDispatchId]);
+    expect(dispatch.rows[0].status).toBe("completed");
+
+    const trade = await pool.query(`SELECT status FROM trade_schedules WHERE id = $1`, [testTradeId]);
+    expect(trade.rows[0].status).toBe("executed");
   });
 
-  it("EventBridge failure → rollback to EXECUTING then throws", async () => {
-    ddbMock.on(UpdateCommand).resolves({});
-    ebMock.on(PutEventsCommand).rejects(new Error("EventBridge unavailable"));
+  it("valid ACK (failed) → 200, trade marked failed", async () => {
+    const req = mockReq({ dispatch_id: testDispatchId, status: "failed", asset_id: "ASSET_SP_001" });
+    const res = mockRes();
 
-    await expect(handler(makeDeviceResponseEvent())).rejects.toThrow(
-      "EventBridge unavailable",
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(200);
+
+    const trade = await pool.query(`SELECT status FROM trade_schedules WHERE id = $1`, [testTradeId]);
+    expect(trade.rows[0].status).toBe("failed");
+  });
+
+  it("already terminal → 409 Conflict", async () => {
+    // First ACK: complete it
+    await pool.query(`UPDATE dispatch_commands SET status = 'completed' WHERE id = $1`, [testDispatchId]);
+
+    const req = mockReq({ dispatch_id: testDispatchId, status: "completed", asset_id: "ASSET_SP_001" });
+    const res = mockRes();
+
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(409);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: false }),
     );
-
-    // Two UpdateCommand calls: (1) initial status update, (2) rollback to EXECUTING
-    const updateCalls = ddbMock.commandCalls(UpdateCommand);
-    expect(updateCalls).toHaveLength(2);
-
-    // First call: set status to COMPLETED
-    expect(
-      updateCalls[0].args[0].input.ExpressionAttributeValues,
-    ).toMatchObject({
-      ":status": "COMPLETED",
-    });
-
-    // Second call (rollback): revert status to EXECUTING
-    expect(
-      updateCalls[1].args[0].input.ExpressionAttributeValues,
-    ).toMatchObject({
-      ":s": "EXECUTING",
-    });
   });
 
-  it("Disaster Recovery: DB succeeds → EB fails → rollback UpdateCommand with EXECUTING + handler throws", async () => {
-    ddbMock.on(UpdateCommand).resolves({});
-    ebMock.on(PutEventsCommand).rejects(new Error("EventBridge timeout"));
+  it("not found → 404", async () => {
+    const req = mockReq({ dispatch_id: 999999, status: "completed", asset_id: "ASSET_SP_001" });
+    const res = mockRes();
 
-    await expect(
-      handler(makeDeviceResponseEvent({ status: "COMPLETED" })),
-    ).rejects.toThrow("EventBridge timeout");
+    await handler(req, res);
 
-    // Verify rollback: second UpdateCommand reverts status to EXECUTING
-    const updateCalls = ddbMock.commandCalls(UpdateCommand);
-    expect(updateCalls).toHaveLength(2);
+    expect(res.status).toHaveBeenCalledWith(404);
+    expect(res.json).toHaveBeenCalledWith(
+      expect.objectContaining({ ok: false }),
+    );
+  });
 
-    const rollbackInput = updateCalls[1].args[0].input;
-    expect(rollbackInput.Key).toEqual({
-      dispatchId: "dispatch-001",
-      assetId: "ASSET_SP_001",
-    });
-    expect(rollbackInput.ExpressionAttributeValues).toMatchObject({
-      ":s": "EXECUTING",
-    });
+  it("missing fields → 400", async () => {
+    const req = mockReq({ dispatch_id: testDispatchId });
+    const res = mockRes();
 
-    // Verify EventBridge was attempted
-    expect(ebMock.commandCalls(PutEventsCommand)).toHaveLength(1);
+    await handler(req, res);
+
+    expect(res.status).toHaveBeenCalledWith(400);
   });
 });

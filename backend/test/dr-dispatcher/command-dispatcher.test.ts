@@ -1,12 +1,12 @@
-import { getPool, closePool } from '../../src/shared/db';
-import { runCommandDispatcher } from '../../src/dr-dispatcher/services/command-dispatcher';
-import { Pool } from 'pg';
+import { getPool, closePool } from "../../src/shared/db";
+import { runCommandDispatcher } from "../../src/dr-dispatcher/services/command-dispatcher";
+import { Pool } from "pg";
 
-jest.mock('node-cron', () => ({
+jest.mock("node-cron", () => ({
   schedule: jest.fn(),
 }));
 
-describe('command-dispatcher (M3)', () => {
+describe("command-dispatcher (M3)", () => {
   let pool: Pool;
   let testTradeId: number;
 
@@ -28,38 +28,46 @@ describe('command-dispatcher (M3)', () => {
 
   afterEach(async () => {
     // 清除測試資料
-    await pool.query(`DELETE FROM dispatch_commands WHERE trade_id = $1`, [testTradeId]);
-    await pool.query(`DELETE FROM trade_schedules WHERE id = $1`, [testTradeId]);
+    await pool.query(`DELETE FROM dispatch_commands WHERE trade_id = $1`, [
+      testTradeId,
+    ]);
+    await pool.query(`DELETE FROM trade_schedules WHERE id = $1`, [
+      testTradeId,
+    ]);
   });
 
   afterAll(async () => {
     await closePool();
   });
 
-  it('時間已到的 scheduled 排程應被推進為 executing', async () => {
+  it("時間已到的 scheduled 排程應被推進為 executing", async () => {
     await runCommandDispatcher(pool);
 
     const result = await pool.query<{ status: string }>(
       `SELECT status FROM trade_schedules WHERE id = $1`,
-      [testTradeId]
+      [testTradeId],
     );
-    expect(result.rows[0].status).toBe('executing');
+    expect(result.rows[0].status).toBe("executing");
   });
 
-  it('推進 executing 時應寫入一筆 dispatch_commands', async () => {
+  it("推進 executing 時應寫入一筆 dispatch_commands", async () => {
     await runCommandDispatcher(pool);
 
-    const result = await pool.query<{ trade_id: number; action: string; m1_boundary: boolean }>(
+    const result = await pool.query<{
+      trade_id: number;
+      action: string;
+      m1_boundary: boolean;
+    }>(
       `SELECT trade_id, action, m1_boundary FROM dispatch_commands WHERE trade_id = $1`,
-      [testTradeId]
+      [testTradeId],
     );
     expect(result.rows).toHaveLength(1);
-    expect(result.rows[0].action).toBe('discharge');
-    expect(result.rows[0].m1_boundary).toBe(true);  // v5.6 永遠為 true
+    expect(result.rows[0].action).toBe("discharge");
+    expect(result.rows[0].m1_boundary).toBe(true); // v5.6 永遠為 true
   });
 
-  it('執行超過 15 分鐘的 executing 應自動推進為 executed', async () => {
-    // 插入一筆已超時的 executing 排程
+  it("v5.9: executing trades are NOT auto-advanced (timeout-checker handles this now)", async () => {
+    // Insert a stale 'executing' trade — command-dispatcher should NOT change it
     const result = await pool.query<{ id: number }>(`
       INSERT INTO trade_schedules
         (asset_id, org_id, planned_time, action, expected_volume_kwh, target_pld_price, status)
@@ -73,9 +81,10 @@ describe('command-dispatcher (M3)', () => {
 
     const check = await pool.query<{ status: string }>(
       `SELECT status FROM trade_schedules WHERE id = $1`,
-      [staleId]
+      [staleId],
     );
-    expect(check.rows[0].status).toBe('executed');
+    // Should still be 'executing' — NOT 'executed' (timeout-checker.ts owns this now)
+    expect(check.rows[0].status).toBe("executing");
 
     // 清理
     await pool.query(`DELETE FROM trade_schedules WHERE id = $1`, [staleId]);

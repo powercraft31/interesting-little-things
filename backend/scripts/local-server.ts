@@ -16,6 +16,8 @@ import { createTelemetryWebhookHandler } from "../src/iot-hub/handlers/telemetry
 import { getPool } from "../src/shared/db";
 import { startScheduleGenerator } from "../src/optimization-engine/services/schedule-generator";
 import { startCommandDispatcher } from "../src/dr-dispatcher/services/command-dispatcher";
+import { startTimeoutChecker } from "../src/dr-dispatcher/handlers/timeout-checker";
+import { createAckHandler } from "../src/dr-dispatcher/handlers/collect-response";
 import { startBillingJob } from "../src/market-billing/services/daily-billing-job";
 import { startTelemetryAggregator } from "../src/iot-hub/services/telemetry-aggregator";
 
@@ -133,9 +135,14 @@ const pool = getPool();
 app.post("/api/telemetry/mock", createTelemetryWebhookHandler(pool));
 // ────────────────────────────────────────────────────────────────────────
 
+// ── v5.9 Dispatch ACK endpoint ──────────────────────────────────────────
+app.post("/api/dispatch/ack", createAckHandler(pool));
+// ────────────────────────────────────────────────────────────────────────
+
 // ── v5.6 System Heartbeat: 啟動自動化管線 ──────────────────────────────
 startScheduleGenerator(pool); // M2: 每小時生成 trade_schedules
 startCommandDispatcher(pool); // M3: 每分鐘推進狀態機 → dispatch_commands
+startTimeoutChecker(pool); // M3: 每分鐘檢查 stale dispatches → failed (v5.9)
 startBillingJob(pool); // M4: 每天 00:05 結算 revenue_daily
 console.log("[v5.6] System heartbeat started: M2/M3/M4 pipelines active");
 // ────────────────────────────────────────────────────────────────────────
@@ -157,6 +164,7 @@ app.listen(PORT, () => {
   console.log("  POST /webhooks/ccee-pld");
   console.log("  POST /webhooks/weather");
   console.log("  POST /api/telemetry/mock");
+  console.log("  POST /api/dispatch/ack");
   console.log("");
   console.log("Auth: pass Authorization header as raw JSON, e.g.:");
   console.log(

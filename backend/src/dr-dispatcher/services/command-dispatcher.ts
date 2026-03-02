@@ -57,13 +57,7 @@ export async function runCommandDispatcher(pool: Pool): Promise<void> {
       }
     }
 
-    // Step 4: 將執行中超過 15 分鐘的紀錄標記為 executed
-    await client.query(`
-      UPDATE trade_schedules
-      SET status = 'executed'
-      WHERE status = 'executing'
-        AND planned_time + INTERVAL '15 minutes' <= NOW()
-    `);
+    // Step 4: timeout detection moved to timeout-checker.ts (v5.9)
 
     await client.query("COMMIT");
 

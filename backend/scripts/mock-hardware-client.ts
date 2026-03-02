@@ -1,6 +1,7 @@
 /**
- * Mock Hardware Client — v5.8
- * Simulates battery inverters posting telemetry to the /api/telemetry/mock endpoint.
+ * Mock Hardware Client — v5.9
+ * Simulates battery inverters posting telemetry to the /api/telemetry/mock endpoint,
+ * and polls dispatch_commands to simulate hardware ACK responses.
  *
  * Usage (standalone, does not affect main server):
  *   npx ts-node backend/scripts/mock-hardware-client.ts
@@ -10,7 +11,10 @@
  *   - battery_soc drifts between 20-80% (random walk +-2%)
  *   - battery_power alternates charge/discharge based on hour of day
  *   - energy_kwh = abs(battery_power) * (10/3600)  [10s interval in hours]
+ *   - Polls dispatch_commands every 5 seconds and ACKs with 90% success rate
  */
+
+import { getPool } from "../src/shared/db";
 
 const BASE_URL = process.env.BFF_URL ?? "http://localhost:3000";
 const INTERVAL_MS = 10_000; // 10 seconds
@@ -113,13 +117,71 @@ async function pushTelemetry(): Promise<void> {
   }
 }
 
+// ---------------------------------------------------------------------------
+// v5.9: Dispatch poll-and-ACK loop
+// ---------------------------------------------------------------------------
+
+// In-memory lock: Set<number> (dispatch_commands.id is BIGSERIAL → number)
+const inFlightDispatchIds = new Set<number>();
+const pool = getPool();
+
+async function pollAndAck(): Promise<void> {
+  try {
+    const { rows } = await pool.query<{
+      id: number;
+      asset_id: string;
+      action: string;
+      volume_kwh: number;
+    }>(`
+      SELECT id, asset_id, action, volume_kwh
+      FROM dispatch_commands
+      WHERE status = 'dispatched'
+        AND dispatched_at > NOW() - INTERVAL '5 minutes'
+    `);
+
+    for (const cmd of rows) {
+      const id = Number(cmd.id);
+      if (inFlightDispatchIds.has(id)) continue; // already in-flight
+      inFlightDispatchIds.add(id);
+
+      const delay = 3000 + Math.random() * 7000; // 3-10 seconds
+      setTimeout(async () => {
+        const status = Math.random() < 0.9 ? "completed" : "failed";
+        try {
+          const res = await fetch(`${BASE_URL}/api/dispatch/ack`, {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify({
+              dispatch_id: id,
+              status,
+              asset_id: cmd.asset_id,
+            }),
+          });
+          console.log(
+            `[MockHW][ACK] dispatch_id=${id} asset=${cmd.asset_id} action=${cmd.action} → ${status} (HTTP ${res.status})`,
+          );
+        } catch (err) {
+          console.error(`[MockHW][ACK] dispatch_id=${id} fetch failed:`, err);
+        } finally {
+          inFlightDispatchIds.delete(id);
+        }
+      }, delay);
+    }
+  } catch (err) {
+    console.error("[MockHW][ACK] Poll failed:", err);
+  }
+}
+
 // Start
 console.log("[MockHW] Starting mock hardware client — pushing to", BASE_URL);
-console.log(`  Interval: every ${INTERVAL_MS / 1000}s`);
+console.log(`  Telemetry interval: every ${INTERVAL_MS / 1000}s`);
+console.log(`  Dispatch ACK poll: every 5s`);
 console.log(`  Assets: ${ASSET_IDS.join(", ")}`);
 
 // Push once immediately
 void pushTelemetry();
+void pollAndAck();
 
 // Periodic push
 setInterval(() => void pushTelemetry(), INTERVAL_MS);
+setInterval(() => void pollAndAck(), 5000);

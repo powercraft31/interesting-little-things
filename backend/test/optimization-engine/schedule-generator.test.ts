@@ -67,4 +67,58 @@ describe("schedule-generator (M2)", () => {
       expect(row.action).toBe("charge");
     });
   });
+
+  // ── v5.9 SoC Guardrail Tests ──────────────────────────────────────
+
+  it("SoC guardrail: asset with battery_soc >= max_soc skips charge slots", async () => {
+    // Set an asset's SoC to 96% (above default max_soc=95)
+    await pool.query(
+      `UPDATE device_state SET battery_soc = 96 WHERE asset_id = 'ASSET_SP_001'`,
+    );
+
+    await runScheduleGenerator(pool);
+
+    // SP_001 should have fewer scheduled slots (charge slots become idle → skipped)
+    const result = await pool.query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM trade_schedules
+       WHERE asset_id = 'ASSET_SP_001'
+         AND status = 'scheduled'
+         AND planned_time > NOW()`,
+    );
+    const count = parseInt(result.rows[0].count, 10);
+
+    // With SoC=96 >= max_soc=95, all 'charge' actions become idle and are skipped.
+    // Only 'discharge' slots (PLD >= 300) should remain, which is fewer than 24.
+    expect(count).toBeLessThan(24);
+
+    // Reset for other tests
+    await pool.query(
+      `UPDATE device_state SET battery_soc = 65 WHERE asset_id = 'ASSET_SP_001'`,
+    );
+  });
+
+  it("SoC guardrail: asset with battery_soc <= min_soc skips discharge slots", async () => {
+    // Set an asset's SoC to 15% (below default min_soc=20)
+    await pool.query(
+      `UPDATE device_state SET battery_soc = 15 WHERE asset_id = 'ASSET_RJ_002'`,
+    );
+
+    await runScheduleGenerator(pool);
+
+    // RJ_002 discharge slots should be skipped. All actions should be 'charge' only.
+    const result = await pool.query<{ action: string }>(
+      `SELECT DISTINCT action FROM trade_schedules
+       WHERE asset_id = 'ASSET_RJ_002'
+         AND status = 'scheduled'
+         AND planned_time > NOW()`,
+    );
+    const actions = result.rows.map((r) => r.action);
+    // Should only have 'charge' (discharge was blocked by min_soc guardrail)
+    expect(actions).not.toContain("discharge");
+
+    // Reset for other tests
+    await pool.query(
+      `UPDATE device_state SET battery_soc = 72 WHERE asset_id = 'ASSET_RJ_002'`,
+    );
+  });
 });

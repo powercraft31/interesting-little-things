@@ -122,4 +122,31 @@ describe("GET /dashboard handler", () => {
     expect(data).toHaveProperty("dispatchSuccessRate");
     expect(data).toHaveProperty("systemHealthBlock");
   });
+
+  it("v5.9: dispatchSuccessCount and dispatchTotalCount come from DB (not hardcoded 156/160)", async () => {
+    const event = makeEvent(tokenFor("admin", "SOLFACIL", "SOLFACIL_ADMIN"));
+    const result = (await handler(event)) as APIGatewayProxyStructuredResultV2;
+
+    const body = JSON.parse(result.body as string);
+    const data = body.data;
+
+    // These should be dynamic from dispatch_commands table, not the old hardcoded 156/160
+    expect(typeof data.dispatchSuccessCount).toBe("number");
+    expect(typeof data.dispatchTotalCount).toBe("number");
+    // The dispatch success rate should be a string formatted as "X/Y"
+    expect(data.dispatchSuccessRate).toMatch(/^\d+\/\d+$/);
+    // Should NOT be the old hardcoded values
+    expect(data.dispatchSuccessRate).not.toBe("156/160");
+  });
+
+  it("v5.9: monthlyRevenueReais is from DB (not hardcoded 0)", async () => {
+    const event = makeEvent(tokenFor("admin", "SOLFACIL", "SOLFACIL_ADMIN"));
+    const result = (await handler(event)) as APIGatewayProxyStructuredResultV2;
+
+    const body = JSON.parse(result.body as string);
+    const data = body.data;
+
+    // monthlyRevenueReais should be a number from DB
+    expect(typeof data.monthlyRevenueReais).toBe("number");
+  });
 });

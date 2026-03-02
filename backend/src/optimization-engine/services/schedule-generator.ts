@@ -22,16 +22,28 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
     }
     const DEFAULT_PLD = 150; // 若 pld_horario 無資料時的 fallback
 
-    // 2. 取得所有 active assets
+    // 2. 取得所有 active assets（LEFT JOIN device_state + vpp_strategies for SoC guardrails）
     const assetsResult = await pool.query<{
       asset_id: string;
       org_id: string;
       capacidade_kw: number;
       submercado: string;
+      operation_mode: string;
+      battery_soc: number;
+      min_soc: number;
+      max_soc: number;
     }>(`
-      SELECT asset_id, org_id, capacidade_kw, submercado
-      FROM assets
-      WHERE is_active = true
+      SELECT
+        a.asset_id, a.org_id, a.capacidade_kw, a.submercado, a.operation_mode,
+        COALESCE(d.battery_soc, 50) AS battery_soc,
+        COALESCE(vs.min_soc, 20)   AS min_soc,
+        COALESCE(vs.max_soc, 95)   AS max_soc
+      FROM assets a
+      LEFT JOIN device_state d ON d.asset_id = a.asset_id
+      LEFT JOIN vpp_strategies vs ON vs.org_id = a.org_id
+        AND vs.target_mode = a.operation_mode
+        AND vs.is_active = true
+      WHERE a.is_active = true
     `);
 
     for (const asset of assetsResult.rows) {
@@ -59,7 +71,7 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
 
         // Mock Rule-based 決策邏輯：
         // 深夜強制充電（00:00-05:00），高電價放電（PLD >= 300），其餘充電
-        let action: "charge" | "discharge";
+        let action: "charge" | "discharge" | "idle";
         if (hora >= 0 && hora < 5) {
           action = "charge";
         } else if (pld >= 300) {
@@ -67,6 +79,14 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
         } else {
           action = "charge";
         }
+
+        // SoC guardrails: clamp actions based on battery state and strategy limits
+        const { battery_soc, min_soc, max_soc } = asset;
+        if (action === "charge" && battery_soc >= max_soc) action = "idle";
+        if (action === "discharge" && battery_soc <= min_soc) action = "idle";
+
+        // Skip inserting 'idle' slots into trade_schedules (no-op)
+        if (action === "idle") continue;
 
         inserts.push([
           asset.asset_id,
