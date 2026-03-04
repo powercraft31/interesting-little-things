@@ -1,0 +1,1149 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>SOLFACIL Admin Portal — 開發執行計劃 v1.0</title>
+<style>
+  :root {
+    --bg: #0f1117;
+    --card: #1a1d27;
+    --border: #2a2d3a;
+    --text: #e4e4e7;
+    --muted: #9ca3af;
+    --accent: #3b82f6;
+    --green: #22c55e;
+    --amber: #f59e0b;
+    --red: #ef4444;
+    --purple: #a855f7;
+    --cyan: #06b6d4;
+    --pink: #ec4899;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+    background: var(--bg);
+    color: var(--text);
+    line-height: 1.7;
+    padding: 2rem;
+  }
+  .container { max-width: 1000px; margin: 0 auto; }
+  h1 {
+    font-size: 1.8rem;
+    margin-bottom: 0.3rem;
+    background: linear-gradient(135deg, var(--accent), var(--cyan));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+  }
+  .subtitle {
+    color: var(--muted);
+    font-size: 0.95rem;
+    margin-bottom: 2rem;
+    border-bottom: 1px solid var(--border);
+    padding-bottom: 1.5rem;
+  }
+
+  /* Overview box */
+  .overview {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .overview h3 { color: var(--accent); margin-bottom: 0.8rem; }
+  .overview p { color: var(--muted); font-size: 0.9rem; margin-bottom: 0.5rem; }
+  .overview ul { margin: 0.5rem 0 0 1.2rem; font-size: 0.88rem; color: var(--muted); }
+  .overview li { margin-bottom: 0.3rem; }
+  .overview code {
+    background: rgba(59,130,246,0.1);
+    color: var(--accent);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.82rem;
+  }
+
+  /* Phase cards */
+  .phase {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    margin-bottom: 1.5rem;
+    overflow: hidden;
+  }
+  .phase-header {
+    padding: 1rem 1.5rem;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 0.8rem;
+  }
+  .phase-num {
+    width: 40px;
+    height: 40px;
+    border-radius: 8px;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-weight: 700;
+    font-size: 0.85rem;
+    flex-shrink: 0;
+  }
+  .phase-header h2 { font-size: 1.1rem; }
+  .phase-header .time {
+    margin-left: auto;
+    font-size: 0.8rem;
+    color: var(--muted);
+    background: rgba(255,255,255,0.05);
+    padding: 0.2rem 0.6rem;
+    border-radius: 4px;
+  }
+  .phase-header .executor {
+    font-size: 0.75rem;
+    font-weight: 600;
+    padding: 0.2rem 0.5rem;
+    border-radius: 4px;
+  }
+  .exec-claude { background: rgba(168,85,247,0.15); color: var(--purple); }
+  .exec-ashe { background: rgba(6,182,212,0.15); color: var(--cyan); }
+  .exec-alan { background: rgba(245,158,11,0.15); color: var(--amber); }
+  .phase-body { padding: 1.5rem; }
+
+  .p0 .phase-num { background: rgba(107,114,128,0.2); color: var(--muted); }
+  .p1 .phase-num { background: rgba(59,130,246,0.2); color: var(--accent); }
+  .p2 .phase-num { background: rgba(34,197,94,0.2); color: var(--green); }
+  .p3 .phase-num { background: rgba(168,85,247,0.2); color: var(--purple); }
+  .p4 .phase-num { background: rgba(245,158,11,0.2); color: var(--amber); }
+  .p5 .phase-num { background: rgba(236,72,153,0.2); color: var(--pink); }
+  .p6 .phase-num { background: rgba(6,182,212,0.2); color: var(--cyan); }
+  .p7 .phase-num { background: rgba(239,68,68,0.2); color: var(--red); }
+  .p8 .phase-num { background: rgba(34,197,94,0.2); color: var(--green); }
+
+  /* Tasks */
+  .task {
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    margin-bottom: 0.8rem;
+  }
+  .task h4 {
+    font-size: 0.9rem;
+    margin-bottom: 0.4rem;
+    display: flex;
+    align-items: center;
+    gap: 0.4rem;
+  }
+  .task p, .task ul {
+    font-size: 0.83rem;
+    color: var(--muted);
+  }
+  .task ul { margin: 0.3rem 0 0 1.2rem; }
+  .task li { margin-bottom: 0.2rem; }
+  .task code {
+    background: rgba(59,130,246,0.1);
+    color: var(--accent);
+    padding: 0.1rem 0.3rem;
+    border-radius: 3px;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+  }
+
+  /* File tree */
+  .file-tree {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.8rem 1rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.78rem;
+    color: var(--cyan);
+    line-height: 1.6;
+    margin: 0.5rem 0;
+    white-space: pre;
+  }
+
+  /* Acceptance criteria */
+  .acceptance {
+    background: rgba(34,197,94,0.05);
+    border: 1px solid rgba(34,197,94,0.2);
+    border-radius: 8px;
+    padding: 0.8rem 1rem;
+    margin-top: 0.5rem;
+  }
+  .acceptance h4 {
+    font-size: 0.85rem;
+    color: var(--green);
+    margin-bottom: 0.4rem;
+  }
+  .acceptance ul {
+    margin: 0 0 0 1.2rem;
+    font-size: 0.82rem;
+    color: var(--muted);
+  }
+  .acceptance li { margin-bottom: 0.2rem; }
+
+  /* Dependencies */
+  .dep {
+    display: inline-block;
+    background: rgba(245,158,11,0.1);
+    color: var(--amber);
+    padding: 0.1rem 0.4rem;
+    border-radius: 3px;
+    font-size: 0.72rem;
+    font-weight: 600;
+  }
+
+  /* Mock data preview */
+  .mock-preview {
+    background: rgba(0,0,0,0.3);
+    border: 1px solid var(--border);
+    border-radius: 6px;
+    padding: 0.8rem 1rem;
+    font-family: 'JetBrains Mono', monospace;
+    font-size: 0.75rem;
+    color: var(--green);
+    line-height: 1.5;
+    margin: 0.5rem 0;
+    overflow-x: auto;
+    white-space: pre;
+  }
+
+  /* Timeline */
+  .timeline {
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 1.5rem;
+    margin-bottom: 2rem;
+  }
+  .timeline h3 { color: var(--purple); margin-bottom: 1rem; }
+  .tl-row {
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    margin-bottom: 0.5rem;
+    font-size: 0.85rem;
+  }
+  .tl-phase {
+    width: 30px;
+    text-align: center;
+    font-weight: 700;
+    font-size: 0.8rem;
+  }
+  .tl-bar {
+    height: 24px;
+    border-radius: 4px;
+    display: flex;
+    align-items: center;
+    padding: 0 0.5rem;
+    font-size: 0.72rem;
+    font-weight: 600;
+    color: rgba(255,255,255,0.9);
+  }
+  .tl-label {
+    font-size: 0.78rem;
+    color: var(--muted);
+    margin-left: 0.3rem;
+  }
+
+  .footer {
+    margin-top: 3rem;
+    padding-top: 1.5rem;
+    border-top: 1px solid var(--border);
+    color: var(--muted);
+    font-size: 0.8rem;
+    text-align: center;
+  }
+</style>
+</head>
+<body>
+<div class="container">
+
+<h1>SOLFACIL Admin Portal — 開發執行計劃</h1>
+<p class="subtitle">v1.0 · 2026-03-04 · 基於 Admin_Portal_Pages_v1.2 設計規約</p>
+
+<!-- ==================== OVERVIEW ==================== -->
+<div class="overview">
+  <h3>📋 計劃概覽</h3>
+  <p><strong>目標：</strong>將 Admin_Portal_Pages_v1.2.html 的文字規約，變成帶 mock 數據的可互動靜態 Dashboard。</p>
+  <p><strong>技術棧：</strong>純前端（HTML + CSS + JS），無後端依賴。Mock 數據 hardcode 在 JS 中。</p>
+  <p><strong>圖表庫：</strong>ECharts（CDN 引入，支持面積圖 / 階梯圖 / 漸層填充 / 響應式）</p>
+  <p><strong>字體：</strong>Inter（Google Fonts CDN）+ JetBrains Mono（Google Fonts CDN）</p>
+  <p><strong>部署：</strong>靜態文件放 <code>/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/frontend-v2/</code>，文件服務器直接訪問。</p>
+  
+  <br>
+  <p><strong>執行方式：</strong></p>
+  <ul>
+    <li><strong>Phase 0（基礎框架）：</strong>Claude Code 執行 — 建立 CSS 系統 + 佈局 + 共用組件</li>
+    <li><strong>Phase 1-6（六個頁面）：</strong>Claude Code 逐頁執行 — 每頁一個獨立任務</li>
+    <li><strong>Phase 7（整合聯調）：</strong>Claude Code 執行 — 頁面間導航 + 角色切換 + 整體 polish</li>
+    <li><strong>Phase 8（Alan 驗收）：</strong>Alan 用瀏覽器工具驗收 → 反饋 → 修正</li>
+    <li><strong>Ashe 角色：</strong>翻譯規約為 Claude Code 可執行任務 + 驗收每個 Phase 的輸出</li>
+  </ul>
+
+  <br>
+  <p><strong>目標文件結構：</strong></p>
+  <div class="file-tree">frontend-v2/
+├── index.html              # 主入口，SPA 殼
+├── css/
+│   ├── variables.css       # CSS 變數（顏色、字體、間距）
+│   ├── base.css            # Reset + 全局樣式 + skeleton loading
+│   ├── layout.css          # Sidebar + 主區域佈局
+│   ├── components.css      # KPI 卡片、表格、標籤、按鈕等共用組件
+│   └── pages.css           # 各頁面特有樣式（如 Wizard 步驟條）
+├── js/
+│   ├── app.js              # 路由 + 角色切換 + 頁面初始化
+│   ├── mock-data.js        # 所有 mock 數據（統一管理，未來替換為 API 調用）
+│   ├── components.js       # 共用 UI 組件（KPI 卡片生成器、表格生成器、骨架屏）
+│   ├── charts.js           # ECharts 圖表配置工廠
+│   ├── p1-fleet.js         # P1 Fleet Overview 頁面邏輯
+│   ├── p2-devices.js       # P2 Device Management 頁面邏輯
+│   ├── p3-energy.js        # P3 Energy Behavior 頁面邏輯
+│   ├── p4-hems.js          # P4 HEMS Control 頁面邏輯
+│   ├── p5-vpp.js           # P5 VPP & DR 頁面邏輯
+│   └── p6-performance.js   # P6 Performance 頁面邏輯
+└── assets/
+    └── (favicon, logo placeholder)</div>
+</div>
+
+<!-- ==================== TIMELINE ==================== -->
+<div class="timeline">
+  <h3>⏱ 預估時間線</h3>
+  
+  <div class="tl-row">
+    <span class="tl-phase" style="color: var(--muted);">P0</span>
+    <div class="tl-bar" style="width: 120px; background: rgba(107,114,128,0.4);">~1hr</div>
+    <span class="tl-label">基礎框架 + CSS 系統</span>
+  </div>
+  <div class="tl-row">
+    <span class="tl-phase" style="color: var(--accent);">P1</span>
+    <div class="tl-bar" style="width: 150px; background: rgba(59,130,246,0.4);">~1.5hr</div>
+    <span class="tl-label">Fleet Overview（定調頁）</span>
+  </div>
+  <div class="tl-row">
+    <span class="tl-phase" style="color: var(--green);">P2</span>
+    <div class="tl-bar" style="width: 200px; background: rgba(34,197,94,0.4);">~2hr</div>
+    <span class="tl-label">Device Management + Wizard</span>
+  </div>
+  <div class="tl-row">
+    <span class="tl-phase" style="color: var(--purple);">P3</span>
+    <div class="tl-bar" style="width: 200px; background: rgba(168,85,247,0.4);">~2hr</div>
+    <span class="tl-label">Energy Behavior（圖表最密集）</span>
+  </div>
+  <div class="tl-row">
+    <span class="tl-phase" style="color: var(--amber);">P4</span>
+    <div class="tl-bar" style="width: 150px; background: rgba(245,158,11,0.4);">~1.5hr</div>
+    <span class="tl-label">HEMS Control</span>
+  </div>
+  <div class="tl-row">
+    <span class="tl-phase" style="color: var(--pink);">P5</span>
+    <div class="tl-bar" style="width: 180px; background: rgba(236,72,153,0.4);">~1.5hr</div>
+    <span class="tl-label">VPP & DR</span>
+  </div>
+  <div class="tl-row">
+    <span class="tl-phase" style="color: var(--cyan);">P6</span>
+    <div class="tl-bar" style="width: 120px; background: rgba(6,182,212,0.4);">~1hr</div>
+    <span class="tl-label">Performance 記分卡</span>
+  </div>
+  <div class="tl-row">
+    <span class="tl-phase" style="color: var(--red);">P7</span>
+    <div class="tl-bar" style="width: 150px; background: rgba(239,68,68,0.4);">~1.5hr</div>
+    <span class="tl-label">整合聯調 + 角色切換</span>
+  </div>
+  <div class="tl-row">
+    <span class="tl-phase" style="color: var(--green);">P8</span>
+    <div class="tl-bar" style="width: 100px; background: rgba(34,197,94,0.4);">Alan</div>
+    <span class="tl-label">瀏覽器驗收</span>
+  </div>
+
+  <p style="margin-top: 1rem; font-size: 0.82rem; color: var(--muted);">
+    <strong>預估總工時：</strong>~12 小時 Claude Code 執行時間（不含等待和驗收）。
+    可以一次跑完，也可以分多個 session 按 Phase 逐步推進。
+    <strong>建議：</strong>Phase 0+1 合併跑（定調），Phase 2-6 可並行或順序（每頁獨立），Phase 7 最後整合。
+  </p>
+</div>
+
+<!-- ==================== PHASE 0 ==================== -->
+<div class="phase p0">
+  <div class="phase-header">
+    <div class="phase-num">P0</div>
+    <h2>基礎框架 + CSS 系統</h2>
+    <span class="executor exec-claude">Claude Code</span>
+    <span class="time">~1 小時</span>
+  </div>
+  <div class="phase-body">
+    <div class="task">
+      <h4>T0.1 建立目錄結構和主入口</h4>
+      <ul>
+        <li>建立上述文件結構（空文件佔位）</li>
+        <li><code>index.html</code>：引入所有 CSS/JS + CDN（ECharts, Inter, JetBrains Mono）</li>
+        <li>SPA 結構：sidebar 導航 + 主內容區域，6 個 page section（display: none/block 切換）</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T0.1b Mock 數據生成策略（mock-data.js 核心規範）</h4>
+      <p><strong>時序數據（P3/P5 的圖表）禁止 hardcode JSON 陣列。</strong>必須寫 Data Generator 函數。</p>
+      <ul>
+        <li><strong>太陽能發電：</strong><code>generateSolarCurve()</code> — 以 <code>Math.sin()</code> 生成鐘型曲線（06:00 開始，12:00 峰值 3-5kW，18:00 歸零），加 ±5% 隨機擾動</li>
+        <li><strong>家庭負載：</strong><code>generateLoadCurve()</code> — 雙峰曲線（07:00 早峰 + 18:00 晚峰），基底負載 0.5-0.8kW，峰值 2-3kW</li>
+        <li><strong>電池：</strong><code>generateBatteryCurve(tariffSchedule, pvCurve, loadCurve)</code> — 根據費率和 PV/Load 計算充放電（off-peak 充，peak 放）</li>
+        <li><strong>電網：</strong><code>grid_kw = load_kw - pv_kw - battery_kw</code>（能量守恆，不需獨立生成）</li>
+        <li><strong>Dumb Baseline：</strong><code>baseline_grid = load_kw</code>（沒有 PV 沒有電池 = 100% 電網供電）</li>
+      </ul>
+      <p style="font-size: 0.82rem; color: var(--amber); margin-top: 0.5rem;">
+        這樣圖表曲線自然真實，代碼輕量，且可以通過改參數快速生成不同家庭的數據。
+      </p>
+      <p style="font-size: 0.82rem; color: var(--red); margin-top: 0.3rem;">
+        <strong>🚨 Mock 數據快取（Memoization）：</strong>所有 Data Generator（含隨機噪聲）只能在系統初始化（Page Load）時執行<strong>一次</strong>，
+        生成的時序陣列存入 <code>DemoStore</code>。後續頁面切換渲染圖表時，直接讀取緩存的陣列，
+        <strong>禁止重複調用 <code>Math.random()</code> 重新生成。</strong>
+        否則從 P3 切到 P4 再切回 P3 時，圖表曲線會「抽搐/變形」（因為 noise 不同），Demo 時會暴露數據是假的。
+      </p>
+      <p style="font-size: 0.82rem; color: var(--red); margin-top: 0.3rem;">
+        <strong>🚨 時區防禦：</strong>所有 24 小時圖表（P3/P5）的 X 軸，<strong>禁止使用 JS Date 物件的時間戳</strong>。
+        必須生成純字串陣列 <code>['00:00', '00:15', '00:30' ... '23:45']</code> 作為 ECharts 的 X 軸 category。
+        原因：Demo 可能在亞洲/澳洲的瀏覽器上打開，JS Date 會套用本地時區，導致 Tarifa Branca 尖峰時段（17:00-20:00）在圖表上錯位。
+        用純字串可以確保在任何國家打開，時段都釘在正確位置。
+      </p>
+      <p style="font-size: 0.82rem; color: var(--red); margin-top: 0.3rem;">
+        <strong>🚨 Tarifa Branca 基準時段（hardcode 在 mock-data.js 頂部）：</strong><br>
+        · <strong>Peak（尖峰）：</strong>17:00–20:00<br>
+        · <strong>Intermediate（中高）：</strong>16:00–17:00 及 20:00–21:00<br>
+        · <strong>Off-peak（離峰）：</strong>其餘時間（21:00–16:00）<br>
+        Data Generator 的充放電邏輯必須嚴格對齊這個時段——off-peak 充電、peak 放電。
+        Claude 不得自行猜測或修改這些時段。
+      </p>
+      <p style="font-size: 0.82rem; color: var(--red); margin-top: 0.3rem;">
+        <strong>🚨 節費計算邏輯（R$）必須加權費率：</strong><br>
+        <code>savings_brl = Σ ((baseline_grid_kw[t] - actual_grid_kw[t]) × tariff_price[t] × 0.25)</code>（15分鐘粒度 = 0.25 小時）<br>
+        <strong>不能簡單用 kW 差額。</strong>半夜充電增加了電網進口（kW 差額為負），但費率便宜（R$0.41/kWh）；
+        白天放電減少了電網進口（kW 差額為正），費率昂貴（R$0.89/kWh）。
+        整體套利利潤 = 昂貴時段省的錢 - 便宜時段多花的錢 = 正值。
+        P6 的節費效果圖表必須用這個加權公式。
+      </p>
+    </div>
+
+    <div class="task">
+      <h4>T0.2 CSS 變數系統 (variables.css)</h4>
+      <p>從 v1.2 設計規約直接提取：</p>
+      <div class="mock-preview">:root {
+  /* 背景與邊框 */
+  --bg: #0f1117;
+  --card: #1a1d27;
+  --border: #2a2d3a;
+  --text: #e4e4e7;
+  --muted: #9ca3af;
+
+  /* 三組色彩語意 */
+  --positive: #22c55e;      /* 綠：省錢/發電/在線/達標 */
+  --positive-bg: rgba(34, 197, 94, 0.1);
+  --negative: #ef4444;      /* 紅：花錢/離線/未達標 */
+  --negative-bg: rgba(239, 68, 68, 0.1);
+  --neutral: #a855f7;       /* 紫：電池調度/VPP/系統動作 */
+  --neutral-bg: rgba(168, 85, 247, 0.1);
+  --accent: #3b82f6;        /* 藍：互動元素/連結 */
+  --amber: #f59e0b;         /* 琥珀：警告/待處理 */
+
+  /* 字體 */
+  --font-ui: 'Inter', -apple-system, sans-serif;
+  --font-data: 'JetBrains Mono', monospace;
+  
+  /* 間距系統（8px 基準） */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* 圓角 */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+}</div>
+    </div>
+
+    <div class="task">
+      <h4>T0.3 全局樣式 (base.css)</h4>
+      <ul>
+        <li>CSS Reset（box-sizing, margin, padding）</li>
+        <li><code>font-variant-numeric: tabular-nums;</code> 全局套用到所有 <code>.data-value</code> class</li>
+        <li>正負號 helper class：<code>.positive::before { content: '+'; }</code> / <code>.negative::before { content: '-'; }</code></li>
+        <li>Skeleton Loading 動畫：<code>@keyframes skeleton-pulse</code> + <code>.skeleton</code> class</li>
+        <li>Dark theme 為預設（Pilot 先做 Admin Dark Mode）</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T0.4 佈局 (layout.css)</h4>
+      <ul>
+        <li>Sidebar：固定左側，寬 240px，包含 6 個頁面導航項 + 角色切換器（底部）</li>
+        <li>主內容區域：<code>margin-left: 240px</code>，padding 24px</li>
+        <li>頂部 bar：顯示當前頁面名稱 + 當前角色標籤</li>
+        <li>響應式：寬度 &lt; 768px 時 sidebar 收起為 icon-only 模式</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T0.5 共用組件 (components.css + components.js + charts.js)</h4>
+      <ul>
+        <li><strong>KPI 卡片：</strong>大數字（JetBrains Mono, 2rem）+ 標籤（Inter）+ 迷你 sparkline 區域</li>
+        <li><strong>數據表格：</strong>striped rows, 數字右對齊, 支持排序圖示</li>
+        <li><strong>狀態標籤：</strong>online(綠) / offline(紅) / warning(琥珀) / neutral(紫)</li>
+        <li><strong>確認對話框：</strong>modal overlay, 影響範圍預覽 + 確認/取消按鈕</li>
+        <li><strong>骨架屏組件：</strong>KPI 骨架 / 表格骨架 / 圖表骨架（各一個）</li>
+      </ul>
+      <p style="margin-top: 0.5rem; font-size: 0.82rem; color: var(--amber);">
+        <strong>⚠️ ECharts 響應式防雷（charts.js 必須遵守）：</strong>
+        所有 ECharts 實例必須綁定 <code>ResizeObserver</code> 到其容器元素上。
+        當容器寬高變化時（Sidebar 收合/展開、視窗調整大小），自動呼叫 <code>chart.resize()</code>。
+        建立一個統一的 <code>createChart(containerId, option)</code> 工廠函數，內建 ResizeObserver 綁定，
+        所有頁面的圖表都必須通過這個工廠創建，禁止直接 <code>echarts.init()</code>。
+      </p>
+      <p style="font-size: 0.82rem; color: var(--red); margin-top: 0.3rem;">
+        <strong>🚨 致命雷區：ECharts + display:none 零像素陷阱：</strong>
+        SPA 使用 <code>display: none/block</code> 切換頁面。如果在 <code>display: none</code> 狀態下初始化 ECharts，
+        容器寬高為 0，圖表會縮成一坨或完全不渲染。<br>
+        <strong>鐵律：</strong><code>createChart()</code> 工廠必須實現延遲初始化——只在頁面切換為 <code>display: block</code> 之後，
+        通過 <code>requestAnimationFrame</code> 觸發圖表的初始化或 <code>chart.resize()</code>。
+        Router 的頁面切換回調中必須調用 <code>activatePageCharts(pageId)</code>。
+      </p>
+      <p style="font-size: 0.82rem; color: var(--red); margin-top: 0.3rem;">
+        <strong>🚨 ECharts 單例模式（Singleton）：</strong><code>createChart()</code> 在執行 <code>echarts.init(dom)</code> 前，
+        必須先檢查 <code>echarts.getInstanceByDom(container)</code>。
+        如果已存在實例，直接複用並調用 <code>.setOption()</code> + <code>.resize()</code>，
+        <strong>禁止重複 init</strong>。否則控制台會噴 <code>"There is a chart instance already initialized on the dom"</code> 警告，
+        且每次頁面切換都會創建新實例導致內存洩漏。
+      </p>
+    </div>
+
+    <div class="task">
+      <h4>T0.6 角色切換 + 跨頁狀態管理 (app.js)</h4>
+      <ul>
+        <li>三個角色：<code>SOLFACIL_ADMIN</code> / <code>INTEGRADOR</code> / <code>CUSTOMER</code>（Customer 頁面顯示 coming soon）</li>
+        <li>切換角色時：顯示/隱藏受角色限制的組件（用 <code>data-role="admin"</code> 屬性控制）</li>
+        <li>Sidebar 導航項也根據角色顯隱（Customer 看不到 P4/P5）</li>
+      </ul>
+      <p style="margin-top: 0.5rem; font-size: 0.82rem; color: var(--red);">
+        <strong>🚨 主題聯動：</strong>切換角色時，同時切換 <code>&lt;body&gt;</code> 的 <code>data-theme</code> 屬性：
+        <code>SOLFACIL_ADMIN → data-theme="dark"</code> / <code>INTEGRADOR → data-theme="light"</code>。
+        CSS 變數使用 <code>[data-theme="dark"] { ... }</code> 和 <code>[data-theme="light"] { ... }</code> 選擇器。
+        <strong>Pilot 階段只實作 Dark Mode 的 CSS 變數值</strong>，Light Mode 變數先定義為 placeholder（與 Dark 相同值），
+        後續擴展時只需填入正確的 Light Mode 顏色即可，無需改 JS 或 HTML 結構。
+      </p>
+      <p style="margin-top: 0.5rem; font-size: 0.82rem; color: var(--amber);">
+        <strong>⚠️ 跨頁狀態管理（DemoStore）：</strong>
+        實作一個極簡的 <code>window.DemoStore</code>（底層用 <code>sessionStorage</code>）。
+        用途：當 P4 執行「批量模式切換」後，新的 target_mode 分佈寫入 DemoStore；
+        切到 P3 時，讀取 DemoStore 決定顯示哪組 mock 曲線（例：切換到 peak_shaving 後，圖表反映峰值削減行為）。
+        <strong>這讓 Demo 演示時跨頁面操作是「活的」，不是每頁獨立的靜態展示。</strong>
+      </p>
+      <div class="mock-preview">// DemoStore 極簡 API
+window.DemoStore = {
+  get(key) { return JSON.parse(sessionStorage.getItem(key)); },
+  set(key, val) { sessionStorage.setItem(key, JSON.stringify(val)); },
+  reset() { sessionStorage.clear(); }
+};
+
+// 使用場景
+// P4: DemoStore.set('targetModeDistribution', { self: 10, arb: 25, peak: 12 });
+// P3: const modes = DemoStore.get('targetModeDistribution') || DEFAULT_MODES;</div>
+    </div>
+
+    <div class="acceptance">
+      <h4>✅ Phase 0 驗收標準</h4>
+      <ul>
+        <li>瀏覽器打開 index.html，看到 sidebar + 空白主內容區域</li>
+        <li>sidebar 6 個導航項可點擊切換，主區域顯示對應頁面佔位符（「P1 Fleet Overview — 開發中」）</li>
+        <li>角色切換器可切換 Admin / Integrador，頁面佔位符隨角色變化</li>
+        <li>KPI 卡片 / 數據表格 / 骨架屏組件的 demo 展示（在任一佔位頁面中展示）</li>
+        <li>字體載入正確（Inter + JetBrains Mono）</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PHASE 1 ==================== -->
+<div class="phase p1">
+  <div class="phase-header">
+    <div class="phase-num">P1</div>
+    <h2>Fleet Overview — 艦隊總覽</h2>
+    <span class="dep">依賴 P0</span>
+    <span class="executor exec-claude">Claude Code</span>
+    <span class="time">~1.5 小時</span>
+  </div>
+  <div class="phase-body">
+    <p style="color: var(--muted); font-size: 0.85rem; margin-bottom: 1rem;">
+      <strong>定調頁。</strong>這是用戶登入後看到的第一個頁面，它的視覺質感決定了整個產品的第一印象。
+      完成後，Fintech 風格的基調就定了，後面的頁面延續即可。
+    </p>
+
+    <div class="task">
+      <h4>T1.1 KPI 卡片組（頂部）</h4>
+      <p>4-6 張 KPI 卡片，橫向排列，響應式（2 列 → 3 列 → 6 列）。</p>
+      <div class="mock-preview">Mock 數據（mock-data.js）：
+{
+  fleet: {
+    totalDevices: 47,
+    onlineCount: 44,
+    offlineCount: 3,
+    onlineRate: 93.6,        // >90% 顯示綠色
+    totalHomes: 3,
+    totalIntegradores: 2
+  }
+}
+
+KPI 卡片格式：
+┌─────────────────┐
+│ 47              │  ← JetBrains Mono, 2rem, bold
+│ Total Devices   │  ← Inter, 0.8rem, muted
+│ ▁▂▃▄▅▆▇ (+3)   │  ← sparkline + 趨勢 (綠色)
+└─────────────────┘</div>
+    </div>
+
+    <div class="task">
+      <h4>T1.2 在線率趨勢圖（ECharts 折線圖）</h4>
+      <ul>
+        <li>X 軸：過去 28 天日期</li>
+        <li>Y 軸：在線率 %</li>
+        <li>90% 目標線：水平虛線 + 標籤「Target: 90%」</li>
+        <li>線色：在線率 ≥90% 時綠色，&lt;90% 時紅色</li>
+      </ul>
+      <div class="mock-preview">Mock：28 天數據，大多在 91-96% 之間，有 2 天跌到 87%（模擬離線事件）</div>
+    </div>
+
+    <div class="task">
+      <h4>T1.3 設備類型分佈（橫向 bar 或 donut）</h4>
+      <ul>
+        <li>四類設備：Inverter + Battery (20), Smart Meter (12), AC (10), EV Charger (5)</li>
+        <li>每類顯示：在線數 / 總數</li>
+        <li>顏色：紫色（電池/逆變器）、青色（電表）、藍色（空調）、粉色（充電樁）</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T1.4 按安裝商分組列表</h4>
+      <ul>
+        <li>表格：org_name / device_count / online_rate / last_commission_date</li>
+        <li>Mock：2 個安裝商（「Solar São Paulo」26 台, 「Green Energy Rio」21 台）</li>
+        <li>Admin 角色：看全部；Integrador 角色：只看自己的一行</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T1.5 離線事件列表</h4>
+      <ul>
+        <li>表格：device_id / offline_start / duration_hrs / cause / backfill_complete</li>
+        <li>Mock：3 筆離線事件（WiFi 斷線 4hr ✅ / 電力中斷 12hr ✅ / 未知 2hr ⚠️）</li>
+      </ul>
+    </div>
+
+    <div class="acceptance">
+      <h4>✅ Phase 1 驗收標準</h4>
+      <ul>
+        <li>KPI 卡片數字使用 JetBrains Mono，tabular-nums 生效（數字不抖動）</li>
+        <li>在線率圖表有 90% 目標線，低於 90% 的區域用紅色標注</li>
+        <li>切換到 Integrador 角色時，安裝商列表只顯示一行</li>
+        <li>頁面載入時先顯示骨架屏，0.5 秒後渲染真實數據</li>
+        <li>整體視覺質感符合 Fintech 風格（深色背景、大數字、乾淨排版）</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PHASE 2 ==================== -->
+<div class="phase p2">
+  <div class="phase-header">
+    <div class="phase-num">P2</div>
+    <h2>Device Management — 設備管理</h2>
+    <span class="dep">依賴 P0</span>
+    <span class="executor exec-claude">Claude Code</span>
+    <span class="time">~2 小時</span>
+  </div>
+  <div class="phase-body">
+    <div class="task">
+      <h4>T2.1 設備總表</h4>
+      <ul>
+        <li>表格：device_id / type / brand / model / home / org / status / last_seen / commission_date</li>
+        <li>篩選器：按類型（下拉）、按狀態（在線/離線/維修中）、搜索框</li>
+        <li>Mock：47 台設備，品牌含 Growatt / Sofar / Goodwe / Deye</li>
+        <li>狀態用色彩標籤：🟢 online / 🔴 offline / 🟡 maintenance</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T2.2 單設備 Drill-Down（側面板或 modal）</h4>
+      <ul>
+        <li>點擊設備行 → 展開/彈出詳情面板</li>
+        <li>按設備類型顯示不同欄位（v1.2 規約中有完整定義）</li>
+        <li>Mock：每台設備 hardcode 一組遙測數據</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T2.3 Commissioning Wizard</h4>
+      <p><strong>這是 P2 最重要的組件。</strong>5 步精靈，全屏 modal 或 sidebar 抽屜。</p>
+      <ul>
+        <li>步驟進度條（Step 1/5 → 2/5 → ...）</li>
+        <li>Step 1：Home ID 輸入框</li>
+        <li>Step 2：Gateway SN 輸入框（旁邊有「📷 掃碼」按鈕，點擊提示「掃碼功能需移動端」）</li>
+        <li>Step 3：自動掃描動畫（mock 延遲 2 秒，然後顯示發現的 4 台設備列表）</li>
+        <li>Step 4：通訊測試按鈕 → mock 延遲 3 秒 → 每台設備逐一顯示 ✅ 或 ❌</li>
+        <li>Step 5：結果報告（全 Pass → 大面積綠色色塊 + commissioning 時間；有 Fail → 紅色 + 排查建議）</li>
+      </ul>
+      <p style="margin-top: 0.5rem; font-size: 0.82rem; color: var(--amber);">
+        <strong>戶外防護：</strong>所有按鈕 min-height: 48px；「下一步」按鈕 100% 寬度 + 高對比色。
+      </p>
+      <p style="font-size: 0.82rem; color: var(--red); margin-top: 0.3rem;">
+        <strong>🚨 Mock 數據一致性：</strong>Wizard Step 3 「發現的設備」列表，必須從 <code>mock-data.js</code> 的
+        <code>unassignedDevices</code> 陣列中讀取，禁止在 Wizard UI 中 hardcode 設備 HTML。
+        Step 5 完成時，觸發 <code>DemoStore.set('lastCommission', {...})</code> 更新，
+        將這些設備狀態改為 online 並歸屬該 Home。切回 P1 時 <code>totalDevices</code> 會反映變化。
+        <strong>如果 Wizard 的設備和 P1 的總數對不上，Demo 在演示時會穿幫。</strong>
+      </p>
+    </div>
+
+    <div class="task">
+      <h4>T2.4 Commissioning 追蹤表</h4>
+      <ul>
+        <li>表格：home_id / integrador / start / complete / duration_min / devices / first_telemetry</li>
+        <li>Mock：3 個家庭，安裝時間分別為 85min ✅ / 110min ✅ / 145min ⚠️（超標）</li>
+      </ul>
+    </div>
+
+    <div class="acceptance">
+      <h4>✅ Phase 2 驗收標準</h4>
+      <ul>
+        <li>設備表格可篩選和搜索</li>
+        <li>Wizard 5 步流程可完整走完（mock 動畫流暢）</li>
+        <li>Wizard 按鈕高度 ≥ 48px</li>
+        <li>Integrador 角色：只能看到自己安裝商的設備 + 可啟動 Wizard</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PHASE 3 ==================== -->
+<div class="phase p3">
+  <div class="phase-header">
+    <div class="phase-num">P3</div>
+    <h2>Energy Behavior — 用電行為分析</h2>
+    <span class="dep">依賴 P0</span>
+    <span class="executor exec-claude">Claude Code</span>
+    <span class="time">~2 小時</span>
+  </div>
+  <div class="phase-body">
+    <p style="color: var(--muted); font-size: 0.85rem; margin-bottom: 1rem;">
+      <strong>圖表最密集的頁面。</strong>這頁的圖表質感直接決定了 SOLFACIL 對旭衡技術實力的判斷。
+    </p>
+
+    <div class="task">
+      <h4>T3.1 家庭選擇器</h4>
+      <ul>
+        <li>頂部下拉選單：選擇 Pilot 家庭（Home A / Home B / Home C）</li>
+        <li>選擇後刷新下方所有圖表</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T3.2 24 小時能源流向圖（主圖，ECharts）</h4>
+      <p><strong>這是整個 Dashboard 最重要的圖表。</strong></p>
+      <ul>
+        <li><strong>底層：</strong>Tarifa Branca 費率階梯圖（Step Chart），R$/kWh，半透明背景色區分 peak/intermediate/off-peak</li>
+        <li><strong>曲線 1：</strong>PV 發電（綠色面積圖，漸層填充）</li>
+        <li><strong>曲線 2：</strong>家庭負載（灰白色線）</li>
+        <li><strong>曲線 3：</strong>電池充放電（紫色線，充電為正值、放電為負值）</li>
+        <li><strong>曲線 4：</strong>電網進出口（進口紅色、出口綠色）</li>
+        <li>X 軸：00:00 — 23:59（15 分鐘粒度 = 96 個數據點）</li>
+        <li>Tooltip：hover 顯示該時刻所有數值 + 當前費率時段</li>
+      </ul>
+      <div class="mock-preview">Mock 數據模式（一天的合理能源流向）：
+00:00-06:00  PV=0, Load=0.8kW, Battery=充電中(off-peak), Grid=進口
+06:00-09:00  PV 上升, Load=1.2kW, Battery=待機
+09:00-15:00  PV 峰值 3-5kW, Load=1.5kW, Battery=充電(PV多餘), Grid=出口(多餘)
+15:00-18:00  PV 下降, Load=2kW(peak), Battery=放電(peak shaving), Grid=少量進口
+18:00-21:00  PV=0, Load=2.5kW(peak), Battery=放電, Grid=少量進口
+21:00-24:00  PV=0, Load=1kW, Battery=off-peak充電, Grid=進口</div>
+    </div>
+
+    <div class="task">
+      <h4>T3.3 Dumb Baseline 對照曲線</h4>
+      <ul>
+        <li>在能源流向圖上疊加一條虛線：「無優化時的電網進口量」</li>
+        <li>虛線（baseline）與實線（actual grid import）之間的差額面積，用<strong>漸層綠色 (gradient)</strong> 填充</li>
+        <li>漸層方向：頂部濃 → 底部淡</li>
+        <li>面積大 = 節省多，視覺上直觀</li>
+      </ul>
+      <div class="mock-preview">Baseline 邏輯（mock）：
+baseline_grid_import = load_kw（沒有 PV、沒有電池，100% 電網供電）
+actual_grid_import = 實際電網進口（有優化後的值）
+savings = baseline - actual（差額 = 節省）</div>
+    </div>
+
+    <div class="task">
+      <h4>T3.4 按設備拆分的行為（子圖表或 tabs）</h4>
+      <ul>
+        <li>電池：24hr 充放電功率曲線（紫色）</li>
+        <li>空調：開/關時間軸（被 peak shaving 關閉的時段用紅色標記）</li>
+        <li>EV 充電樁：充電時段（off-peak 充電用綠色，peak 充電用紅色）</li>
+        <li>可用 tab 切換或垂直堆疊</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T3.5 規則變更前後對比</h4>
+      <ul>
+        <li>兩個日期選擇器：Before / After</li>
+        <li>對比面板：左右分屏或疊加，顯示同一家庭在不同時段的能源流向差異</li>
+        <li>關鍵指標差異卡片：自發自用率 Δ / 峰時用電 Δ / 電網進口 Δ</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T3.6 跨家庭聚合表</h4>
+      <ul>
+        <li>表格：home_id / self_consumption_% / grid_export_kwh / grid_import_kwh / peak_load_kw / target_mode</li>
+        <li>Mock：3 個家庭，self_consumption 分別為 96.2% / 98.5% / 94.1%</li>
+      </ul>
+    </div>
+
+    <div class="acceptance">
+      <h4>✅ Phase 3 驗收標準</h4>
+      <ul>
+        <li>能源流向圖有 5 層數據（費率背景 + PV + Load + Battery + Grid）</li>
+        <li>Tarifa Branca 用階梯圖，視覺上 peak 時段明顯突出</li>
+        <li>Dumb Baseline 差額面積用漸層綠色填充，視覺衝擊力強</li>
+        <li>切換家庭時圖表平滑更新</li>
+        <li>圖表 tooltip 資訊完整</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PHASE 4 ==================== -->
+<div class="phase p4">
+  <div class="phase-header">
+    <div class="phase-num">P4</div>
+    <h2>HEMS Control — 優化規則控制</h2>
+    <span class="dep">依賴 P0</span>
+    <span class="executor exec-claude">Claude Code</span>
+    <span class="time">~1.5 小時</span>
+  </div>
+  <div class="phase-body">
+    <div class="task">
+      <h4>T4.1 優化模式設定面板</h4>
+      <ul>
+        <li>三個 target_mode 展示為大型卡片/radio 選擇</li>
+        <li>每個模式：名稱 + 簡述 + 圖示 + 「目前 N 台設備使用此模式」</li>
+        <li>選中時高亮邊框</li>
+      </ul>
+      <div class="mock-preview">Mock 分佈：
+self_consumption:       22 台 (46.8%)
+peak_valley_arbitrage:  18 台 (38.3%)
+peak_shaving:            7 台 (14.9%)</div>
+    </div>
+
+    <div class="task">
+      <h4>T4.2 批量下發操作</h4>
+      <ul>
+        <li>篩選器：按安裝商 / 按地區 / 按設備類型 / 按當前模式</li>
+        <li>目標模式選擇</li>
+        <li>「預覽影響範圍」按鈕 → 顯示：「此操作將變更 N 台設備」+ 按組分類統計</li>
+        <li>確認對話框 → mock 執行（2 秒延遲 + 成功提示）</li>
+        <li>離線設備標記（「N 台離線設備將在恢復後收到新規則」）</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T4.3 Tarifa Branca 費率表</h4>
+      <ul>
+        <li>當前費率顯示（DISCO / peak / intermediate / off-peak / 生效日期）</li>
+        <li>「編輯費率」按鈕 → modal 表單（手動輸入各時段電價）</li>
+        <li>Mock：CEMIG 費率（peak R$0.89 / intermediate R$0.62 / off-peak R$0.41）</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T4.4 規則生效確認面板</h4>
+      <ul>
+        <li>最近一次規則下發記錄：時間 / 模式 / 影響設備數 / 成功率</li>
+        <li>ACK 狀態列表：每台設備的回應狀態（✅ ACK / ⏳ 等待 / ❌ 超時）</li>
+        <li>「查看行為變化」連結 → 跳轉到 P3</li>
+      </ul>
+    </div>
+
+    <div class="acceptance">
+      <h4>✅ Phase 4 驗收標準</h4>
+      <ul>
+        <li>批量下發流程完整：篩選 → 預覽 → 確認 → 執行（mock）</li>
+        <li>費率表可編輯（mock，不持久化）</li>
+        <li>Integrador 角色：此頁所有操作不可用（唯讀標記）</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PHASE 5 ==================== -->
+<div class="phase p5">
+  <div class="phase-header">
+    <div class="phase-num">P5</div>
+    <h2>VPP & DR — VPP 調度與需求響應</h2>
+    <span class="dep">依賴 P0</span>
+    <span class="executor exec-claude">Claude Code</span>
+    <span class="time">~1.5 小時</span>
+  </div>
+  <div class="phase-body">
+    <div class="task">
+      <h4>T5.1 VPP 聚合容量卡片</h4>
+      <ul>
+        <li>大型 KPI 組：total_capacity / available / aggregate_soc / max_discharge / max_charge / dispatchable_count</li>
+        <li>Net Dispatchable 預留位置（灰色，「Load forecast adapting — available in 2 weeks」）</li>
+      </ul>
+      <div class="mock-preview">Mock：
+total_capacity_kwh: 156.0
+available_capacity_kwh: 112.3
+aggregate_soc: 72%
+max_discharge_kw: 45.0
+max_charge_kw: 38.0
+devices_dispatchable: 41</div>
+    </div>
+
+    <div class="task">
+      <h4>T5.2 DR 事件觸發面板</h4>
+      <ul>
+        <li>表單：事件類型（放電/充電/負載削減）/ 目標功率 kW / 持續時間 / 設備範圍</li>
+        <li>「觸發」按鈕 → 確認對話框 → mock 執行</li>
+        <li>執行中狀態：進度條 + 已回應設備數 / 總設備數</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T5.3 調度延遲測試結果</h4>
+      <ul>
+        <li>7 級延遲的成功率 bar chart</li>
+        <li>每級顯示：latency tier / test count / success rate / 是否達標</li>
+        <li>≥15min 的 tier 目標 >90%，用綠/紅色標記</li>
+      </ul>
+      <div class="mock-preview">Mock：
+1s:   60%  ❌ (可接受，不是硬指標)
+5s:   72%  ⚠️
+15s:  88%  ⚠️
+30s:  94%  ✅
+1min: 97%  ✅
+15min: 99% ✅
+1h:  100%  ✅</div>
+    </div>
+
+    <div class="task">
+      <h4>T5.4 DR 事件歷史表</h4>
+      <ul>
+        <li>表格：event_id / type / triggered_at / target_kw / achieved_kw / accuracy / participated / failed</li>
+        <li>Mock：5 筆歷史事件</li>
+      </ul>
+    </div>
+
+    <div class="acceptance">
+      <h4>✅ Phase 5 驗收標準</h4>
+      <ul>
+        <li>DR 事件觸發流程完整（含 mock 進度動畫）</li>
+        <li>延遲測試 bar chart 的 90% 目標線清晰可見</li>
+        <li>Integrador 角色：此頁唯讀</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PHASE 6 ==================== -->
+<div class="phase p6">
+  <div class="phase-header">
+    <div class="phase-num">P6</div>
+    <h2>Performance — 表現指標</h2>
+    <span class="dep">依賴 P0</span>
+    <span class="executor exec-claude">Claude Code</span>
+    <span class="time">~1 小時</span>
+  </div>
+  <div class="phase-body">
+    <div class="task">
+      <h4>T6.1 Pilot 驗收記分卡</h4>
+      <ul>
+        <li>三組指標（OBJECTIVE 1 硬件 / OBJECTIVE 2 優化 / 運營），每組垂直排列</li>
+        <li>每個指標：名稱 / 目標值 / 實際值 / 狀態圖示（🟢🟡🔴）</li>
+        <li>實際值用 JetBrains Mono 大字體，tabular-nums</li>
+      </ul>
+      <div class="mock-preview">Mock 驗收指標：
+commissioning_time:     95 min  ✅ (target: &lt;120)
+offline_resilience:     72 hrs  ✅ (target: ≥72)
+uptime_4weeks:         93.6%   ✅ (target: &gt;90%)
+first_telemetry:       18 hrs  ✅ (target: &lt;24)
+savings_alpha:         74.2%   ✅ (target: &gt;70%)
+self_consumption:      96.8%   🟡 (target: &gt;98%)  ← 接近但未達標
+pv_forecast_mape:      22.1%   ✅ (target: &lt;25%)
+load_forecast_adapt:   11 days ✅ (target: &lt;14)
+dispatch_accuracy:     91.3%   ✅ (target: TBD)
+training_time:         75 min  ✅ (target: &lt;90)
+manual_interventions:  4       ⚠️
+app_uptime:           99.2%    ✅</div>
+    </div>
+
+    <div class="task">
+      <h4>T6.2 節費效果圖表</h4>
+      <ul>
+        <li>按家庭的月度節費金額 bar chart（R$）</li>
+        <li>節費來源拆分（stacked bar：self_consumption 綠 / TOU 藍 / peak_shaving 紫）</li>
+        <li>理論最大值 vs 實際值（alpha_% 顯示在 bar 上方）</li>
+        <li>金額使用正號：<code>+R$ 145.00</code></li>
+      </ul>
+    </div>
+
+    <div class="acceptance">
+      <h4>✅ Phase 6 驗收標準</h4>
+      <ul>
+        <li>記分卡有真實的「幾乎達標」項目（self_consumption 96.8%），不是全綠</li>
+        <li>金額使用 +/- 符號 + 綠/紅色雙重標記</li>
+        <li>整體像一份投資人可讀的 Pilot 成績單</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PHASE 7 ==================== -->
+<div class="phase p7">
+  <div class="phase-header">
+    <div class="phase-num">P7</div>
+    <h2>整合聯調 + 角色切換 + Polish</h2>
+    <span class="dep">依賴 P1-P6 全部完成</span>
+    <span class="executor exec-claude">Claude Code</span>
+    <span class="time">~1.5 小時</span>
+  </div>
+  <div class="phase-body">
+    <div class="task">
+      <h4>T7.1 頁面間導航</h4>
+      <ul>
+        <li>Sidebar 導航完整：6 頁 + 當前頁高亮</li>
+        <li>頁面內的跨頁連結生效（例：P4 「查看行為變化」→ P3）</li>
+        <li>URL hash routing（#fleet / #devices / #energy / #hems / #vpp / #performance）</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T7.2 角色切換完整性</h4>
+      <ul>
+        <li>Admin → 看全部，所有操作可用</li>
+        <li>Integrador → 設備列表只顯示自己安裝商的；P4/P5 操作按鈕 disabled + 灰色 + tooltip「此操作需要 Admin 權限」</li>
+        <li>Customer → 顯示 coming soon 頁面（只有 P6 節費和 P1 自家概覽的簡化版）</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T7.3 視覺 Polish</h4>
+      <ul>
+        <li>所有圖表的 ECharts 主題統一（暗色背景、grid 線顏色、tooltip 樣式）</li>
+        <li>骨架屏在每頁首次載入時觸發（mock 0.5s 延遲）</li>
+        <li>表格空狀態（「No data」提示）</li>
+        <li>所有 KPI 卡片的 sparkline 動畫一致</li>
+        <li>頁面間切換動畫（fade in/out，200ms）</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T7.4 響應式基礎</h4>
+      <ul>
+        <li>桌面端（≥1200px）：完整 sidebar + 多欄佈局</li>
+        <li>平板端（768-1200px）：sidebar 收窄為 icon-only，內容單欄</li>
+        <li>不需要做完整移動端（Pilot 階段 Admin 用桌面）</li>
+      </ul>
+    </div>
+
+    <div class="acceptance">
+      <h4>✅ Phase 7 驗收標準</h4>
+      <ul>
+        <li>6 頁之間導航流暢，無 broken link</li>
+        <li>角色切換一鍵生效，可見範圍正確</li>
+        <li>ECharts 主題統一，無視覺不一致</li>
+        <li>整體可以直接截圖給 SOLFACIL 看的水平</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== PHASE 8 ==================== -->
+<div class="phase p8">
+  <div class="phase-header">
+    <div class="phase-num">P8</div>
+    <h2>Alan 瀏覽器驗收</h2>
+    <span class="executor exec-alan">Alan</span>
+    <span class="time">依需求</span>
+  </div>
+  <div class="phase-body">
+    <div class="task">
+      <h4>T8.1 瀏覽器全頁面走查</h4>
+      <ul>
+        <li>Ashe 用 browser 工具先做一輪自動化截圖驗收</li>
+        <li>Alan 打開 <code>https://152.42.235.155:8443/2026-02-15_SOLFACIL_VPP_Demo/frontend-v2/index.html</code></li>
+        <li>逐頁檢查：數據合理性 / 視覺質感 / 操作流程</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T8.2 角色切換驗證</h4>
+      <ul>
+        <li>切換 Admin → Integrador：確認數據範圍收窄、操作被鎖定</li>
+        <li>切換 Customer → 確認 coming soon</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T8.3 Integrador 移動端模擬驗收</h4>
+      <ul>
+        <li>開啟 Chrome DevTools → Device Mode → 模擬 iPad (768×1024) 和 iPhone 14 (390×844)</li>
+        <li>切換到 Integrador 角色</li>
+        <li>專門走查 P2 Commissioning Wizard 的全部 5 步流程</li>
+        <li>驗證：按鈕高度 ≥ 48px / 掃碼按鈕可見 / 「下一步」全寬 / Pass/Fail 色塊醒目</li>
+        <li>如果有組件在移動端破版 → 記錄 → 修正</li>
+      </ul>
+    </div>
+
+    <div class="task">
+      <h4>T8.4 反饋收集與迭代</h4>
+      <ul>
+        <li>Alan 提出修改意見 → Ashe 翻譯為 Claude Code 任務 → 執行修正</li>
+        <li>可能需要 1-2 輪迭代</li>
+      </ul>
+    </div>
+
+    <div class="acceptance">
+      <h4>✅ Phase 8 驗收標準</h4>
+      <ul>
+        <li>Alan 確認「可以截圖發給 SOLFACIL」</li>
+        <li>Fintech 風格到位</li>
+        <li>所有 mock 數據合理（不出現明顯的假數據穿幫）</li>
+      </ul>
+    </div>
+  </div>
+</div>
+
+<!-- ==================== EXECUTION NOTES ==================== -->
+<div class="overview">
+  <h3>⚠️ 執行注意事項</h3>
+  <ul>
+    <li><strong>Mock 數據一致性：</strong>所有頁面的 mock 數據必須統一在 <code>mock-data.js</code> 中管理。P1 說「47 台設備」，P2 的設備列表就必須有 47 筆記錄。P6 的 self_consumption 96.8% 必須與 P3 的跨家庭表對應。</li>
+    <li><strong>巴西本地化：</strong>貨幣格式 <code>R$ 1.234,56</code>（巴西用逗號做小數點、點做千位分隔符）。日期格式 <code>DD/MM/YYYY</code>。<strong>時間格式：24 小時制（HH:mm），禁止 AM/PM。</strong>語言：英文 UI + 巴西葡語地名（São Paulo / Rio de Janeiro）。</li>
+    <li><strong>ECharts 版本：</strong>使用 ECharts 5.x CDN，<code>https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js</code></li>
+    <li><strong>不需要做的事：</strong>後端 API / 數據持久化（DemoStore 用 sessionStorage 即可）/ 用戶登入 / 真正的 QR 掃碼 / i18n 多語言 / Admin 頁面的移動端適配（但 Wizard 必須支持平板）</li>
+    <li><strong>ECharts 鐵律：</strong>所有圖表必須通過 <code>createChart()</code> 工廠創建，內建 ResizeObserver → <code>chart.resize()</code>。禁止直接 <code>echarts.init()</code>。</li>
+    <li><strong>時序數據鐵律：</strong>P3/P5 的圖表 mock 數據必須用 Data Generator 函數（<code>Math.sin()</code> + noise）生成，禁止 hardcode 96×5 的 JSON 陣列。</li>
+    <li><strong>Phase 執行策略：</strong>Phase 0+1 建議合併為一個 Claude Code session（定調）。Phase 2-6 可順序或按需執行。Phase 7 必須在 P1-P6 全完成後執行。</li>
+  </ul>
+</div>
+
+<div class="footer">
+  <p>SOLFACIL Admin Portal Build Plan v1.0 · 2026-03-04</p>
+  <p>設計規約：Admin_Portal_Pages_v1.2.html · 需求來源：SOLFACIL Pilot Brief</p>
+  <p>Phase 0-7: Claude Code 執行 · Phase 8: Alan 瀏覽器驗收</p>
+</div>
+
+</div>
+</body>
+</html>

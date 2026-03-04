@@ -1,0 +1,135 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOLFACIL VPP — Admin Portal</title>
+
+  <!-- Google Fonts: Inter + JetBrains Mono -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <!-- CSS -->
+  <link rel="stylesheet" href="css/variables.css?v=1772601570">
+  <link rel="stylesheet" href="css/base.css?v=1772601570">
+  <link rel="stylesheet" href="css/layout.css?v=1772601570">
+  <link rel="stylesheet" href="css/components.css?v=1772601570">
+  <link rel="stylesheet" href="css/pages.css?v=1772601570">
+</head>
+<body data-theme="dark">
+  <div class="app-shell">
+
+    <!-- ========== SIDEBAR ========== -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <div class="brand-icon">&#x26A1;</div>
+        <span class="brand-text">SOLFACIL VPP</span>
+      </div>
+
+      <nav class="sidebar-nav">
+        <div class="nav-item active" data-page="fleet">
+          <span class="nav-icon">&#x1F4CA;</span>
+          <span class="nav-label">Fleet</span>
+        </div>
+        <div class="nav-item" data-page="devices">
+          <span class="nav-icon">&#x1F50C;</span>
+          <span class="nav-label">Devices</span>
+        </div>
+        <div class="nav-item" data-page="energy">
+          <span class="nav-icon">&#x26A1;</span>
+          <span class="nav-label">Energy</span>
+        </div>
+        <div class="nav-item" data-page="hems">
+          <span class="nav-icon">&#x2699;&#xFE0F;</span>
+          <span class="nav-label">HEMS</span>
+        </div>
+        <div class="nav-item" data-page="vpp">
+          <span class="nav-icon">&#x1F50B;</span>
+          <span class="nav-label">VPP</span>
+        </div>
+        <div class="nav-item" data-page="performance">
+          <span class="nav-icon">&#x1F3AF;</span>
+          <span class="nav-label">Performance</span>
+        </div>
+      </nav>
+
+      <div class="sidebar-footer">
+        <div class="role-switcher">
+          <label>Role</label>
+          <select id="role-select">
+            <option value="admin">SOLFACIL Admin</option>
+            <option value="integrador">Integrador</option>
+            <option value="customer">Customer</option>
+          </select>
+        </div>
+      </div>
+    </aside>
+
+    <!-- ========== MAIN CONTENT ========== -->
+    <main class="main-content">
+      <!-- Top Bar -->
+      <div class="top-bar">
+        <h1 id="page-title" class="page-title">Fleet Overview</h1>
+        <div class="top-bar-right">
+          <select id="lang-switcher" class="lang-switcher">
+            <option value="pt-BR">&#x1F1E7;&#x1F1F7; PT</option>
+            <option value="en">&#x1F1FA;&#x1F1F8; EN</option>
+            <option value="zh-CN">&#x1F1E8;&#x1F1F3; &#x4E2D;&#x6587;</option>
+          </select>
+          <span id="role-badge" class="role-badge role-badge-admin">SOLFACIL Admin</span>
+        </div>
+      </div>
+
+      <!-- ===== PAGE: Fleet Overview ===== -->
+      <section id="page-fleet" class="page-section active">
+        <div class="page-content" id="fleet-content">
+          <!-- Rendered by p1-fleet.js -->
+        </div>
+      </section>
+
+      <!-- ===== PAGE: Devices ===== -->
+      <section id="page-devices" class="page-section">
+        <div class="page-content" id="devices-content"></div>
+      </section>
+
+      <!-- ===== PAGE: Energy ===== -->
+      <section id="page-energy" class="page-section">
+        <div class="page-content" id="energy-content"></div>
+      </section>
+
+      <!-- ===== PAGE: HEMS ===== -->
+      <section id="page-hems" class="page-section">
+        <div class="page-content" id="hems-content"></div>
+      </section>
+
+      <!-- ===== PAGE: VPP ===== -->
+      <section id="page-vpp" class="page-section">
+        <div class="page-content" id="vpp-content"></div>
+      </section>
+
+      <!-- ===== PAGE: Performance ===== -->
+      <section id="page-performance" class="page-section">
+        <div class="page-content" id="performance-content"></div>
+      </section>
+    </main>
+  </div>
+
+  <!-- ========== SCRIPTS ========== -->
+  <!-- ECharts 5.x CDN -->
+  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+
+  <!-- App JS (order matters: mock-data → components → charts → pages → app) -->
+  <script src="js/mock-data.js?v=1772601570"></script>
+  <script src="js/i18n.js?v=1772601570"></script>
+  <script src="js/components.js?v=1772601570"></script>
+  <script src="js/charts.js?v=1772601570"></script>
+  <script src="js/p1-fleet.js?v=1772601570"></script>
+  <script src="js/p2-devices.js?v=1772601570"></script>
+  <script src="js/p3-energy.js?v=1772601570"></script>
+  <script src="js/p4-hems.js?v=1772601570"></script>
+  <script src="js/p5-vpp.js?v=1772601570"></script>
+  <script src="js/p6-performance.js?v=1772601570"></script>
+  <script src="js/app.js?v=1772601570"></script>
+</body>
+</html>

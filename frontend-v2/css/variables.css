@@ -1,0 +1,76 @@
+/* ============================================
+   SOLFACIL Admin Portal — CSS Variables
+   Design tokens extracted from v1.2 spec
+   ============================================ */
+
+:root {
+  /* Background & Border */
+  --bg: #0f1117;
+  --card: #1a1d27;
+  --border: #2a2d3a;
+  --text: #e4e4e7;
+  --muted: #9ca3af;
+
+  /* Semantic Colors — 3 groups */
+  --positive: #22c55e;        /* Green: savings / generation / online / target met */
+  --positive-bg: rgba(34, 197, 94, 0.1);
+  --negative: #ef4444;        /* Red: cost / offline / below target */
+  --negative-bg: rgba(239, 68, 68, 0.1);
+  --neutral: #a855f7;         /* Purple: battery dispatch / VPP / system actions */
+  --neutral-bg: rgba(168, 85, 247, 0.1);
+  --accent: #3b82f6;          /* Blue: interactive elements / links */
+  --accent-bg: rgba(59, 130, 246, 0.1);
+  --amber: #f59e0b;           /* Amber: warnings / pending */
+  --amber-bg: rgba(245, 158, 11, 0.1);
+  --cyan: #06b6d4;
+  --cyan-bg: rgba(6, 182, 212, 0.1);
+  --pink: #ec4899;
+  --pink-bg: rgba(236, 72, 153, 0.1);
+
+  /* Fonts */
+  --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-data: 'JetBrains Mono', monospace;
+
+  /* Spacing (8px base) */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+
+  /* Border Radius */
+  --radius-sm: 6px;
+  --radius-md: 10px;
+  --radius-lg: 14px;
+
+  /* Sidebar */
+  --sidebar-width: 240px;
+  --sidebar-collapsed: 60px;
+
+  /* Transitions */
+  --transition-fast: 150ms ease;
+  --transition-normal: 200ms ease;
+}
+
+/* Light theme placeholder — same values for now, fill in real light colors later */
+[data-theme="light"] {
+  --bg: #f8f9fa;
+  --card: #ffffff;
+  --border: #e2e4e9;
+  --text: #1a1d27;
+  --muted: #6b7280;
+  --positive: #16a34a;
+  --positive-bg: rgba(22, 163, 74, 0.1);
+  --negative: #dc2626;
+  --negative-bg: rgba(220, 38, 38, 0.1);
+  --neutral: #9333ea;
+  --neutral-bg: rgba(147, 51, 234, 0.1);
+  --accent: #2563eb;
+  --accent-bg: rgba(37, 99, 235, 0.1);
+  --amber: #d97706;
+  --amber-bg: rgba(217, 119, 6, 0.1);
+  --cyan: #0891b2;
+  --cyan-bg: rgba(8, 145, 178, 0.1);
+  --pink: #db2777;
+  --pink-bg: rgba(219, 39, 119, 0.1);
+}

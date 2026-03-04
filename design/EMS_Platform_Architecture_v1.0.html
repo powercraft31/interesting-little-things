@@ -1,0 +1,830 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>EMS 平台架構 v1.0</title>
+<style>
+  :root {
+    --primary: #1a3a5c;
+    --accent: #2980b9;
+    --accent-light: #d6eaf8;
+    --success: #27ae60;
+    --danger: #e74c3c;
+    --warning: #f39c12;
+    --bg: #f5f7fa;
+    --card: #ffffff;
+    --border: #dde3ea;
+    --text: #2c3e50;
+    --muted: #7f8c8d;
+    --code-bg: #1e2d3d;
+  }
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: 'PingFang SC','Microsoft YaHei','Noto Sans SC',sans-serif; background:var(--bg); color:var(--text); font-size:15px; line-height:1.8; }
+
+  .doc-header { background:linear-gradient(135deg,#0f2940,#1a6fa0); color:white; padding:48px 0 36px; text-align:center; }
+  .doc-header h1 { font-size:28px; font-weight:700; margin-bottom:8px; }
+  .doc-header .sub { opacity:.7; font-size:14px; margin-bottom:24px; }
+  .meta-tags { display:flex; gap:12px; justify-content:center; flex-wrap:wrap; }
+  .meta-tag { background:rgba(255,255,255,.15); padding:4px 14px; border-radius:20px; font-size:13px; }
+
+  .container { max-width:980px; margin:0 auto; padding:0 24px; }
+
+  .toc { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:28px 32px; margin:36px 0; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+  .toc h2 { font-size:13px; color:var(--muted); text-transform:uppercase; letter-spacing:1px; margin-bottom:14px; }
+  .toc ol { padding-left:20px; }
+  .toc li { margin:7px 0; }
+  .toc a { color:var(--accent); text-decoration:none; font-weight:500; }
+
+  .section { background:var(--card); border:1px solid var(--border); border-radius:12px; padding:36px 40px; margin-bottom:28px; box-shadow:0 2px 8px rgba(0,0,0,.06); }
+  .section-label { font-size:12px; font-weight:700; color:var(--accent); text-transform:uppercase; letter-spacing:1.5px; margin-bottom:8px; }
+  h2 { font-size:22px; color:var(--primary); margin-bottom:22px; padding-bottom:12px; border-bottom:2px solid var(--accent-light); }
+  h3 { font-size:17px; color:var(--primary); margin:28px 0 14px; font-weight:600; }
+  h4 { font-size:15px; color:var(--accent); margin:20px 0 10px; font-weight:600; }
+  p { margin:10px 0; }
+
+  .highlight { background:var(--accent-light); border-left:4px solid var(--accent); border-radius:0 8px 8px 0; padding:16px 20px; margin:18px 0; font-size:15px; }
+
+  pre { background:var(--code-bg); color:#a8d8f0; border-radius:10px; padding:20px 24px; overflow-x:auto; font-family:'JetBrains Mono','Courier New',monospace; font-size:13px; line-height:1.7; margin:16px 0; }
+  code { background:#e8f4fd; color:#1a6fa0; padding:2px 7px; border-radius:4px; font-family:'JetBrains Mono',monospace; font-size:13px; }
+  pre code { background:none; color:inherit; padding:0; }
+
+  table { width:100%; border-collapse:collapse; margin:16px 0; font-size:14px; }
+  th { background:var(--primary); color:white; padding:10px 16px; text-align:left; }
+  td { padding:10px 16px; border-bottom:1px solid var(--border); }
+  tr:nth-child(even) td { background:#f8fafc; }
+
+  /* use case cards */
+  .usecase-group { margin:20px 0; }
+  .usecase-group-title { font-size:13px; font-weight:700; color:white; padding:6px 14px; border-radius:6px 6px 0 0; }
+  .usecase-group-title.market { background:#2980b9; }
+  .usecase-group-title.optimize { background:#27ae60; }
+  .usecase-group-title.resilience { background:#e67e22; }
+  .usecase-group-title.community { background:#8e44ad; }
+  .usecase-items { border:1px solid var(--border); border-top:none; border-radius:0 0 8px 8px; padding:4px 0; }
+  .usecase-item { display:flex; align-items:flex-start; gap:14px; padding:12px 18px; border-bottom:1px solid #f0f0f0; }
+  .usecase-item:last-child { border-bottom:none; }
+  .usecase-num { font-size:18px; flex-shrink:0; }
+  .usecase-name { font-weight:700; color:var(--primary); font-size:14px; }
+  .usecase-desc { font-size:13px; color:var(--muted); }
+
+  /* domain sections */
+  .domain-header { display:flex; align-items:center; gap:12px; margin:28px 0 16px; }
+  .domain-icon { font-size:24px; }
+  .domain-title { font-size:18px; font-weight:700; color:var(--primary); }
+  .domain-subtitle { font-size:13px; color:var(--muted); }
+  .domain-tag { font-size:11px; background:#e8f4fd; color:var(--accent); padding:2px 10px; border-radius:10px; font-weight:600; }
+
+  .module-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:12px; margin:14px 0; }
+  .module-card { border:1px solid var(--border); border-radius:8px; padding:14px 16px; background:#fafcff; }
+  .module-card .module-name { font-weight:700; font-size:14px; color:var(--primary); margin-bottom:4px; }
+  .module-card .module-en { font-size:12px; color:var(--muted); margin-bottom:8px; }
+  .module-card .module-desc { font-size:13px; color:#555; }
+  .module-card.shared { background:#f0fff4; border-color:#a9dfbf; }
+  .module-card.arbitrage-only { background:#fef9e7; border-color:#f9e79f; }
+
+  .legend { display:flex; gap:16px; margin:12px 0; font-size:12px; flex-wrap:wrap; }
+  .legend-item { display:flex; align-items:center; gap:6px; }
+  .legend-dot { width:12px; height:12px; border-radius:3px; flex-shrink:0; }
+
+  /* platform services */
+  .ps-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(280px,1fr)); gap:14px; margin:18px 0; }
+  .ps-card { border:1px solid var(--border); border-radius:10px; padding:18px; background:#fffef8; }
+  .ps-card .ps-icon { font-size:22px; margin-bottom:8px; }
+  .ps-card .ps-name { font-weight:700; color:var(--primary); margin-bottom:5px; }
+  .ps-card .ps-desc { font-size:13px; color:var(--muted); }
+  .ps-card.db-card { background:#f8f4ff; border-color:#c9b8e8; grid-column:1/-1; }
+
+  .arch-box { background:#111827; color:#e2e8f0; border-radius:12px; padding:28px; font-family:'JetBrains Mono',monospace; font-size:13px; line-height:2; overflow-x:auto; white-space:pre; }
+
+  .step-list { display:flex; flex-direction:column; gap:8px; margin:16px 0; }
+  .step-item { display:flex; gap:14px; align-items:flex-start; background:#f0f7ff; border-radius:8px; padding:12px 16px; }
+  .step-num { font-size:20px; flex-shrink:0; }
+  .step-name { font-weight:700; color:var(--primary); font-size:14px; }
+  .step-domains { font-size:12px; color:var(--accent); margin-top:2px; }
+
+  .two-col { display:grid; grid-template-columns:1fr 1fr; gap:20px; margin:16px 0; }
+  @media(max-width:640px){ .two-col{grid-template-columns:1fr;} .section{padding:24px 18px;} .module-grid{grid-template-columns:1fr;} }
+
+  .doc-footer { text-align:center; padding:32px; color:var(--muted); font-size:13px; }
+  hr { border:none; border-top:1px solid var(--border); margin:24px 0; }
+
+  .badge { display:inline-block; padding:2px 10px; border-radius:10px; font-size:12px; font-weight:700; }
+  .badge-all { background:#eafaf1; color:#27ae60; }
+  .badge-some { background:#fef9e7; color:#e67e22; }
+</style>
+</head>
+<body>
+
+<div class="doc-header">
+  <div class="container">
+    <h1>⚡ EMS 平台架構</h1>
+    <div class="sub">Energy Management System — Platform Architecture Specification</div>
+    <div class="meta-tags">
+      <span class="meta-tag">v1.0</span>
+      <span class="meta-tag">2026-03-03</span>
+      <span class="meta-tag">Layer 1 + Layer 2</span>
+      <span class="meta-tag">旭衡電子 內部架構文件</span>
+    </div>
+  </div>
+</div>
+
+<div class="container">
+
+<div class="toc">
+  <h2>目錄</h2>
+  <ol>
+    <li><a href="#s1">旭衡電子的業務定位</a></li>
+    <li><a href="#s2">能源管理的本質</a></li>
+    <li><a href="#s3">完整用例清單</a></li>
+    <li><a href="#s4">第一層：業務域（Domain）— 8 個</a></li>
+    <li><a href="#s5">第二層：模塊結構（Module）</a></li>
+    <li><a href="#s6">平台服務層（水平組件）</a></li>
+    <li><a href="#s7">完整架構視圖</a></li>
+  </ol>
+</div>
+
+<!-- S1 -->
+<div class="section" id="s1">
+  <div class="section-label">第一部分</div>
+  <h2>旭衡電子的業務定位</h2>
+
+  <p>旭衡電子的核心業務是<strong>能源管理系統（Energy Management System，EMS）</strong>——幫助用電方、儲能設備擁有者，通過智能化的能源調度，降低用電成本、提升能源效率、參與電力市場獲得收益。</p>
+
+  <div class="highlight">
+    <strong>戰略目標：</strong>把 EMS 能力打包成白牌多租戶平台，賣給更多客戶。每個客戶（租戶）根據自身市場和業務場景，選擇啟用不同的用例組合。接入第 N 個客戶的增量工作量趨近於零，才是真正的平台。
+  </div>
+
+  <div class="two-col">
+    <div style="background:#eafaf1;border-radius:8px;padding:16px">
+      <div style="font-size:13px;font-weight:700;color:#27ae60;margin-bottom:8px">🇦🇺 UEH（已上線）</div>
+      <ul style="padding-left:16px;font-size:13px">
+        <li>澳洲家庭儲能聚合</li>
+        <li>AEMO 電力現貨市場</li>
+        <li>6 個逆變器品牌，雲端 API 接入</li>
+        <li>啟用用例：市場套利</li>
+      </ul>
+    </div>
+    <div style="background:#eaf2ff;border-radius:8px;padding:16px">
+      <div style="font-size:13px;font-weight:700;color:#2980b9;margin-bottom:8px">🇧🇷 SOLFACIL（設計中）</div>
+      <ul style="padding-left:16px;font-size:13px">
+        <li>巴西工商業儲能聚合</li>
+        <li>CCEE 電力現貨市場</li>
+        <li>硬件網關 + MQTT 接入</li>
+        <li>啟用用例：市場套利</li>
+      </ul>
+    </div>
+  </div>
+  <p style="font-size:14px;margin-top:12px">兩個客戶目前都只啟用了「市場套利」這一個用例。但平台的域設計必須從完整的 EMS 業務出發，而非只為套利服務——否則每個新用例都需要重構。</p>
+</div>
+
+<!-- S2 -->
+<div class="section" id="s2">
+  <div class="section-label">第二部分</div>
+  <h2>能源管理的本質</h2>
+
+  <h3>2.1 第一性原理</h3>
+  <p>能源管理的本質問題只有一個：</p>
+  <div class="highlight">
+    <strong>在正確的時間，對正確的設備，做出正確的能源決策——讓能源資源的每一度電都在最優的時機被使用、儲存或出售。</strong>
+  </div>
+
+  <p>這裡的「正確」有多個維度，由不同用例定義：</p>
+  <table>
+    <tr><th>維度</th><th>定義「正確」的標準</th><th>對應用例</th></tr>
+    <tr><td>市場時機</td><td>電價低時充、高時放，差價最大</td><td>市場套利</td></tr>
+    <tr><td>自用效率</td><td>先用太陽能，電池補充，最後才買電</td><td>自發自用優化</td></tr>
+    <tr><td>需量管理</td><td>在用電高峰前放電，削減峰值需量費</td><td>峰值功率管理</td></tr>
+    <tr><td>電網協作</td><td>電網需要削峰/補頻時即時響應</td><td>需求響應 / 輔助服務</td></tr>
+    <tr><td>韌性保障</td><td>保留最低備用電量應對突發停電</td><td>備用電源管理</td></tr>
+  </table>
+
+  <h3>2.2 核心操作永遠只有三個</h3>
+  <p>無論哪個用例，對儲能設備的操作指令只有：</p>
+  <div style="display:flex;gap:12px;margin:12px 0;flex-wrap:wrap">
+    <div style="flex:1;min-width:120px;background:#eafaf1;border-radius:8px;padding:14px;text-align:center">
+      <div style="font-size:24px">⬇️</div>
+      <div style="font-weight:700;color:#27ae60">CHARGE</div>
+      <div style="font-size:12px;color:var(--muted)">充電</div>
+    </div>
+    <div style="flex:1;min-width:120px;background:#fdecea;border-radius:8px;padding:14px;text-align:center">
+      <div style="font-size:24px">⬆️</div>
+      <div style="font-weight:700;color:#e74c3c">DISCHARGE</div>
+      <div style="font-size:12px;color:var(--muted)">放電</div>
+    </div>
+    <div style="flex:1;min-width:120px;background:#f8f9fa;border-radius:8px;padding:14px;text-align:center">
+      <div style="font-size:24px">⏸️</div>
+      <div style="font-weight:700;color:#7f8c8d">STOP</div>
+      <div style="font-size:12px;color:var(--muted)">停止</div>
+    </div>
+  </div>
+  <p style="font-size:13px;color:var(--muted)">三條指令適用於所有用例、所有品牌、所有接入模式。「做什麼」的複雜度在決策層，「怎麼執行」的複雜度在設備通信層。</p>
+</div>
+
+<!-- S3 -->
+<div class="section" id="s3">
+  <div class="section-label">第三部分</div>
+  <h2>完整用例清單</h2>
+  <p style="margin-bottom:20px">從旭衡電子的能源管理業務出發，可以列舉出以下 8 個完整用例。不同客戶根據自身市場與業務需求，選擇啟用其中的子集。</p>
+
+  <div class="usecase-group">
+    <div class="usecase-group-title market">A. 市場參與類（Market Participation）</div>
+    <div class="usecase-items">
+      <div class="usecase-item">
+        <div class="usecase-num">①</div>
+        <div>
+          <div class="usecase-name">市場套利（Price Arbitrage）</div>
+          <div class="usecase-desc">根據電力現貨市場電價，在低電價時段充電，在高電價時段放電，賺取差價收益。UEH（AEMO）和 SOLFACIL（CCEE）均啟用此用例。</div>
+        </div>
+      </div>
+      <div class="usecase-item">
+        <div class="usecase-num">②</div>
+        <div>
+          <div class="usecase-name">需求響應（Demand Response / DR）</div>
+          <div class="usecase-desc">電網運營商發出削峰/填谷事件信號，平台聚合設備響應，按響應量獲得 DR 補償費。信號是事件驅動，收益按次計算，非電價差價。</div>
+        </div>
+      </div>
+      <div class="usecase-item">
+        <div class="usecase-num">③</div>
+        <div>
+          <div class="usecase-name">輔助服務（Ancillary Services / Frequency Response）</div>
+          <div class="usecase-desc">電網頻率偏離 50Hz 時，設備在秒級內自動響應穩定頻率。響應速度遠快於市場套利，需要實時遙測支撐。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="usecase-group" style="margin-top:16px">
+    <div class="usecase-group-title optimize">B. 建築/家庭優化類（On-Site Optimization）</div>
+    <div class="usecase-items">
+      <div class="usecase-item">
+        <div class="usecase-num">④</div>
+        <div>
+          <div class="usecase-name">自發自用優化（Self-Consumption Optimization）</div>
+          <div class="usecase-desc">最大化利用屋頂光伏發電：白天太陽能充電池，晚間電池放電，減少從電網購電。需要負載預測和太陽能出力預測支撐。</div>
+        </div>
+      </div>
+      <div class="usecase-item">
+        <div class="usecase-num">⑤</div>
+        <div>
+          <div class="usecase-name">峰值功率管理（Peak Demand Management）</div>
+          <div class="usecase-desc">工商業客戶按最高需量計費。在用電高峰前提前放電，削減峰值，降低需量費。需要實時負載監測。</div>
+        </div>
+      </div>
+      <div class="usecase-item">
+        <div class="usecase-num">⑥</div>
+        <div>
+          <div class="usecase-name">電動車智慧充電（Smart EV Charging）</div>
+          <div class="usecase-desc">在電價谷值或太陽能充裕時為電動車充電，避免在高峰電價充電，降低充電成本。支持 V2G（電動車電池回注電網）的場景可視作臨時儲能資源參與套利。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="usecase-group" style="margin-top:16px">
+    <div class="usecase-group-title" style="background:#c0392b">E. 充電服務類（Charging Services）</div>
+    <div class="usecase-items">
+      <div class="usecase-item">
+        <div class="usecase-num">⑨</div>
+        <div>
+          <div class="usecase-name">公共充電站管理（Public EV Charging Station）<span style="font-size:11px;background:#fdecea;color:#c0392b;padding:2px 8px;border-radius:8px;margin-left:8px">規劃中</span></div>
+          <div class="usecase-desc">對外開放的 EV 充電樁，車主掃碼付費，按充電量計費。充電樁可以附帶儲能（電價谷值儲電、高峰向車主放電，降低電費）或不帶儲能（純直接充電）。兩種模式對調度引擎透明，區別在設備能力模型。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="usecase-group" style="margin-top:16px">
+    <div class="usecase-group-title resilience">C. 韌性類（Resilience）</div>
+    <div class="usecase-items">
+      <div class="usecase-item">
+        <div class="usecase-num">⑦</div>
+        <div>
+          <div class="usecase-name">備用電源管理（Backup Power / Resilience Mode）</div>
+          <div class="usecase-desc">在電池 SoC 達到安全底線前停止一切調度，確保停電時有足夠備用電量。韌性策略優先級高於所有套利策略。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="usecase-group" style="margin-top:16px">
+    <div class="usecase-group-title community">D. 社區類（Community）</div>
+    <div class="usecase-items">
+      <div class="usecase-item">
+        <div class="usecase-num">⑧</div>
+        <div>
+          <div class="usecase-name">社區共享儲能（Community Energy Sharing / P2P）</div>
+          <div class="usecase-desc">社區內鄰居之間直接進行電力撮合交易。需要計量、撮合引擎和獨立的 P2P 結算機制。</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- S4 -->
+<div class="section" id="s4">
+  <div class="section-label">第四部分 · 第一層</div>
+  <h2>業務域（Domain）</h2>
+
+  <p style="margin-bottom:16px">根據用例的需求分析，EMS 平台定義 <strong>8 個業務域</strong>。每個域的存在由至少一個用例的業務需求決定，沒有用例需要的概念不應獨立成域。</p>
+
+  <div class="step-list">
+    <div class="step-item">
+      <div class="step-num">📡</div>
+      <div>
+        <div class="step-name">外部信號域（External Signal）</div>
+        <div class="step-domains">被用例需要：① 市場套利　② 需求響應　③ 輔助服務</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">📋</div>
+      <div>
+        <div class="step-name">資產登記域（Asset Registry）</div>
+        <div class="step-domains">被用例需要：① ② ③ ④ ⑤ ⑥ ⑦ ⑧（全部用例）</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">🧠</div>
+      <div>
+        <div class="step-name">調度引擎域（Dispatch Engine）</div>
+        <div class="step-domains">被用例需要：① ② ③ ④ ⑤ ⑥ ⑦ ⑧（全部用例，策略不同）</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">🔌</div>
+      <div>
+        <div class="step-name">設備網關域（Device Gateway）</div>
+        <div class="step-domains">被用例需要：① ② ③ ④ ⑤ ⑥ ⑦ ⑧（全部用例）</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">🔮</div>
+      <div>
+        <div class="step-name">預測域（Forecasting）</div>
+        <div class="step-domains">被用例需要：④ 自發自用　⑤ 峰值管理　⑥ EV 充電（市場套利部分用：CCEE 日前電價預測）</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">📊</div>
+      <div>
+        <div class="step-name">遙測域（Telemetry）</div>
+        <div class="step-domains">被用例需要：③ 輔助服務　④ 自發自用　⑤ 峰值管理　⑦ 備用電源　⑧ 社區共享（套利部分用）</div>
+      </div>
+    </div>
+    <div class="step-item">
+      <div class="step-num">💰</div>
+      <div>
+        <div class="step-name">財務結算域（Financial Settlement）</div>
+        <div class="step-domains">被用例需要：① 市場套利　② 需求響應　④ 自發自用節省　⑧ P2P 交易</div>
+      </div>
+    </div>
+    <div class="step-item" style="background:#fef0f0;border:1px dashed #e74c3c">
+      <div class="step-num">🔌</div>
+      <div>
+        <div class="step-name">充電交易域（Charging Transaction）<span style="font-size:11px;background:#fdecea;color:#c0392b;padding:2px 8px;border-radius:8px;margin-left:8px">規劃中</span></div>
+        <div class="step-domains">被用例需要：⑨ 公共充電站管理　（車主認證 → 充電會話 → 用電計費 → 付款結算）</div>
+      </div>
+    </div>
+  </div>
+
+  <div style="background:#f8f9fa;border-radius:8px;padding:14px 18px;margin-top:16px;font-size:13px">
+    <strong>資產登記 / 調度引擎 / 設備網關</strong> 是三個全域共用域——所有用例都需要它們。這三個域是平台的基礎骨架，它們的接口設計必須能支撐任意用例的策略切換。
+  </div>
+</div>
+
+<!-- S5 -->
+<div class="section" id="s5">
+  <div class="section-label">第五部分 · 第二層</div>
+  <h2>模塊結構（Module）</h2>
+
+  <div class="legend">
+    <div class="legend-item"><div class="legend-dot" style="background:#d5f5e3;border:1px solid #a9dfbf"></div> 全用例共用模塊</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#fef9e7;border:1px solid #f9e79f"></div> 特定用例模塊（非全部用例需要）</div>
+    <div class="legend-item"><div class="legend-dot" style="background:#fafcff;border:1px solid var(--border)"></div> 標準模塊</div>
+  </div>
+
+  <h3>📡 外部信號域（External Signal）</h3>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">職責：接收所有來自電力市場和電網運營商的外部信號，標準化後發布到平台內部。</p>
+  <div class="module-grid">
+    <div class="module-card">
+      <div class="module-name">市場電價連接器</div>
+      <div class="module-en">Market Price Connector</div>
+      <div class="module-desc">每個市場一個實現（插件）。AEMO 輪詢 REST，CCEE 監聽 Webhook。拉取原始電價數據。</div>
+    </div>
+    <div class="module-card arbitrage-only">
+      <div class="module-name">需求響應事件接收器</div>
+      <div class="module-en">DR Event Receiver</div>
+      <div class="module-desc">接收電網運營商推送的 DR 事件（削峰/填谷信號），與市場電價信號性質不同——是操作指令，非價格數據。</div>
+    </div>
+    <div class="module-card arbitrage-only">
+      <div class="module-name">頻率偏差監測器</div>
+      <div class="module-en">Grid Frequency Monitor</div>
+      <div class="module-desc">實時監測電網頻率偏差（50Hz 基準），秒級觸發輔助服務響應。</div>
+    </div>
+    <div class="module-card">
+      <div class="module-name">信號標準化器</div>
+      <div class="module-en">Signal Normalizer</div>
+      <div class="module-desc">各市場不同格式 → 統一的 ExternalSignal 標準結構，包含信號類型、地區、時間戳、數值。</div>
+    </div>
+    <div class="module-card">
+      <div class="module-name">信號發布器</div>
+      <div class="module-en">Signal Publisher</div>
+      <div class="module-desc">向 Event Bus 發出標準化信號事件，調度引擎訂閱並自主決定響應方式。</div>
+    </div>
+  </div>
+
+  <h3>📋 資產登記域（Asset Registry）</h3>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">職責：管理所有參與 EMS 平台的設備元數據、業主信息和授權狀態。所有用例的調度前提。</p>
+  <div style="background:#fff8e1;border:1px solid #f9e79f;border-radius:8px;padding:14px 16px;margin-bottom:14px;font-size:13px">
+    <strong>設備能力模型（Device Capability Model）</strong>：平台不以「設備類型」判斷，而是以「設備能力」決定可執行哪些操作。
+    <div style="margin-top:8px;font-family:monospace;font-size:12px;color:#555">
+      DeviceCapability {<br>
+      &nbsp;&nbsp;hasStorage: boolean &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#888">// 能儲能（電池逆變器、帶儲能充電樁）</span><br>
+      &nbsp;&nbsp;isControllableLoad: boolean <span style="color:#888">// 是可調度負載（充電樁、HVAC）</span><br>
+      &nbsp;&nbsp;hasGeneration: boolean &nbsp;&nbsp;&nbsp;<span style="color:#888">// 能發電（PV 逆變器）</span><br>
+      &nbsp;&nbsp;isV2G: boolean &nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span style="color:#888">// 支持車對電網放電</span><br>
+      &nbsp;&nbsp;gatewayProtocol: BRAND_API | OCPP | MQTT<br>
+      }
+    </div>
+  </div>
+  <div class="module-grid">
+    <div class="module-card shared">
+      <div class="module-name">設備目錄</div>
+      <div class="module-en">Device Catalog</div>
+      <div class="module-desc">設備技術規格：品牌、型號、SN、容量、能力組合（DeviceCapability）、連接協議。</div>
+    </div>
+    <div class="module-card shared">
+      <div class="module-name">業主管理</div>
+      <div class="module-en">Owner Management</div>
+      <div class="module-desc">設備業主的個人/企業信息、聯繫方式、銀行賬戶（用於分成）。</div>
+    </div>
+    <div class="module-card shared">
+      <div class="module-name">授權管理器</div>
+      <div class="module-en">Authorization Manager</div>
+      <div class="module-desc">授權生命周期：待審 → 已授權 → 暫停 → 撤銷。授權狀態決定設備是否可被調度。</div>
+    </div>
+    <div class="module-card shared">
+      <div class="module-name">位置管理</div>
+      <div class="module-en">Location Management</div>
+      <div class="module-desc">地理位置、電網區域（如 AEMO 的 NSW/VIC/SA 區域），決定適用的電價和 DR 信號。</div>
+    </div>
+    <div class="module-card shared">
+      <div class="module-name">查詢接口</div>
+      <div class="module-en">Query Interface</div>
+      <div class="module-desc">回答「某地區有哪些已授權設備可以調度」。調度引擎的主要查詢入口。</div>
+    </div>
+  </div>
+
+  <h3>🧠 調度引擎域（Dispatch Engine）</h3>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">職責：平台的決策核心。根據外部信號 + 可調度設備列表，按照啟用的策略決定對哪些設備做什麼操作。</p>
+  <div class="module-grid">
+    <div class="module-card">
+      <div class="module-name">策略引擎</div>
+      <div class="module-en">Strategy Engine</div>
+      <div class="module-desc">可插拔策略容器。每個用例對應一個策略實現，租戶配置決定啟用哪些策略和優先級順序。</div>
+    </div>
+    <div class="module-card">
+      <div class="module-name">↳ 套利策略</div>
+      <div class="module-en">Arbitrage Strategy</div>
+      <div class="module-desc">電價低於閾值→充電；電價高於閾值→放電。當前 UEH/SOLFACIL 啟用的策略。</div>
+    </div>
+    <div class="module-card arbitrage-only">
+      <div class="module-name">↳ 自發自用策略</div>
+      <div class="module-en">Self-Consumption Strategy</div>
+      <div class="module-desc">太陽能充裕 → 充電；夜間/陰天 → 放電抵消購電。依賴預測域輸入。</div>
+    </div>
+    <div class="module-card arbitrage-only">
+      <div class="module-name">↳ 需求響應策略</div>
+      <div class="module-en">DR Response Strategy</div>
+      <div class="module-desc">接收 DR 事件信號 → 立即按指令方向調度指定設備群。響應時效嚴格。</div>
+    </div>
+    <div class="module-card arbitrage-only">
+      <div class="module-name">↳ 峰值管理策略</div>
+      <div class="module-en">Peak Demand Strategy</div>
+      <div class="module-desc">預測負載高峰 → 提前放電削峰。依賴遙測域實時負載和預測域負載預測。</div>
+    </div>
+    <div class="module-card arbitrage-only">
+      <div class="module-name">↳ 韌性策略</div>
+      <div class="module-en">Resilience Strategy</div>
+      <div class="module-desc">SoC 低於安全閾值 → 停止所有調度，保留備用電量。優先級最高，可覆蓋所有其他策略。</div>
+    </div>
+    <div class="module-card shared">
+      <div class="module-name">條件評估器</div>
+      <div class="module-en">Condition Evaluator</div>
+      <div class="module-desc">接收信號 + 策略規則 → 判斷是否觸發、觸發哪個方向。與策略解耦，獨立組件。</div>
+    </div>
+    <div class="module-card shared">
+      <div class="module-name">調度計劃器</div>
+      <div class="module-en">Dispatch Planner</div>
+      <div class="module-desc">查詢資產登記，確定對哪些設備下發什麼指令，生成調度計劃。</div>
+    </div>
+    <div class="module-card shared">
+      <div class="module-name">狀態追蹤器</div>
+      <div class="module-en">State Tracker</div>
+      <div class="module-desc">記錄當前調度狀態，防止重複下發，處理超時，維護調度生命周期。</div>
+    </div>
+  </div>
+
+  <h3>🔌 設備網關域（Device Gateway）</h3>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">職責：將調度引擎的抽象指令（CHARGE/DISCHARGE/STOP）翻譯為各品牌設備的具體通信調用。對調度引擎完全透明。</p>
+  <div class="module-grid">
+    <div class="module-card shared">
+      <div class="module-name">路由器</div>
+      <div class="module-en">Gateway Router</div>
+      <div class="module-desc">根據 Device.gatewayMode（CLOUD/MQTT）決定走哪條通信路徑。</div>
+    </div>
+    <div class="module-card shared">
+      <div class="module-name">雲端適配器</div>
+      <div class="module-en">Cloud API Adapter</div>
+      <div class="module-desc">每個品牌一個實現（插件）。AlphaESS / FoxESS / SunGrow / SNJ / GrowWatt / WeiHeng。新品牌 = 新增一個 Adapter 類。</div>
+    </div>
+    <div class="module-card shared">
+      <div class="module-name">MQTT 網關客戶端</div>
+      <div class="module-en">MQTT Gateway Client</div>
+      <div class="module-desc">向本地網關盒發布 MQTT 指令，訂閱 ACK 回報。SOLFACIL 使用此模式。</div>
+    </div>
+    <div class="module-card arbitrage-only" style="border-color:#f1948a">
+      <div class="module-name">OCPP 適配器 <span style="font-size:11px;background:#fdecea;color:#c0392b;padding:1px 6px;border-radius:6px">規劃中</span></div>
+      <div class="module-en">OCPP Adapter</div>
+      <div class="module-desc">EV 充電樁的標準通信協議（Open Charge Point Protocol）。一個適配器覆蓋大多數品牌充電樁，與逆變器「每品牌一個適配器」不同。支持充電授權、計量、遠程控制。</div>
+    </div>
+    <div class="module-card shared">
+      <div class="module-name">指令確認器</div>
+      <div class="module-en">Command ACK Handler</div>
+      <div class="module-desc">處理設備執行結果回報（SUCCESS/FAILED/TIMEOUT），通知狀態追蹤器更新。</div>
+    </div>
+  </div>
+
+  <h3>🔮 預測域（Forecasting）</h3>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">職責：預測未來的負載、發電量和電價，為調度引擎的策略提供前瞻性輸入。市場套利基本不需要，自發自用/峰值管理必須依賴。</p>
+  <div class="module-grid">
+    <div class="module-card arbitrage-only">
+      <div class="module-name">負載預測</div>
+      <div class="module-en">Load Forecasting</div>
+      <div class="module-desc">預測未來 24 小時的建築/家庭用電負荷。自發自用和峰值管理策略的核心輸入。</div>
+    </div>
+    <div class="module-card arbitrage-only">
+      <div class="module-name">太陽能出力預測</div>
+      <div class="module-en">Solar Generation Forecasting</div>
+      <div class="module-desc">根據天氣預報預測 PV 板發電量。自發自用策略決定充放電時機的依據。</div>
+    </div>
+    <div class="module-card arbitrage-only">
+      <div class="module-name">電價預測</div>
+      <div class="module-en">Price Forecasting</div>
+      <div class="module-desc">日前市場（如 CCEE）需要提前預測次日電價窗口，提前規劃最優充放電排程。</div>
+    </div>
+    <div class="module-card arbitrage-only">
+      <div class="module-name">預測模型管理</div>
+      <div class="module-en">Model Management</div>
+      <div class="module-desc">管理預測模型的訓練、版本和部署。支持各租戶使用不同的預測模型配置。</div>
+    </div>
+  </div>
+
+  <h3 style="color:#c0392b">🔌 充電交易域（Charging Transaction）<span style="font-size:12px;background:#fdecea;color:#c0392b;padding:2px 10px;border-radius:8px;margin-left:8px;font-weight:400">規劃中</span></h3>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">職責：管理公共充電站的完整交易生命周期——從車主到站插槍，到完成付款離開。這是一個獨立的商業交易流程，與能源調度解耦。</p>
+  <div class="module-grid" style="opacity:0.85">
+    <div class="module-card" style="border-color:#f1948a">
+      <div class="module-name">充電樁授權器</div>
+      <div class="module-en">Charger Authorization</div>
+      <div class="module-desc">車主掃碼/RFID/APP 認證，確認授權後才能開始充電。對接 Identity 平台服務。</div>
+    </div>
+    <div class="module-card" style="border-color:#f1948a">
+      <div class="module-name">充電會話管理器</div>
+      <div class="module-en">Charging Session Manager</div>
+      <div class="module-desc">記錄每次充電的開始時間、結束時間、充電電量。會話是計費的原子單位。</div>
+    </div>
+    <div class="module-card" style="border-color:#f1948a">
+      <div class="module-name">充電計費引擎</div>
+      <div class="module-en">Charging Billing Engine</div>
+      <div class="module-desc">依據充電電量和定價策略（按電量/按時間/分時段）計算本次應收費用。</div>
+    </div>
+    <div class="module-card" style="border-color:#f1948a">
+      <div class="module-name">支付收款器</div>
+      <div class="module-en">Payment Collector</div>
+      <div class="module-desc">對接支付平台（信用卡/掃碼支付），完成款項收取，觸發財務結算域記錄收益。</div>
+    </div>
+  </div>
+
+  <h3>📊 遙測域（Telemetry）</h3>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">職責：收集所有設備和電表的實時狀態數據，提供「現在正在發生什麼」的即時答案。</p>
+  <div class="module-grid">
+    <div class="module-card">
+      <div class="module-name">設備狀態收集器</div>
+      <div class="module-en">Device State Collector</div>
+      <div class="module-desc">收集逆變器/電池的 SoC、充放電功率、在線狀態。市場套利也需要（確認指令執行）。</div>
+    </div>
+    <div class="module-card arbitrage-only">
+      <div class="module-name">負載監測器</div>
+      <div class="module-en">Load Monitor</div>
+      <div class="module-desc">實時監測建築/家庭用電量。峰值管理策略必須依賴，用於判斷何時需要放電削峰。</div>
+    </div>
+    <div class="module-card arbitrage-only">
+      <div class="module-name">太陽能出力監測器</div>
+      <div class="module-en">PV Generation Monitor</div>
+      <div class="module-desc">實時監測 PV 板發電量。自發自用策略的實時輸入，與 PV 預測結合使用。</div>
+    </div>
+    <div class="module-card">
+      <div class="module-name">數據聚合器</div>
+      <div class="module-en">Data Aggregator</div>
+      <div class="module-desc">將高頻原始遙測數據聚合為分鐘/小時粒度，降低存儲壓力，提供結算用的準確能量數據。</div>
+    </div>
+    <div class="module-card">
+      <div class="module-name">歷史遙測查詢</div>
+      <div class="module-en">Historical Telemetry Query</div>
+      <div class="module-desc">提供歷史能量數據查詢接口，供結算域計算收益時使用。</div>
+    </div>
+  </div>
+
+  <h3>💰 財務結算域（Financial Settlement）</h3>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">職責：計算每個用例產生的收益或節省，按配置的分成比例分配給各方，生成報表。永遠不觸發調度。</p>
+  <div style="background:#e8f8f5;border:1px solid #a9dfbf;border-radius:8px;padding:12px 16px;margin-bottom:14px;font-size:13px">
+    <strong>兩種截然不同的財務模型並存：</strong><br>
+    模式 A（能源收益型）：平台從市場賺差價 → 按比例分給業主。計費對象是「電量×電價」<br>
+    模式 B（充電服務型）：車主付費 → 按用電量計費。計費對象是「充電電量×服務單價」<br>
+    兩種模式在同一個財務結算域內，由不同模塊處理。
+  </div>
+  <div class="module-grid">
+    <div class="module-card">
+      <div class="module-name">套利結算</div>
+      <div class="module-en">Arbitrage Settlement</div>
+      <div class="module-desc">充放電能量 × 對應電價差 = 毛收益。當前 UEH/SOLFACIL 使用的結算模塊。</div>
+    </div>
+    <div class="module-card arbitrage-only">
+      <div class="module-name">需求響應結算</div>
+      <div class="module-en">DR Event Settlement</div>
+      <div class="module-desc">按 DR 響應事件計費，與電價套利邏輯完全不同——按響應量和響應質量付費。</div>
+    </div>
+    <div class="module-card arbitrage-only">
+      <div class="module-name">自發自用節省計算</div>
+      <div class="module-en">Self-Consumption Savings Calculator</div>
+      <div class="module-desc">計算通過光伏+電池自發自用避免向電網購電所節省的電費金額。</div>
+    </div>
+    <div class="module-card arbitrage-only">
+      <div class="module-name">P2P 交易結算</div>
+      <div class="module-en">P2P Trading Settlement</div>
+      <div class="module-desc">社區電力撮合交易的結算。賣電方收益 + 買電方成本 + 平台手續費。</div>
+    </div>
+    <div class="module-card shared">
+      <div class="module-name">分成分配器</div>
+      <div class="module-en">Revenue / Savings Splitter</div>
+      <div class="module-desc">按租戶配置的分成比例，將收益/節省分配給業主、平台及其他參與方。</div>
+    </div>
+    <div class="module-card shared">
+      <div class="module-name">報表生成器</div>
+      <div class="module-en">Report Generator</div>
+      <div class="module-desc">生成月度/季度財務報表，供業主門戶和管理後台展示。</div>
+    </div>
+  </div>
+</div>
+
+<!-- S6 -->
+<div class="section" id="s6">
+  <div class="section-label">第六部分 · 水平組件</div>
+  <h2>平台服務層（Platform Services）</h2>
+
+  <p style="margin-bottom:16px">以下組件是水平基礎設施——它們不執行業務邏輯，但定義了七個業務域能否各自獨立運作的前提條件。缺少任何一個，域邊界就無法維持。</p>
+
+  <div class="ps-grid">
+    <div class="ps-card">
+      <div class="ps-icon">🖥️</div>
+      <div class="ps-name">BFF（前端聚合層）</div>
+      <div class="ps-desc">為管理後台和業主門戶提供業務語義 API。從多個域聚合數據，組合成前端所需的視圖格式。不包含核心業務規則。<br><br><strong style="color:var(--danger);font-size:12px">缺少時：</strong><span style="font-size:12px">前端直接對接七個域的 API，自行聚合，維護成本極高。</span></div>
+    </div>
+    <div class="ps-card">
+      <div class="ps-icon">🔐</div>
+      <div class="ps-name">Identity（身份認證）</div>
+      <div class="ps-desc">統一處理用戶認證、角色權限和租戶隔離。所有入站請求在此校驗。確保租戶 A 無法訪問租戶 B 的數據。<br><br><strong style="color:var(--danger);font-size:12px">缺少時：</strong><span style="font-size:12px">每個域各自實現 Auth，標準不一，安全漏洞難以統一修復。</span></div>
+    </div>
+    <div class="ps-card">
+      <div class="ps-icon">📨</div>
+      <div class="ps-name">Event Bus（事件總線）</div>
+      <div class="ps-desc">域間異步通信的通道，解耦發布方與訂閱方。ExternalSignal → 調度引擎，DispatchResult → 遙測域 / 結算域。<br><br><strong style="color:var(--danger);font-size:12px">缺少時：</strong><span style="font-size:12px">外部信號域必須直接調用調度引擎，形成硬耦合，域邊界被打破。</span></div>
+    </div>
+    <div class="ps-card">
+      <div class="ps-icon">⚙️</div>
+      <div class="ps-name">Tenant Config（租戶配置）</div>
+      <div class="ps-desc">存儲各租戶的運行配置：啟用哪些用例、哪些市場連接器、哪種網關模式、分成比例。純配置讀取，無業務邏輯。<br><br><strong style="color:var(--danger);font-size:12px">缺少時：</strong><span style="font-size:12px">新增租戶需要改多個域的硬編碼配置。</span></div>
+    </div>
+    <div class="ps-card">
+      <div class="ps-icon">🧰</div>
+      <div class="ps-name">Shared Layer（公共工具）</div>
+      <div class="ps-desc">跨域共用的標準數據結構定義（ExternalSignal / DispatchCommand / DispatchResult / RevenueRecord）、時區工具、日誌工具、通用錯誤類型。</div>
+    </div>
+  </div>
+
+  <div class="ps-card db-card" style="margin-top:14px;padding:20px">
+    <div style="display:flex;align-items:flex-start;gap:16px">
+      <div style="font-size:28px;flex-shrink:0">🗄️</div>
+      <div style="flex:1">
+        <div class="ps-name" style="font-size:16px;margin-bottom:6px">Data Persistence（數據持久化）</div>
+        <div class="ps-desc" style="margin-bottom:14px">共用的數據存儲基礎設施，為所有業務域提供持久化能力。</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px;font-size:13px">
+          <div>
+            <strong>Layer 2 原則（本文件範圍）：</strong>
+            <ul style="padding-left:16px;margin-top:6px">
+              <li>所有域共用同一個物理數據庫</li>
+              <li>每個域擁有自己的表，不得被其他域直接讀寫</li>
+              <li>跨域數據訪問只能通過域 API，嚴禁跨域 JOIN</li>
+            </ul>
+          </div>
+          <div>
+            <strong style="color:var(--danger)">缺少此原則的後果：</strong>
+            <ul style="padding-left:16px;margin-top:6px;color:#555">
+              <li>任意代碼跨域 JOIN，一張表改動破壞多個域</li>
+              <li>牽一髮動全身，無法獨立部署或測試單個域</li>
+            </ul>
+          </div>
+        </div>
+        <div style="margin-top:10px;font-size:12px;color:var(--muted);font-style:italic">📌 Layer 3（Spec）定義具體的表結構、字段和數據庫技術選擇，不在本文件範圍內。</div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- S7 -->
+<div class="section" id="s7">
+  <div class="section-label">第七部分</div>
+  <h2>完整架構視圖</h2>
+
+  <div class="arch-box">
+                     前端（管理後台 / 業主門戶）
+                               │
+                         ┌─────▼─────┐
+                         │    BFF    │
+                         └─────┬─────┘
+                               │
+     ┌────────────────── Identity 統一認證 ───────────────────┐
+     └──────────────────────────┬────────────────────────────┘
+                                │
+     ┌──────────────────────────┼───────────────────────────┐
+     │                          │  Tenant Config（租戶配置）  │
+     └──────────────────────────┼───────────────────────────┘
+                                │
+  ┌──────────┐      ┌───────────▼──────────┐
+  │ 電力市場  │     │     外部信號域         │
+  │ 電網運營  │────▶│  市場電價 / DR事件     │
+  │  商信號   │     │  頻率偏差             │
+  └──────────┘      └───────────┬──────────┘
+                                │ ExternalSignal（Event Bus）
+                                ▼
+                       ┌─────────────────────┐
+                       │      調度引擎域       │◀─── 資產登記域
+                       │  策略引擎（可插拔）   │◀─── 預測域
+                       │  套利/自用/DR/峰值/  │◀─── 遙測域
+                       │  EV充電/韌性 策略    │
+                       └──────────┬──────────┘
+                                  │ DispatchCommand（Event Bus）
+                                  ▼
+                       ┌─────────────────────┐
+                       │      設備網關域       │
+                       │  雲端適配器 / MQTT   │
+                       └──────────┬──────────┘
+                                  │ DispatchResult（Event Bus）
+                                  ▼
+                       ┌─────────────────────┐
+                       │     財務結算域        │◀─── 遙測域（能量數據）
+                       │  套利/DR/自用/P2P    │◀─── 外部信號域（歷史電價）
+                       │  結算 + 分成分配      │
+                       └─────────────────────┘
+
+  ┌─────────────────────────────────────────────────────────────┐
+  │        Tenant Config    Shared Layer    Data Persistence     │
+  └─────────────────────────────────────────────────────────────┘</div>
+
+  <h3 style="margin-top:28px">用例 × 域啟用矩陣</h3>
+  <p style="font-size:13px;color:var(--muted);margin-bottom:12px">✅ = 該用例需要此域　⬜ = 不需要　🔶 = 部分模塊需要</p>
+  <div style="overflow-x:auto">
+  <table style="font-size:13px">
+    <tr>
+      <th>用例</th>
+      <th>外部信號</th>
+      <th>資產登記</th>
+      <th>調度引擎</th>
+      <th>設備網關</th>
+      <th>預測</th>
+      <th>遙測</th>
+      <th>財務結算</th>
+      <th style="color:#f1948a">充電交易 🔶</th>
+    </tr>
+    <tr><td>① 市場套利 ⭐</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>🔶 CCEE日前</td><td>🔶 ACK</td><td>✅</td><td>⬜</td></tr>
+    <tr><td>② 需求響應</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>⬜</td><td>🔶</td><td>✅</td><td>⬜</td></tr>
+    <tr><td>③ 輔助服務</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>⬜</td><td>✅</td><td>✅</td><td>⬜</td></tr>
+    <tr><td>④ 自發自用</td><td>⬜</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>⬜</td></tr>
+    <tr><td>⑤ 峰值管理</td><td>⬜</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>⬜</td><td>⬜</td></tr>
+    <tr><td>⑥ EV充電/V2G</td><td>🔶 電價</td><td>✅</td><td>✅</td><td>✅</td><td>✅</td><td>⬜</td><td>⬜</td><td>⬜</td></tr>
+    <tr><td>⑦ 備用電源</td><td>⬜</td><td>✅</td><td>✅</td><td>✅</td><td>⬜</td><td>✅</td><td>⬜</td><td>⬜</td></tr>
+    <tr><td>⑧ P2P社區</td><td>⬜</td><td>✅</td><td>✅</td><td>✅</td><td>⬜</td><td>✅</td><td>✅</td><td>⬜</td></tr>
+    <tr style="background:#fff0f0"><td>⑨ 公共充電站 🔶</td><td>⬜</td><td>✅</td><td>🔶 限功率</td><td>✅ OCPP</td><td>⬜</td><td>✅</td><td>✅</td><td>✅</td></tr>
+  </table>
+  </div>
+</div>
+
+</div><!-- /container -->
+
+<div class="doc-footer">
+  EMS Platform Architecture v1.0 &nbsp;·&nbsp; 旭衡電子 &nbsp;·&nbsp; 2026-03-03<br>
+  本文件定義平台架構（Layer 1 + Layer 2）。具體實現規約（Layer 3）見各用例實現文件。
+</div>
+
+</body>
+</html>
