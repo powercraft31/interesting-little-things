@@ -151,16 +151,22 @@ var PerformancePage = {
   },
 
   _renderSavingsChart: function () {
-    var homes = SAVINGS_BY_HOME.map(function (h) {
+    // Customer sees only their own home (Casa Silva); Admin/Integrador see all
+    var role = (typeof currentRole !== "undefined") ? currentRole : "admin";
+    var savingsData = (role === "customer")
+      ? SAVINGS_BY_HOME.filter(function (h) { return h.home === "Casa Silva"; })
+      : SAVINGS_BY_HOME;
+
+    var homes = savingsData.map(function (h) {
       return h.home;
     });
-    var scData = SAVINGS_BY_HOME.map(function (h) {
+    var scData = savingsData.map(function (h) {
       return h.sc;
     });
-    var touData = SAVINGS_BY_HOME.map(function (h) {
+    var touData = savingsData.map(function (h) {
       return h.tou;
     });
-    var psData = SAVINGS_BY_HOME.map(function (h) {
+    var psData = savingsData.map(function (h) {
       return h.ps;
     });
 
@@ -181,7 +187,7 @@ var PerformancePage = {
         axisPointer: { type: "shadow" },
         formatter: function (params) {
           var homeIdx = params[0].dataIndex;
-          var home = SAVINGS_BY_HOME[homeIdx];
+          var home = savingsData[homeIdx];
           var totalFormatted = formatBRL(home.total);
           var lines = [
             "<strong>" + home.home + "</strong>",
@@ -277,7 +283,7 @@ var PerformancePage = {
             fontFamily: "'JetBrains Mono', monospace",
             fontWeight: 600,
             formatter: function (params) {
-              var home = SAVINGS_BY_HOME[params.dataIndex];
+              var home = savingsData[params.dataIndex];
               return formatBRL(home.total) + "\n\u03B1 " + home.alpha + "%";
             },
           },

@@ -204,6 +204,10 @@ const Charts = {
     requestAnimationFrame(function () {
       requestAnimationFrame(function () {
         containerIds.forEach(function (id) {
+          // Final sync guard: abort if container went invisible (race condition from fast nav)
+          var c = document.getElementById(id);
+          if (!c || c.offsetWidth === 0 || c.offsetHeight === 0) return;
+
           var pending = self._pendingOptions[id];
           if (pending) {
             self._initOrUpdate(id, pending.option);
