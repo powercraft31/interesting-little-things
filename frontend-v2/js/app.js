@@ -40,7 +40,7 @@ var PAGES = [
     labelKey: "page.fleet",
     icon: "\u{1F4CA}",
     navKey: "nav.fleet",
-    roles: ["admin", "integrador", "customer"],
+    roles: ["admin", "integrador"],
   },
   {
     id: "devices",
@@ -242,7 +242,9 @@ function switchRole(role) {
     return p.id === currentPage;
   });
   if (currentPageDef && !currentPageDef.roles.includes(role)) {
-    navigateTo("fleet");
+    // Customer → Performance; others → Fleet
+    var fallback = role === "customer" ? "performance" : "fleet";
+    navigateTo(fallback);
     return;
   }
 
@@ -261,9 +263,25 @@ function switchRole(role) {
     mod.onRoleChange(role);
   }
 
+  // Invalidate ALL other pages — force re-init on next visit with new role
+  invalidateHiddenPages();
+
   // Refresh chart theme colors after theme change
   requestAnimationFrame(function () {
     Charts.refreshTheme();
+  });
+}
+
+/**
+ * Dispose charts and clear pageInitialized for all pages except currentPage.
+ * Next navigation to those pages will trigger full re-init with correct role/lang.
+ */
+function invalidateHiddenPages() {
+  PAGES.forEach(function (p) {
+    if (p.id !== currentPage && pageInitialized[p.id]) {
+      Charts.disposePageCharts(p.id);
+      delete pageInitialized[p.id];
+    }
   });
 }
 
@@ -358,11 +376,12 @@ document.addEventListener("DOMContentLoaded", function () {
       if (titleEl) titleEl.textContent = t(page.labelKey);
     }
 
-    // Dispose stale chart instances before re-init (prevents ResizeObserver orphans)
-    Charts.disposePageCharts(currentPage);
+    // Dispose all hidden pages' charts (prevents ResizeObserver orphans on re-visit)
+    invalidateHiddenPages();
 
-    // Force re-init current page with translated content
-    pageInitialized = {};
+    // Dispose + re-init CURRENT page with translated content
+    Charts.disposePageCharts(currentPage);
+    delete pageInitialized[currentPage];
     initPage(currentPage);
   });
 

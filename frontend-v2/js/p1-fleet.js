@@ -66,10 +66,14 @@ const FleetPage = {
    * Compute tenant-scoped fleet stats.
    * Admin sees global FLEET; Integrador sees only org-001 (Solar São Paulo).
    */
+  /**
+   * Tenant-scoped fleet stats.
+   * Admin: full global view. Integrador: org-001 only. Customer: single home.
+   */
   _getFleetStats(role) {
     if (role === "integrador") {
       var org = INTEGRADORES.find(function (i) { return i.orgId === "org-001"; });
-      if (!org) return FLEET; // fallback
+      if (!org) return FLEET;
       var online = Math.round(org.deviceCount * org.onlineRate / 100);
       var offline = org.deviceCount - online;
       return {
@@ -77,8 +81,19 @@ const FleetPage = {
         onlineCount: online,
         offlineCount: offline,
         onlineRate: org.onlineRate,
-        totalHomes: 1, // Integrador sees only their homes
+        totalHomes: 1,
         totalIntegradores: 1,
+      };
+    }
+    if (role === "customer") {
+      // Customer sees only their single home (Casa Silva = ~8 devices)
+      return {
+        totalDevices: 8,
+        onlineCount: 8,
+        offlineCount: 0,
+        onlineRate: 100,
+        totalHomes: 1,
+        totalIntegradores: 0,
       };
     }
     return FLEET;
