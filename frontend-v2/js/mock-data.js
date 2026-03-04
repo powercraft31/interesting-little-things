@@ -102,7 +102,7 @@ const OFFLINE_EVENTS = [
 // =========================================================
 function generateUptimeTrend() {
   const data = [];
-  const baseDate = new Date(2026, 2, 4); // March 4, 2026
+  const baseDate = new Date(2026, 2, 4, 12, 0, 0); // March 4, 2026 noon — DST-safe anchor
   for (let i = 27; i >= 0; i--) {
     const d = new Date(baseDate);
     d.setDate(d.getDate() - i);

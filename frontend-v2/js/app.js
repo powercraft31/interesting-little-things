@@ -358,6 +358,9 @@ document.addEventListener("DOMContentLoaded", function () {
       if (titleEl) titleEl.textContent = t(page.labelKey);
     }
 
+    // Dispose stale chart instances before re-init (prevents ResizeObserver orphans)
+    Charts.disposePageCharts(currentPage);
+
     // Force re-init current page with translated content
     pageInitialized = {};
     initPage(currentPage);

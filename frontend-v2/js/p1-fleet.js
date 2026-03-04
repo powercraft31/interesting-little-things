@@ -8,19 +8,27 @@ const FleetPage = {
     const container = document.getElementById("fleet-content");
     if (!container) return;
 
+    // Read current role from app.js global (defaults to "admin" on first load)
+    const role = (typeof currentRole !== "undefined") ? currentRole : "admin";
     const skeletonHTML = this._buildSkeleton();
-    const realHTML = this._buildContent("admin");
+    const realHTML = this._buildContent(role);
 
     Components.renderWithSkeleton(container, skeletonHTML, realHTML, () => {
-      this._initCharts();
+      this._initCharts(role);
     });
   },
 
   onRoleChange(role) {
-    const tableContainer = document.getElementById("fleet-integrador-table");
-    if (tableContainer) {
-      tableContainer.innerHTML = this._buildIntegradorTable(role);
-    }
+    // Re-render entire page content to reflect tenant-scoped data
+    const container = document.getElementById("fleet-content");
+    if (!container) return;
+
+    // Dispose stale charts before DOM replacement
+    Charts.disposePageCharts("fleet");
+
+    const realHTML = this._buildContent(role);
+    container.innerHTML = realHTML;
+    this._initCharts(role);
   },
 
   // =========================================================
@@ -43,7 +51,7 @@ const FleetPage = {
   // =========================================================
   _buildContent(role) {
     return `
-      ${this._buildKPICards()}
+      ${this._buildKPICards(role)}
       <div class="two-col">
         ${this._buildUptimeChartCard()}
         ${this._buildDeviceDistCard()}
@@ -54,8 +62,30 @@ const FleetPage = {
   },
 
   // ---- KPI Cards ----
-  _buildKPICards() {
-    const f = FLEET;
+  /**
+   * Compute tenant-scoped fleet stats.
+   * Admin sees global FLEET; Integrador sees only org-001 (Solar São Paulo).
+   */
+  _getFleetStats(role) {
+    if (role === "integrador") {
+      var org = INTEGRADORES.find(function (i) { return i.orgId === "org-001"; });
+      if (!org) return FLEET; // fallback
+      var online = Math.round(org.deviceCount * org.onlineRate / 100);
+      var offline = org.deviceCount - online;
+      return {
+        totalDevices: org.deviceCount,
+        onlineCount: online,
+        offlineCount: offline,
+        onlineRate: org.onlineRate,
+        totalHomes: 1, // Integrador sees only their homes
+        totalIntegradores: 1,
+      };
+    }
+    return FLEET;
+  },
+
+  _buildKPICards(role) {
+    const f = this._getFleetStats(role);
     const onlineColor = f.onlineRate >= 90 ? "positive" : "negative";
 
     const cards = [
@@ -185,14 +215,15 @@ const FleetPage = {
   // =========================================================
   // CHARTS
   // =========================================================
-  _initCharts() {
+  _initCharts(role) {
+    role = role || "admin";
     try {
       this._initUptimeChart();
     } catch (e) {
       console.error("[Fleet] Uptime chart error:", e);
     }
     try {
-      this._initDeviceDistChart();
+      this._initDeviceDistChart(role);
     } catch (e) {
       console.error("[Fleet] DeviceDist chart error:", e);
     }
@@ -291,12 +322,18 @@ const FleetPage = {
     Charts.createChart("chart-uptime-trend", option, { pageId: "fleet" });
   },
 
-  _initDeviceDistChart() {
+  _initDeviceDistChart(role) {
+    // Tenant-scoped: Integrador sees proportional subset (org-001 = 26/47)
+    var scale = 1;
+    if (role === "integrador") {
+      var org = INTEGRADORES.find(function (i) { return i.orgId === "org-001"; });
+      scale = org ? org.deviceCount / FLEET.totalDevices : 1;
+    }
     const data = DEVICE_TYPES.map((d) => ({
       name: t("dtype." + d.type),
-      total: d.count,
-      online: d.online,
-      offline: d.count - d.online,
+      total: Math.round(d.count * scale),
+      online: Math.round(d.online * scale),
+      offline: Math.max(0, Math.round(d.count * scale) - Math.round(d.online * scale)),
       color: d.color,
     }));
 

@@ -112,13 +112,34 @@ const Charts = {
   },
 
   /**
+   * Dispose all charts for a page before re-init (prevents DOM orphans)
+   */
+  disposePageCharts(pageId) {
+    var containerIds = this._registry[pageId] || [];
+    var self = this;
+    containerIds.forEach(function (id) {
+      var container = document.getElementById(id);
+      if (container) {
+        var chart = echarts.getInstanceByDom(container);
+        if (chart) chart.dispose();
+      }
+      // Disconnect stale observer — will be rebound on next init
+      if (self._observers[id]) {
+        self._observers[id].disconnect();
+        delete self._observers[id];
+      }
+      delete self._pendingOptions[id];
+    });
+  },
+
+  /**
    * Internal: init or update chart instance, then apply theme overrides
    */
   _initOrUpdate(containerId, option) {
     var container = document.getElementById(containerId);
     if (!container) return null;
 
-    // Singleton: check for existing instance
+    // Singleton: check for existing instance — but verify it's on the SAME DOM node
     var chart = echarts.getInstanceByDom(container);
     if (chart) {
       chart.setOption(option, { notMerge: false });
@@ -126,17 +147,18 @@ const Charts = {
       // New init
       chart = echarts.init(container, null, { renderer: "canvas" });
       chart.setOption(option);
-
-      // Bind ResizeObserver for auto-resize
-      if (!this._observers[containerId]) {
-        var observer = new ResizeObserver(function () {
-          var inst = echarts.getInstanceByDom(container);
-          if (inst) inst.resize();
-        });
-        observer.observe(container);
-        this._observers[containerId] = observer;
-      }
     }
+
+    // Always (re)bind ResizeObserver to the CURRENT DOM node
+    if (this._observers[containerId]) {
+      this._observers[containerId].disconnect();
+    }
+    var observer = new ResizeObserver(function () {
+      var inst = echarts.getInstanceByDom(container);
+      if (inst) inst.resize();
+    });
+    observer.observe(container);
+    this._observers[containerId] = observer;
 
     // Apply theme overrides (tooltip, legend colors)
     var themeOverrides = this._getThemeOverrides();
@@ -185,6 +207,7 @@ const Charts = {
           var pending = self._pendingOptions[id];
           if (pending) {
             self._initOrUpdate(id, pending.option);
+            // Keep in _pendingOptions for theme refresh — but mark as initialized
           } else {
             // Just resize existing
             var container = document.getElementById(id);
