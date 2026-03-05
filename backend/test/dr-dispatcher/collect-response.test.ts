@@ -1,4 +1,4 @@
-import { getPool, closePool } from "../../src/shared/db";
+import { getServicePool, closeAllPools } from "../../src/shared/db";
 import { createAckHandler } from "../../src/dr-dispatcher/handlers/collect-response";
 import { Pool } from "pg";
 import type { Request, Response } from "express";
@@ -33,7 +33,7 @@ describe("collect-response ACK handler (v5.9)", () => {
   let testDispatchId: number;
 
   beforeAll(() => {
-    pool = getPool();
+    pool = getServicePool();
     handler = createAckHandler(pool);
   });
 
@@ -49,61 +49,96 @@ describe("collect-response ACK handler (v5.9)", () => {
     testTradeId = tradeResult.rows[0].id;
 
     // Insert a dispatch_command in 'dispatched' state
-    const dispatchResult = await pool.query<{ id: number }>(`
+    const dispatchResult = await pool.query<{ id: number }>(
+      `
       INSERT INTO dispatch_commands
         (trade_id, asset_id, org_id, action, volume_kwh, status, m1_boundary)
       VALUES
         ($1, 'ASSET_SP_001', 'ORG_ENERGIA_001', 'discharge', 5.0, 'dispatched', true)
       RETURNING id
-    `, [testTradeId]);
+    `,
+      [testTradeId],
+    );
     testDispatchId = dispatchResult.rows[0].id;
   });
 
   afterEach(async () => {
-    await pool.query(`DELETE FROM dispatch_commands WHERE trade_id = $1`, [testTradeId]);
-    await pool.query(`DELETE FROM trade_schedules WHERE id = $1`, [testTradeId]);
+    await pool.query(`DELETE FROM dispatch_commands WHERE trade_id = $1`, [
+      testTradeId,
+    ]);
+    await pool.query(`DELETE FROM trade_schedules WHERE id = $1`, [
+      testTradeId,
+    ]);
   });
 
   afterAll(async () => {
-    await closePool();
+    await closeAllPools();
   });
 
   it("valid ACK (completed) → 200, dispatch marked completed, trade marked executed", async () => {
-    const req = mockReq({ dispatch_id: testDispatchId, status: "completed", asset_id: "ASSET_SP_001" });
+    const req = mockReq({
+      dispatch_id: testDispatchId,
+      status: "completed",
+      asset_id: "ASSET_SP_001",
+    });
     const res = mockRes();
 
     await handler(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
     expect(res.json).toHaveBeenCalledWith(
-      expect.objectContaining({ ok: true, dispatch_id: testDispatchId, status: "completed" }),
+      expect.objectContaining({
+        ok: true,
+        dispatch_id: testDispatchId,
+        status: "completed",
+      }),
     );
 
     // Verify DB state
-    const dispatch = await pool.query(`SELECT status FROM dispatch_commands WHERE id = $1`, [testDispatchId]);
+    const dispatch = await pool.query(
+      `SELECT status FROM dispatch_commands WHERE id = $1`,
+      [testDispatchId],
+    );
     expect(dispatch.rows[0].status).toBe("completed");
 
-    const trade = await pool.query(`SELECT status FROM trade_schedules WHERE id = $1`, [testTradeId]);
+    const trade = await pool.query(
+      `SELECT status FROM trade_schedules WHERE id = $1`,
+      [testTradeId],
+    );
     expect(trade.rows[0].status).toBe("executed");
   });
 
   it("valid ACK (failed) → 200, trade marked failed", async () => {
-    const req = mockReq({ dispatch_id: testDispatchId, status: "failed", asset_id: "ASSET_SP_001" });
+    const req = mockReq({
+      dispatch_id: testDispatchId,
+      status: "failed",
+      asset_id: "ASSET_SP_001",
+    });
     const res = mockRes();
 
     await handler(req, res);
 
     expect(res.status).toHaveBeenCalledWith(200);
 
-    const trade = await pool.query(`SELECT status FROM trade_schedules WHERE id = $1`, [testTradeId]);
+    const trade = await pool.query(
+      `SELECT status FROM trade_schedules WHERE id = $1`,
+      [testTradeId],
+    );
     expect(trade.rows[0].status).toBe("failed");
   });
 
   it("already terminal → 409 Conflict", async () => {
     // First ACK: complete it
-    await pool.query(`UPDATE dispatch_commands SET status = 'completed' WHERE id = $1`, [testDispatchId]);
+    await pool.query(
+      `UPDATE dispatch_commands SET status = 'completed' WHERE id = $1`,
+      [testDispatchId],
+    );
 
-    const req = mockReq({ dispatch_id: testDispatchId, status: "completed", asset_id: "ASSET_SP_001" });
+    const req = mockReq({
+      dispatch_id: testDispatchId,
+      status: "completed",
+      asset_id: "ASSET_SP_001",
+    });
     const res = mockRes();
 
     await handler(req, res);
@@ -115,7 +150,11 @@ describe("collect-response ACK handler (v5.9)", () => {
   });
 
   it("not found → 404", async () => {
-    const req = mockReq({ dispatch_id: 999999, status: "completed", asset_id: "ASSET_SP_001" });
+    const req = mockReq({
+      dispatch_id: 999999,
+      status: "completed",
+      asset_id: "ASSET_SP_001",
+    });
     const res = mockRes();
 
     await handler(req, res);

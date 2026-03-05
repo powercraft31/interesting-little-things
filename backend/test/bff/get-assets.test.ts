@@ -3,7 +3,7 @@ import type {
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import { handler } from "../../src/bff/handlers/get-assets";
-import { closePool } from "../../src/shared/db";
+import { closeAllPools } from "../../src/shared/db";
 
 // ---------------------------------------------------------------------------
 // Fetch mock for AppConfig feature-flags
@@ -250,6 +250,6 @@ describe("GET /assets handler", () => {
   });
 
   afterAll(async () => {
-    await closePool();
+    await closeAllPools();
   });
 });

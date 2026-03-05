@@ -13,7 +13,7 @@ import { handleCceeWebhook } from "../src/open-api/handlers/ccee-webhook";
 import { handleWeatherWebhook } from "../src/open-api/handlers/weather-webhook";
 import { createTelemetryWebhookHandler } from "../src/iot-hub/handlers/telemetry-webhook";
 
-import { getPool } from "../src/shared/db";
+import { getServicePool, closeAllPools } from "../src/shared/db";
 import { startScheduleGenerator } from "../src/optimization-engine/services/schedule-generator";
 import { startCommandDispatcher } from "../src/dr-dispatcher/services/command-dispatcher";
 import { startTimeoutChecker } from "../src/dr-dispatcher/handlers/timeout-checker";
@@ -128,27 +128,27 @@ app.post("/webhooks/ccee-pld", handleCceeWebhook);
 app.post("/webhooks/weather", handleWeatherWebhook);
 // ────────────────────────────────────────────────────────────────────────
 
-// ── Shared DB pool ───────────────────────────────────────────────────────
-const pool = getPool();
+// ── Shared DB pool (v5.11: dual pool — service pool for cron/internal) ────
+const servicePool = getServicePool();
 
 // ── v5.8 Telemetry Feedback Loop ─────────────────────────────────────────
-app.post("/api/telemetry/mock", createTelemetryWebhookHandler(pool));
+app.post("/api/telemetry/mock", createTelemetryWebhookHandler(servicePool));
 // ────────────────────────────────────────────────────────────────────────
 
 // ── v5.9 Dispatch ACK endpoint ──────────────────────────────────────────
-app.post("/api/dispatch/ack", createAckHandler(pool));
+app.post("/api/dispatch/ack", createAckHandler(servicePool));
 // ────────────────────────────────────────────────────────────────────────
 
 // ── v5.6 System Heartbeat: 啟動自動化管線 ──────────────────────────────
-startScheduleGenerator(pool); // M2: 每小時生成 trade_schedules
-startCommandDispatcher(pool); // M3: 每分鐘推進狀態機 → dispatch_commands
-startTimeoutChecker(pool); // M3: 每分鐘檢查 stale dispatches → failed (v5.9)
-startBillingJob(pool); // M4: 每天 00:05 結算 revenue_daily
+startScheduleGenerator(servicePool); // M2: 每小時生成 trade_schedules
+startCommandDispatcher(servicePool); // M3: 每分鐘推進狀態機 → dispatch_commands
+startTimeoutChecker(servicePool); // M3: 每分鐘檢查 stale dispatches → failed (v5.9)
+startBillingJob(servicePool); // M4: 每天 00:05 結算 revenue_daily
 console.log("[v5.6] System heartbeat started: M2/M3/M4 pipelines active");
 // ────────────────────────────────────────────────────────────────────────
 
 // ── v5.8 Telemetry Aggregator (hourly cron) ──────────────────────────────
-startTelemetryAggregator(pool);
+startTelemetryAggregator(servicePool);
 console.log(
   "[v5.8] Telemetry aggregator started: hourly rollup to asset_hourly_metrics",
 );
@@ -171,3 +171,14 @@ app.listen(PORT, () => {
     '  curl -H \'Authorization: {"userId":"u1","orgId":"ORG_ENERGIA_001","role":"ORG_MANAGER"}\' http://localhost:3000/dashboard',
   );
 });
+
+// ── Graceful Shutdown ─────────────────────────────────────────────────
+async function gracefulShutdown(signal: string): Promise<void> {
+  console.log(`\n[Shutdown] Received ${signal}. Closing all database pools...`);
+  await closeAllPools();
+  console.log("[Shutdown] All pools closed. Exiting.");
+  process.exit(0);
+}
+
+process.on("SIGTERM", () => gracefulShutdown("SIGTERM"));
+process.on("SIGINT", () => gracefulShutdown("SIGINT"));

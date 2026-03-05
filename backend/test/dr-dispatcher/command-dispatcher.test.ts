@@ -1,4 +1,4 @@
-import { getPool, closePool } from "../../src/shared/db";
+import { getServicePool, closeAllPools } from "../../src/shared/db";
 import { runCommandDispatcher } from "../../src/dr-dispatcher/services/command-dispatcher";
 import { Pool } from "pg";
 
@@ -11,7 +11,7 @@ describe("command-dispatcher (M3)", () => {
   let testTradeId: number;
 
   beforeAll(() => {
-    pool = getPool();
+    pool = getServicePool();
   });
 
   beforeEach(async () => {
@@ -37,7 +37,7 @@ describe("command-dispatcher (M3)", () => {
   });
 
   afterAll(async () => {
-    await closePool();
+    await closeAllPools();
   });
 
   it("時間已到的 scheduled 排程應被推進為 executing", async () => {

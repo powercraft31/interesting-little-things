@@ -4,7 +4,7 @@
 -- 19 tables total. Run as superuser (postgres).
 -- ============================================================
 
-BEGIN;
+-- BEGIN;
 
 -- ============================================================
 -- M6 Identity
@@ -209,8 +209,11 @@ CREATE TABLE IF NOT EXISTS trade_schedules (
     action              VARCHAR(10) NOT NULL CHECK (action IN ('charge','discharge','idle')),
     expected_volume_kwh NUMERIC(8,2) NOT NULL,
     target_pld_price    NUMERIC(10,2),
+    status              VARCHAR(20) NOT NULL DEFAULT 'scheduled',
     created_at          TIMESTAMPTZ DEFAULT NOW()
 );
+CREATE INDEX IF NOT EXISTS idx_trade_schedules_status
+  ON trade_schedules (status, planned_time);
 
 CREATE TABLE IF NOT EXISTS algorithm_metrics (
     id                   SERIAL PRIMARY KEY,
@@ -240,10 +243,13 @@ CREATE INDEX IF NOT EXISTS idx_dispatch_asset_time ON dispatch_records (asset_id
 
 CREATE TABLE IF NOT EXISTS dispatch_commands (
   id              SERIAL       PRIMARY KEY,
+  trade_id        INTEGER      REFERENCES trade_schedules(id),
   asset_id        VARCHAR(50)  NOT NULL REFERENCES assets(asset_id),
   org_id          VARCHAR(50)  NOT NULL REFERENCES organizations(org_id),
   action          VARCHAR(20)  NOT NULL,
-  status          VARCHAR(20)  NOT NULL DEFAULT 'scheduled',
+  volume_kwh      NUMERIC(8,2),
+  status          VARCHAR(20)  NOT NULL DEFAULT 'dispatched',
+  m1_boundary     BOOLEAN      NOT NULL DEFAULT true,
   dispatched_at   TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   completed_at    TIMESTAMPTZ,
   error_message   TEXT,
@@ -318,17 +324,10 @@ ALTER TABLE assets ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_assets_tenant ON assets
   USING (org_id = current_setting('app.current_org_id', true));
 
-ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
-CREATE POLICY rls_trades_tenant ON trades
-  USING (org_id = current_setting('app.current_org_id', true));
+-- trades and revenue_daily do NOT have org_id column; scoped via asset_id JOIN
+-- RLS not applied to these tables
 
-ALTER TABLE revenue_daily ENABLE ROW LEVEL SECURITY;
-CREATE POLICY rls_revenue_daily_tenant ON revenue_daily
-  USING (org_id = current_setting('app.current_org_id', true));
-
-ALTER TABLE dispatch_records ENABLE ROW LEVEL SECURITY;
-CREATE POLICY rls_dispatch_records_tenant ON dispatch_records
-  USING (org_id = current_setting('app.current_org_id', true));
+-- dispatch_records has no org_id column; RLS not applied
 
 ALTER TABLE dispatch_commands ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_dispatch_commands_tenant ON dispatch_commands
@@ -358,4 +357,4 @@ ALTER TABLE algorithm_metrics ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_algorithm_metrics_tenant ON algorithm_metrics
   USING (org_id::TEXT = current_setting('app.current_org_id', true));
 
-COMMIT;
+-- COMMIT;

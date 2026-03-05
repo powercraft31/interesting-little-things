@@ -60,10 +60,7 @@ CREATE INDEX IF NOT EXISTS idx_dispatch_commands_status_org
 -- v5.10 replaces "IS NULL OR = ''" admin bypass with dual-role architecture.
 
 DROP POLICY IF EXISTS rls_assets_admin_bypass ON assets;
-DROP POLICY IF EXISTS rls_trades_admin_bypass ON trades;
-DROP POLICY IF EXISTS rls_revenue_daily_admin_bypass ON revenue_daily;
-DROP POLICY IF EXISTS rls_revenue_daily_admin ON revenue_daily;
-DROP POLICY IF EXISTS rls_dispatch_records_admin_bypass ON dispatch_records;
+-- trades, revenue_daily, dispatch_records have no org_id → no RLS policies to drop
 DROP POLICY IF EXISTS rls_dispatch_commands_admin_bypass ON dispatch_commands;
 DROP POLICY IF EXISTS rls_tariff_schedules_admin_bypass ON tariff_schedules;
 DROP POLICY IF EXISTS rls_vpp_strategies_admin_bypass ON vpp_strategies;

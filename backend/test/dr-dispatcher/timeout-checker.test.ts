@@ -1,4 +1,4 @@
-import { getPool, closePool } from "../../src/shared/db";
+import { getServicePool, closeAllPools } from "../../src/shared/db";
 import { runTimeoutChecker } from "../../src/dr-dispatcher/handlers/timeout-checker";
 import { Pool } from "pg";
 
@@ -12,7 +12,7 @@ describe("timeout-checker (v5.9)", () => {
   let testDispatchId: number;
 
   beforeAll(() => {
-    pool = getPool();
+    pool = getServicePool();
   });
 
   beforeEach(async () => {
@@ -27,24 +27,31 @@ describe("timeout-checker (v5.9)", () => {
     testTradeId = tradeResult.rows[0].id;
 
     // Insert a stale dispatch_command (dispatched > 15 min ago)
-    const dispatchResult = await pool.query<{ id: number }>(`
+    const dispatchResult = await pool.query<{ id: number }>(
+      `
       INSERT INTO dispatch_commands
         (trade_id, asset_id, org_id, action, volume_kwh, status, m1_boundary, dispatched_at)
       VALUES
         ($1, 'ASSET_SP_001', 'ORG_ENERGIA_001', 'discharge', 5.0, 'dispatched', true,
          NOW() - INTERVAL '20 minutes')
       RETURNING id
-    `, [testTradeId]);
+    `,
+      [testTradeId],
+    );
     testDispatchId = dispatchResult.rows[0].id;
   });
 
   afterEach(async () => {
-    await pool.query(`DELETE FROM dispatch_commands WHERE trade_id = $1`, [testTradeId]);
-    await pool.query(`DELETE FROM trade_schedules WHERE id = $1`, [testTradeId]);
+    await pool.query(`DELETE FROM dispatch_commands WHERE trade_id = $1`, [
+      testTradeId,
+    ]);
+    await pool.query(`DELETE FROM trade_schedules WHERE id = $1`, [
+      testTradeId,
+    ]);
   });
 
   afterAll(async () => {
-    await closePool();
+    await closeAllPools();
   });
 
   it("marks stale dispatched commands as failed after 15 minutes", async () => {

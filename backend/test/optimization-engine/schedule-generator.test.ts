@@ -1,4 +1,4 @@
-import { getPool, closePool } from "../../src/shared/db";
+import { getServicePool, closeAllPools } from "../../src/shared/db";
 import { runScheduleGenerator } from "../../src/optimization-engine/services/schedule-generator";
 import { Pool } from "pg";
 
@@ -11,7 +11,7 @@ describe("schedule-generator (M2)", () => {
   let pool: Pool;
 
   beforeAll(() => {
-    pool = getPool();
+    pool = getServicePool();
   });
 
   afterAll(async () => {
@@ -22,7 +22,7 @@ describe("schedule-generator (M2)", () => {
         AND planned_time >= NOW()
         AND created_at >= NOW() - INTERVAL '5 minutes'
     `);
-    await closePool();
+    await closeAllPools();
   });
 
   it("應為所有 active assets 寫入未來 24 小時的排程", async () => {

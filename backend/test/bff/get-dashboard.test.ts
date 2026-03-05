@@ -3,7 +3,7 @@ import type {
   APIGatewayProxyStructuredResultV2,
 } from "aws-lambda";
 import { handler } from "../../src/bff/handlers/get-dashboard";
-import { closePool } from "../../src/shared/db";
+import { closeAllPools } from "../../src/shared/db";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -48,7 +48,7 @@ function tokenFor(userId: string, orgId: string, role: string): string {
 
 describe("GET /dashboard handler", () => {
   afterAll(async () => {
-    await closePool();
+    await closeAllPools();
   });
 
   it("SOLFACIL_ADMIN sees all 4 assets aggregated", async () => {
