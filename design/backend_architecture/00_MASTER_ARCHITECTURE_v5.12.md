@@ -3,7 +3,7 @@
 > **模組版本**: v5.12
 > **最後更新**: 2026-03-05
 > **說明**: 系統總控藍圖 — 文件索引、系統定位、8大模組邊界、事件流、架構決策
-> **核心主題**: API Contract Alignment & BFF Expansion — 前端數據盤點、Gap Analysis、15 個新 BFF 端點、5 個新 DB 表
+> **核心主題**: API Contract Alignment & BFF Expansion — 前端數據盤點、Gap Analysis、15 個新 BFF 端點、3 個新 DB 表 + 3 ALTER
 
 ---
 
@@ -41,7 +41,7 @@
 > 1. **前端數據盤點** — 完整掃描 6 個頁面的數據依賴（26 個 mock 物件、7 個圖表、6 個表格）
 > 2. **Gap Analysis** — 交叉比對前端需求 vs 後端提供（20 項差距）
 > 3. **BFF 擴展** — 設計 15 個新端點覆蓋所有前端頁面
-> 4. **DB Schema 擴展** — 5 個新表 + 1 個 ALTER（homes, devices, offline_events, daily_uptime_snapshots, device_telemetry_state, tariff_schedules ALTER）
+> 4. **DB Schema 擴展** — 3 個新表 + 3 個 ALTER（homes, offline_events, daily_uptime_snapshots + assets ALTER, device_state ALTER, tariff_schedules ALTER）+ 1 個新索引（telemetry_history）
 > 5. **Dashboard De-hardcoding** — 清理 GET /dashboard 剩餘 5 個硬編碼欄位
 > 6. **Frontend 漸進整合策略** — Dual-Source Adapter Pattern，逐頁從 mock 切換到 live API
 >
@@ -57,7 +57,7 @@
 >
 > **v5.12 Scope：**
 > - M5 BFF: v5.10 → v5.12（15 新端點 + 5 hardcoded 欄位去硬編碼）
-> - Database Schema: 需更新（5 新表 + 1 ALTER，但不升版 Schema 文件 — 留待實施時同步）
+> - Database Schema: 需更新（3 新表 + 3 ALTER + 1 新索引，但不升版 Schema 文件 — 留待實施時同步）
 > - 其餘模組版本不變
 >
 > **v5.12 Out of Scope（明確排除）：**
@@ -142,7 +142,7 @@ M5 (BFF)               --publishes-->  DRCommandIssued (user-initiated dispatch)
                        --reads    -->  dispatch_commands, dispatch_records, vpp_strategies,
                                       tariff_schedules, revenue_daily, algorithm_metrics,
                                       telemetry_history, assets, device_state, organizations
-                       --reads    -->  homes, devices, offline_events, daily_uptime_snapshots (v5.12 NEW)
+                       --reads    -->  homes, offline_events, daily_uptime_snapshots (v5.12 NEW)
                        --uses     -->  app pool + queryWithOrg (v5.11: unchanged)
                        --exposes  -->  19 GET/POST endpoints (4 existing + 15 new in v5.12)
 M6 (IAM)               --publishes-->  OrgProvisioned, UserCreated
@@ -189,10 +189,10 @@ M8 (Admin Control)     --publishes-->  ConfigUpdated, SchemaEvolved
                                    │ queryWithOrg + getAppPool()
                     ┌──────────────▼───────────────────────┐
                     │        PostgreSQL (24 tables)          │
-                    │  19 existing + 5 new (v5.12):          │
-                    │    homes, devices, offline_events,     │
-                    │    daily_uptime_snapshots,             │
-                    │    device_telemetry_state              │
+                    │  19 existing + 3 new + 2 ALTER (v5.12): │
+                    │    NEW: homes, offline_events,          │
+                    │         daily_uptime_snapshots          │
+                    │    ALTER: assets, device_state          │
                     └───────────────────────────────────────┘
 ```
 
@@ -207,23 +207,29 @@ M8 (Admin Control)     --publishes-->  ConfigUpdated, SchemaEvolved
 
 ## 6. v5.12 Database Changes Summary
 
-### New Tables (5)
+### New Tables (3)
 
 | Table | Purpose | RLS | Rows (seed) |
 |-------|---------|-----|-------------|
-| `homes` | Residential home registry | Yes (org_id) | 3 |
-| `devices` | Individual device registry (granular) | Yes (org_id) | 47 |
-| `offline_events` | Device offline event tracking | Yes (org_id) | ~10 |
-| `daily_uptime_snapshots` | Daily fleet uptime percentage | Yes (org_id) | 28 per org |
-| `device_telemetry_state` | Per-device live telemetry (JSONB) | No (via devices FK) | 47 |
+| `homes` | Residential home registry | Yes (`org_id` + RLS policy) | 3 |
+| `offline_events` | Device offline event tracking | Yes (`org_id` + RLS policy) | ~10 |
+| `daily_uptime_snapshots` | Daily fleet uptime percentage | Yes (`org_id` + RLS policy) | 28 per org |
 
-### Altered Tables (1)
+### Altered Tables (3)
 
 | Table | Change | Purpose |
 |-------|--------|---------|
+| `assets` | Add `asset_type`, `home_id`, `brand`, `model`, `serial_number`, `commissioned_at` | Unified device model — ALL "devices" ARE "assets" (47 rows). Eliminates split-brain domain model. |
+| `device_state` | Add `telemetry_json JSONB` | Device-type-specific telemetry (AC temp, EV SOC, smart meter readings) |
 | `tariff_schedules` | Add `intermediate_rate`, `intermediate_start`, `intermediate_end`, `disco` columns | Support tarifa branca 3-tier model |
 
-### Total Table Count: 19 existing + 5 new = **24 tables**
+### New Index (1)
+
+| Table | Index | Purpose |
+|-------|-------|---------|
+| `telemetry_history` | `idx_telemetry_asset_time ON (asset_id, recorded_at DESC)` | Required for EP-7 performance — prevents CPU spike on 15-min bucket aggregation |
+
+### Total Table Count: 19 existing + 3 new = **22 tables**
 
 Full DDL for new tables is documented in [05_BFF_MODULE_v5.12.md §6](./05_BFF_MODULE_v5.12.md#6-new-db-tables-required-v512-ddl).
 
@@ -243,4 +249,4 @@ Full DDL for new tables is documented in [05_BFF_MODULE_v5.12.md §6](./05_BFF_M
 | v5.9 | 2026-03-02 | 邏輯閉環與去硬編碼 |
 | v5.10 | 2026-03-05 | 三維修正：DB Bootstrap Fix + Architecture Boundary Fix + BFF De-hardcoding |
 | v5.11 | 2026-03-05 | Dual Connection Pool: 代碼層實現雙角色 DB 架構 |
-| **v5.12** | **2026-03-05** | **API Contract Alignment & BFF Expansion: (1) 完整前端數據盤點 — 6 頁面 × 26 mock 物件 × 7 圖表 × 6 表格; (2) 20 項 Gap Analysis (12 缺失端點 + 3 格式不符 + 5 缺失 DB 表); (3) M5 BFF v5.10→v5.12: 15 新端點 (fleet×4 + devices×2 + energy×2 + hems×2 + vpp×3 + perf×2) + GET /dashboard 5 欄位去硬編碼 → 共 19 端點; (4) 5 新 DB 表 (homes, devices, offline_events, daily_uptime_snapshots, device_telemetry_state) + tariff_schedules ALTER; (5) Frontend Dual-Source Adapter Pattern — 逐頁 mock→API 漸進遷移; (6) 9 階段 36 項實施計劃** |
+| **v5.12** | **2026-03-05** | **API Contract Alignment & BFF Expansion: (1) 完整前端數據盤點 — 6 頁面 × 26 mock 物件 × 7 圖表 × 6 表格; (2) 20 項 Gap Analysis (12 缺失端點 + 3 格式不符 + 5 缺失 DB 表); (3) M5 BFF v5.10→v5.12: 15 新端點 (fleet×4 + devices×2 + energy×2 + hems×2 + vpp×3 + perf×2) + GET /dashboard 5 欄位去硬編碼 → 共 19 端點; (4) 3 新 DB 表 (homes, offline_events, daily_uptime_snapshots) + 3 ALTER (assets unified device model, device_state telemetry_json, tariff_schedules) + 1 新索引 (telemetry_history); (5) Frontend Dual-Source Adapter Pattern — 逐頁 mock→API 漸進遷移; (6) 9 階段實施計劃; (7) v5.12-fix: 統一 asset/device 域模型消除 split-brain、全表 RLS with org_id、EP-7 性能索引** |

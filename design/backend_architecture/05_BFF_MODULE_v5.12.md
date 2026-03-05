@@ -417,7 +417,7 @@ WHERE a.is_active = true;
 SELECT COUNT(*) FROM organizations;
 ```
 
-**Design Note**: The frontend model has "devices" (47 per 3 homes) while the backend model has "assets" (4 battery+inverter units). For v5.12, we map assets → devices and expose the existing asset data through the fleet lens. The `device_types` breakdown requires adding a `device_type` column to `assets` or creating a separate `devices` table. **Recommended**: For demo purposes, derive device type from `operation_mode` or add a `device_type VARCHAR(50)` column to `assets`.
+**Design Note (v5.12-fix)**: The frontend model has "devices" (47 per 3 homes) — these are ALL modeled as rows in the `assets` table with an `asset_type` column. The existing 4 battery+inverter assets become `asset_type = 'INVERTER_BATTERY'`; the remaining 43 devices (smart meters, ACs, EV chargers, solar panels) are additional rows in `assets`. This unified model means ALL existing M1–M4 logic (dispatch, telemetry, scheduling, billing) works WITHOUT changes — they already use `asset_id`. The `device_types` breakdown uses `COUNT(*) ... GROUP BY asset_type` on the `assets` table.
 
 ---
 
@@ -599,36 +599,32 @@ interface DevicesResponse {
 }
 ```
 
-**Design Decision**: The backend `assets` table currently models battery+inverter assets (4 total). The frontend expects 47 individual devices (inverters, meters, ACs, EV chargers) across 3 homes. Two approaches:
+**Design Decision (v5.12-fix)**: All "devices" ARE "assets". The `assets` table is extended with `asset_type`, `home_id`, `brand`, `model`, `serial_number`, and `commissioned_at` columns (see §6.3). The 47 frontend "devices" are 47 rows in `assets`. This avoids a split-brain domain model — ALL existing M1–M4 logic (dispatch, telemetry, scheduling, billing) continues to use `asset_id` without any mapping layer.
 
-1. **Option A (Recommended for v5.12)**: Create a `devices` table that represents individual devices within an asset/home. Each asset has multiple devices.
-2. **Option B (Quick path)**: Map existing `assets` to device format, supplementing with synthetic device data for demo.
-
-**Recommendation**: Option A — see §6.3 for `devices` table DDL.
-
-**SQL Logic** (with devices table):
+**SQL Logic** (unified assets model):
 ```sql
 SELECT
-  d.device_id,
-  d.device_type AS type,
-  d.brand,
-  d.model,
-  d.home_id,
+  a.asset_id AS device_id,
+  a.asset_type AS type,
+  a.brand,
+  a.model,
+  a.home_id,
   h.name AS home_name,
-  d.org_id,
+  a.org_id,
   o.name AS org_name,
   CASE WHEN ds.is_online THEN 'online' ELSE 'offline' END AS status,
   ds.updated_at AS last_seen,
-  d.commissioned_at AS commission_date,
+  a.commissioned_at AS commission_date,
   ds.telemetry_json AS telemetry
-FROM devices d
-JOIN homes h ON d.home_id = h.home_id
-JOIN organizations o ON d.org_id = o.org_id
-LEFT JOIN device_state ds ON d.device_id = ds.asset_id
-WHERE ($1 = 'all' OR d.device_type = $1)
+FROM assets a
+JOIN homes h ON a.home_id = h.home_id
+JOIN organizations o ON a.org_id = o.org_id
+LEFT JOIN device_state ds ON a.asset_id = ds.asset_id
+WHERE a.is_active = true
+  AND ($1 = 'all' OR a.asset_type = $1)
   AND ($2 = 'all' OR (CASE WHEN ds.is_online THEN 'online' ELSE 'offline' END) = $2)
-  AND ($3 = '' OR d.device_id ILIKE '%' || $3 || '%' OR h.name ILIKE '%' || $3 || '%')
-ORDER BY d.device_id;
+  AND ($3 = '' OR a.asset_id ILIKE '%' || $3 || '%' OR h.name ILIKE '%' || $3 || '%')
+ORDER BY a.asset_id;
 ```
 
 ---
@@ -707,7 +703,10 @@ interface HomeEnergyResponse {
 
 **SQL Logic**:
 ```sql
--- Fetch 15-min interval data for all devices in a home for a given date
+-- REQUIRED INDEX (Defect 3 fix — avoid CPU spike on high-frequency telemetry table):
+-- CREATE INDEX idx_telemetry_asset_time ON telemetry_history(asset_id, recorded_at DESC);
+--
+-- Fetch 15-min interval data for all assets in a home for a given date
 SELECT
   date_trunc('minute', th.recorded_at)
     - (EXTRACT(MINUTE FROM th.recorded_at)::INT % 15) * INTERVAL '1 minute' AS time_bucket,
@@ -717,19 +716,26 @@ SELECT
   SUM(th.grid_power_kw) AS grid,
   AVG(th.battery_soc) AS soc
 FROM telemetry_history th
-JOIN devices d ON th.asset_id = d.device_id
-WHERE d.home_id = $1
+JOIN assets a ON th.asset_id = a.asset_id
+WHERE a.home_id = $1
+  AND a.is_active = true
   AND th.recorded_at >= $2::DATE
   AND th.recorded_at < $2::DATE + INTERVAL '1 day'
 GROUP BY time_bucket
 ORDER BY time_bucket;
+
+-- For date ranges > 1 day, use pre-aggregated asset_hourly_metrics instead:
+-- SELECT ... FROM asset_hourly_metrics WHERE asset_id IN (SELECT asset_id FROM assets WHERE home_id = $1)
+-- This avoids scanning raw telemetry_history for multi-day views.
 ```
+
+**Performance Note (Defect 3 fix)**: `telemetry_history` receives high-frequency writes (~1 row per 5 seconds per asset = 17,000+ rows/day per household). The composite index `idx_telemetry_asset_time ON telemetry_history(asset_id, recorded_at DESC)` is **mandatory** before deploying EP-7. For time ranges longer than 1 day, the handler SHOULD read from `asset_hourly_metrics` (pre-aggregated by M1 telemetry-aggregator) instead of raw `telemetry_history`.
 
 **Server-side Computation**:
 - `baseline[t] = load[t]` (no PV, no battery scenario)
 - `savings = Σ((baseline[t] - grid[t]) × tariff_price[t] × 0.25)` using tariff_schedules
 - `beforeAfter` computed from aggregated daily totals
-- `acPower` and `evCharge` require device-type filtering from `devices` table
+- `acPower` and `evCharge` require `asset_type` filtering: `WHERE a.asset_type = 'HVAC'` / `'EV_CHARGER'`
 
 ---
 
@@ -895,7 +901,7 @@ interface DispatchResponse {
 
 **Min Role**: `ORG_OPERATOR`
 
-**Logic**: Filter assets matching criteria → create `dispatch_commands` batch → return dispatch ID for status polling.
+**Logic**: Filter `assets` matching criteria (using `asset_type`, `home_id`, `org_id` columns) → create `dispatch_commands` batch → return dispatch ID for status polling. All filters use the unified `assets` table — no separate `devices` table needed.
 
 ---
 
@@ -1084,7 +1090,7 @@ interface ScorecardMetric {
 
 | Metric | Source | SQL / Computation |
 |--------|--------|-------------------|
-| Commissioning Time | Average time from `devices.commissioned_at` to first `telemetry_history` record | `AVG(first_telemetry - commissioned_at)` |
+| Commissioning Time | Average time from `assets.commissioned_at` to first `telemetry_history` record | `AVG(first_telemetry - commissioned_at)` |
 | Offline Resilience | Max offline duration from `offline_events` | `MAX(duration)` |
 | Uptime (4 weeks) | From `daily_uptime_snapshots` | `AVG(uptime_pct) WHERE date >= CURRENT_DATE - 28` |
 | First Telemetry | Average time from commission to first data | Same as commissioning time |
@@ -1141,9 +1147,10 @@ SELECT
   SUM(rd.client_savings_reais * 0.30) AS tou,  -- ~30% from TOU arbitrage
   SUM(rd.client_savings_reais * 0.15) AS ps    -- ~15% from peak shaving
 FROM revenue_daily rd
-JOIN devices d ON rd.asset_id = d.device_id
-JOIN homes h ON d.home_id = h.home_id
+JOIN assets a ON rd.asset_id = a.asset_id
+JOIN homes h ON a.home_id = h.home_id
 WHERE rd.date >= date_trunc('month', CURRENT_DATE)
+  AND a.is_active = true
 GROUP BY h.home_id, h.name
 ORDER BY total DESC;
 ```
@@ -1298,8 +1305,8 @@ Recommended order based on data availability and complexity:
 | **Phase B** | P4 HEMS | EP-9, EP-10 | Data mostly in DB (vpp_strategies, tariff_schedules, dispatch_commands) |
 | **Phase C** | P1 Fleet | EP-1, EP-2, EP-3, EP-4 | Requires some new tables (offline_events, daily_uptime_snapshots) |
 | **Phase D** | P6 Performance | EP-14, EP-15 | Mixed DB + hardcoded metrics |
-| **Phase E** | P2 Devices | EP-5, EP-6 | Requires new tables (devices, homes) — biggest model gap |
-| **Phase F** | P3 Energy | EP-7, EP-8 | Requires 15-min time-series from telemetry_history + new tables |
+| **Phase E** | P2 Devices | EP-5, EP-6 | Requires `homes` table + `assets` ALTER (unified model, no separate devices table) |
+| **Phase F** | P3 Energy | EP-7, EP-8 | Requires 15-min time-series from telemetry_history + idx_telemetry_asset_time index |
 
 ### 5.3 Migration Pattern per Page
 
@@ -1333,7 +1340,7 @@ CREATE TABLE IF NOT EXISTS offline_events (
 CREATE INDEX idx_offline_events_asset ON offline_events(asset_id, started_at DESC);
 ALTER TABLE offline_events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_offline_events_tenant ON offline_events
-  USING (org_id = current_setting('app.current_org_id'));
+  USING (org_id = current_setting('app.current_org_id', true));
 ```
 
 ### 6.2 `daily_uptime_snapshots` — Daily uptime percentage per org
@@ -1353,34 +1360,35 @@ CREATE TABLE IF NOT EXISTS daily_uptime_snapshots (
 CREATE INDEX idx_uptime_org_date ON daily_uptime_snapshots(org_id, date DESC);
 ALTER TABLE daily_uptime_snapshots ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_uptime_tenant ON daily_uptime_snapshots
-  USING (org_id = current_setting('app.current_org_id'));
+  USING (org_id = current_setting('app.current_org_id', true));
 ```
 
-### 6.3 `devices` — Individual device registry (granular device model)
+### 6.3 `assets` ALTER — Extend for unified device model (Defect 1 fix)
+
+> **Rationale**: ALL "devices" ARE "assets". Instead of creating a separate `devices` table
+> (which would cause a split-brain domain model — M1–M4 all use `asset_id`), we extend the
+> existing `assets` table. The 47 frontend "devices" become 47 rows in `assets`.
 
 ```sql
-CREATE TABLE IF NOT EXISTS devices (
-  device_id         VARCHAR(50) PRIMARY KEY,
-  asset_id          VARCHAR(50) REFERENCES assets(asset_id),
-  home_id           VARCHAR(50) NOT NULL REFERENCES homes(home_id),
-  org_id            VARCHAR(50) NOT NULL REFERENCES organizations(org_id),
-  device_type       VARCHAR(50) NOT NULL,  -- "Inverter + Battery", "Smart Meter", "AC", "EV Charger"
-  brand             VARCHAR(100),
-  model             VARCHAR(100),
-  serial_number     VARCHAR(100),
-  commissioned_at   TIMESTAMPTZ,
-  is_active         BOOLEAN DEFAULT true,
-  created_at        TIMESTAMPTZ DEFAULT NOW(),
-  updated_at        TIMESTAMPTZ DEFAULT NOW()
-);
+-- Extend assets table to support all device types and home linkage
+ALTER TABLE assets
+  ADD COLUMN IF NOT EXISTS asset_type       VARCHAR(30) NOT NULL DEFAULT 'INVERTER_BATTERY'
+    CHECK (asset_type IN ('INVERTER_BATTERY', 'SMART_METER', 'HVAC', 'EV_CHARGER', 'SOLAR_PANEL')),
+  ADD COLUMN IF NOT EXISTS home_id          VARCHAR(50) REFERENCES homes(home_id),
+  ADD COLUMN IF NOT EXISTS brand            VARCHAR(100),
+  ADD COLUMN IF NOT EXISTS model            VARCHAR(100),
+  ADD COLUMN IF NOT EXISTS serial_number    VARCHAR(100),
+  ADD COLUMN IF NOT EXISTS commissioned_at  TIMESTAMPTZ;
 
-CREATE INDEX idx_devices_home ON devices(home_id);
-CREATE INDEX idx_devices_org ON devices(org_id);
-CREATE INDEX idx_devices_type ON devices(device_type);
-ALTER TABLE devices ENABLE ROW LEVEL SECURITY;
-CREATE POLICY rls_devices_tenant ON devices
-  USING (org_id = current_setting('app.current_org_id'));
+-- Indexes for new query patterns
+CREATE INDEX IF NOT EXISTS idx_assets_home ON assets(home_id);
+CREATE INDEX IF NOT EXISTS idx_assets_type ON assets(asset_type);
+
+-- Existing RLS on assets table already covers these new columns.
+-- No additional RLS policy needed — assets.org_id + existing policy = tenant isolation.
 ```
+
+**Migration note**: Existing 4 assets get `asset_type = 'INVERTER_BATTERY'` (the DEFAULT). New seed data adds 43 more rows for smart meters, ACs, EV chargers, and solar panels — all as `assets` rows.
 
 ### 6.4 `homes` — Residential home registry
 
@@ -1397,7 +1405,7 @@ CREATE TABLE IF NOT EXISTS homes (
 CREATE INDEX idx_homes_org ON homes(org_id);
 ALTER TABLE homes ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_homes_tenant ON homes
-  USING (org_id = current_setting('app.current_org_id'));
+  USING (org_id = current_setting('app.current_org_id', true));
 ```
 
 ### 6.5 `tariff_schedules` ALTER — Add intermediate rate and hour range columns
@@ -1418,19 +1426,24 @@ UPDATE tariff_schedules SET
 WHERE intermediate_rate IS NULL;
 ```
 
-### 6.6 `device_telemetry_state` — Per-device live telemetry (extends device_state concept)
+### 6.6 `device_state` ALTER — Add JSONB telemetry for device-type-specific data (Defect 1 fix)
+
+> **Rationale**: Since all "devices" are now rows in `assets`, each has a corresponding
+> `device_state` row (FK: `device_state.asset_id → assets.asset_id`). The existing
+> `device_state` columns cover inverter/battery metrics. For device-type-specific telemetry
+> (AC temperature, EV SOC, smart meter power factor), we add a `telemetry_json JSONB` column.
 
 ```sql
--- Extend device_state to support individual devices (not just assets)
--- For v5.12, reuse existing device_state table by allowing device_id FK
--- Alternative: create a separate table if we want to keep asset_id FK intact
+ALTER TABLE device_state
+  ADD COLUMN IF NOT EXISTS telemetry_json JSONB DEFAULT '{}';
 
-CREATE TABLE IF NOT EXISTS device_telemetry_state (
-  device_id       VARCHAR(50) PRIMARY KEY REFERENCES devices(device_id) ON DELETE CASCADE,
-  is_online       BOOLEAN DEFAULT false,
-  telemetry_json  JSONB DEFAULT '{}',
-  updated_at      TIMESTAMPTZ DEFAULT NOW()
-);
+-- No new table needed — device_state already has:
+--   asset_id (PK/FK), is_online, battery_soc, pv_power, battery_power,
+--   grid_power_kw, load_power, inverter_temp, updated_at, etc.
+-- The telemetry_json column holds device-type-specific fields:
+--   HVAC:       {"on": true, "setTemp": 23, "roomTemp": 25, "powerDraw": 1.2}
+--   EV_CHARGER: {"charging": true, "chargeRate": 7.2, "sessionEnergy": 15.3, "evSoc": 65}
+--   SMART_METER: {"consumption": 3.2, "voltage": 220, "current": 14.5, "powerFactor": 0.92}
 ```
 
 ---
@@ -1441,14 +1454,15 @@ CREATE TABLE IF NOT EXISTS device_telemetry_state (
 
 | # | Task | Target File | Verification |
 |---|------|-------------|-------------|
-| 0.1 | Add `homes` table DDL | `scripts/ddl_base.sql` | `\d homes` shows correct schema |
-| 0.2 | Add `devices` table DDL | `scripts/ddl_base.sql` | `\d devices` shows correct schema |
-| 0.3 | Add `offline_events` table DDL | `scripts/ddl_base.sql` | `\d offline_events` shows correct schema |
-| 0.4 | Add `daily_uptime_snapshots` table DDL | `scripts/ddl_base.sql` | `\d daily_uptime_snapshots` shows correct schema |
-| 0.5 | Add `device_telemetry_state` table DDL | `scripts/ddl_base.sql` | `\d device_telemetry_state` shows correct schema |
+| 0.1 | Add `homes` table DDL + RLS | `scripts/ddl_base.sql` | `\d homes` shows correct schema with RLS |
+| 0.2 | ALTER `assets` — add `asset_type`, `home_id`, `brand`, `model`, `serial_number`, `commissioned_at` | `scripts/ddl_base.sql` | New columns visible, CHECK constraint on asset_type |
+| 0.3 | Add `offline_events` table DDL + RLS | `scripts/ddl_base.sql` | `\d offline_events` shows correct schema with RLS |
+| 0.4 | Add `daily_uptime_snapshots` table DDL + RLS | `scripts/ddl_base.sql` | `\d daily_uptime_snapshots` shows correct schema with RLS |
+| 0.5 | ALTER `device_state` — add `telemetry_json JSONB` | `scripts/ddl_base.sql` | New column visible |
 | 0.6 | ALTER `tariff_schedules` for intermediate rate | `scripts/ddl_base.sql` | New columns visible |
-| 0.7 | Create `scripts/seed_v5.12.sql` with homes, devices, offline_events, uptime data | `scripts/seed_v5.12.sql` | Seed runs without errors |
-| 0.8 | Update seed to populate 3 homes, 47 devices matching frontend mock | `scripts/seed_v5.12.sql` | `SELECT COUNT(*) FROM devices` = 47 |
+| 0.7 | Add `idx_telemetry_asset_time` index on `telemetry_history` | `scripts/ddl_base.sql` | Index exists (required for EP-7 performance) |
+| 0.8 | Create `scripts/seed_v5.12.sql` with homes, assets (47 rows), offline_events, uptime data | `scripts/seed_v5.12.sql` | Seed runs without errors |
+| 0.9 | Update seed to populate 3 homes, 47 assets (unified model) matching frontend mock | `scripts/seed_v5.12.sql` | `SELECT COUNT(*) FROM assets WHERE is_active = true` = 47 |
 
 ### Phase 1: BFF Handler Implementation (VPP — Phase A)
 
@@ -1485,11 +1499,11 @@ CREATE TABLE IF NOT EXISTS device_telemetry_state (
 | 4.2 | Create `get-performance-savings.ts` handler (EP-15) | `src/bff/handlers/get-performance-savings.ts` | Returns per-home savings |
 | 4.3 | Register 2 Performance routes | `scripts/local-server.ts` | Routes accessible |
 
-### Phase 5: BFF Handler Implementation (Devices + Homes — Phase E)
+### Phase 5: BFF Handler Implementation (Assets by Type + Homes — Phase E)
 
 | # | Task | Target File | Verification |
 |---|------|-------------|-------------|
-| 5.1 | Create `get-devices.ts` handler (EP-5) | `src/bff/handlers/get-devices.ts` | Returns 47 devices with telemetry |
+| 5.1 | Create `get-devices.ts` handler (EP-5) — queries `assets` with `asset_type` filter | `src/bff/handlers/get-devices.ts` | Returns 47 assets with telemetry via unified model |
 | 5.2 | Create `get-homes.ts` handler (EP-6) | `src/bff/handlers/get-homes.ts` | Returns 3 homes |
 | 5.3 | Register 2 Device/Home routes | `scripts/local-server.ts` | Routes accessible |
 
@@ -1637,4 +1651,4 @@ src/bff/
 | v5.5 | 2026-02-28 | BFF 淨化行動：移除 hardcode，改為 SQL 讀取 trade_schedules / revenue_daily / algorithm_metrics |
 | v5.9 | 2026-03-02 | De-hardcoding: vpp_strategies JOIN, dashboard KPI from DB |
 | v5.10 | 2026-03-05 | HTTP 適配器模式 + dispatch KPI de-hardcoding + API Gap Analysis |
-| **v5.12** | **2026-03-05** | **API Contract Alignment & BFF Expansion: (1) 完整前端數據盤點 — 6 頁面、26 mock 數據物件、7 圖表、6 表格; (2) 20 項 Gap Analysis — 12 缺失端點、3 格式不符、5 缺失 DB 表/欄位; (3) 15 個新 BFF 端點設計 + TypeScript 介面 + SQL 查詢; (4) 5 個新 DB 表: homes, devices, offline_events, daily_uptime_snapshots, device_telemetry_state; (5) tariff_schedules ALTER 新增 intermediate rate; (6) GET /dashboard 5 個硬編碼欄位去硬編碼; (7) Frontend Dual-Source Adapter Pattern — 漸進式 mock→API 遷移策略; (8) 9 階段實施計劃、36 項具體任務** |
+| **v5.12** | **2026-03-05** | **API Contract Alignment & BFF Expansion: (1) 完整前端數據盤點 — 6 頁面、26 mock 數據物件、7 圖表、6 表格; (2) 20 項 Gap Analysis — 12 缺失端點、3 格式不符、5 缺失 DB 表/欄位; (3) 15 個新 BFF 端點設計 + TypeScript 介面 + SQL 查詢; (4) 3 個新 DB 表: homes, offline_events, daily_uptime_snapshots; 2 個 ALTER TABLE: assets (unified device model), device_state (telemetry_json); (5) tariff_schedules ALTER 新增 intermediate rate; (6) GET /dashboard 5 個硬編碼欄位去硬編碼; (7) Frontend Dual-Source Adapter Pattern — 漸進式 mock→API 遷移策略; (8) 9 階段實施計劃; (9) v5.12-fix: 統一 asset/device 域模型、全表 RLS、EP-7 性能索引** |
