@@ -2,9 +2,10 @@
 
 > **版本**: v5.10 | **建立日期**: 2026-03-05 | **負責人**: Shared Infrastructure
 >
-> **變更說明**: v5.10 DB Bootstrap Fix & RLS Admin Bypass — 修復 `feature_flags` 表的 UNIQUE 約束語法錯誤，
-> 移除 seed 腳本中對不存在欄位的引用，新增所有 RLS 啟用表的 Admin Bypass 策略，
-> 啟用 `dispatch_commands` 表的 RLS + 租戶隔離 + Admin Bypass，設計統一 `bootstrap.sh` 腳本。
+> **變更說明**: v5.10 DB Bootstrap Fix & Dual-Role RLS Architecture — 修復 `feature_flags` 表的 UNIQUE 約束語法錯誤，
+> 移除 seed 腳本中對不存在欄位的引用，**以雙角色 DB 架構取代危險的 Admin Bypass RLS 策略**，
+> 啟用 `dispatch_commands` 表的 RLS + 租戶隔離，設計統一 `bootstrap.sh` 腳本，
+> 新增 `idx_dispatch_commands_status_org` 複合索引（dashboard KPI 聚合效能）。
 > 表格總數：19（不變）。
 
 ---
@@ -322,6 +323,15 @@ CREATE TABLE dispatch_commands (
 CREATE INDEX idx_dispatch_commands_status ON dispatch_commands (status, dispatched_at);
 CREATE INDEX idx_dispatch_commands_org ON dispatch_commands (org_id);
 
+-- v5.10: Dashboard KPI 聚合效能索引
+-- 用途：GET /dashboard 每次載入時執行
+--   SELECT COUNT(*) FILTER (WHERE status = 'completed') FROM dispatch_commands
+--   WHERE org_id = $1 AND dispatched_at >= CURRENT_DATE
+-- 50,000+ 設備場景下避免全表掃描。org_id 在前（RLS 過濾），status 居中（FILTER），
+-- dispatched_at DESC 末位（時間範圍掃描）。
+CREATE INDEX idx_dispatch_commands_status_org
+  ON dispatch_commands (org_id, status, dispatched_at DESC);
+
 -- ============================================================
 -- M8 Admin Control Plane
 -- ============================================================
@@ -386,123 +396,142 @@ CREATE UNIQUE INDEX uq_feature_flags_name_org ON feature_flags (flag_name, COALE
 
 ---
 
-## §RLS Row-Level Security — 租戶隔離 + Admin Bypass (v5.10)
+## §RLS Row-Level Security — 雙角色架構 (v5.10)
 
-> **v5.10 重大變更：新增 Admin Bypass 策略**
+> **v5.10 重大變更：以雙角色架構取代危險的 Admin Bypass**
 >
-> v5.9 及之前版本的 RLS 策略僅包含租戶隔離（`org_id = current_setting('app.current_org_id')`），
-> 但未提供 Admin Bypass 路徑。當 Cron Jobs（M2 Schedule Generator、M3 Command Dispatcher、
-> M4 Daily Billing）以 `solfacil_app` DB role 連線時，若未設定 `app.current_org_id` session variable，
-> 將因 RLS 策略導致查詢返回空結果，造成排程、調度、結算靜默失敗。
+> **問題（v5.9 Admin Bypass 設計的安全缺陷）**：
+> 舊設計使用 `current_setting('app.current_org_id', true) IS NULL OR = ''` 作為 admin bypass 條件。
+> 這意味著任何忘記設定 `app.current_org_id` 的連線**靜默獲得 god-mode 存取權限**，
+> 能讀取所有租戶的數據。這不是安全的 fail-open 設計。
 >
-> v5.10 為所有 RLS 啟用表新增 Admin Bypass 策略：
-> - **Pattern**: 當 `current_setting('app.current_org_id', true)` 為 NULL 或空字串時，允許 SELECT/ALL 操作
-> - **用途**: Cron Jobs 不設定 `app.current_org_id` 即可讀取全量數據
-> - **安全邊界**: Admin Bypass 僅在服務端 DB 連線使用；前端 API 路徑必須經由 middleware 設定 `app.current_org_id`
+> **解決方案：雙 PostgreSQL 角色**
+>
+> | 角色 | 用途 | RLS 行為 |
+> |------|------|---------|
+> | `solfacil_app` | BFF Lambda handlers（使用者請求） | **強制 RLS**：必須設定 `app.current_org_id`，否則查詢返回空結果（安全 fail-closed） |
+> | `solfacil_service` | Cron Jobs（M2/M3/M4 排程任務） | **`BYPASSRLS` 屬性**：合法繞過 RLS，讀取全量跨租戶數據 |
+>
+> **安全保證**：
+> - `solfacil_app` 忘記設定 `org_id` → 查詢返回 **0 行**（fail-closed），不會洩漏數據
+> - `solfacil_service` 是唯一能讀取全量數據的角色，且僅用於受信任的服務端 cron jobs
+> - 不再有 "NULL or empty = 繞過" 的隱式條件
+
+### §RLS.1 角色建立
 
 ```sql
 -- =====================================================================
--- §RLS  Row-Level Security — 租戶隔離 + Admin Bypass (v5.10)
+-- §RLS.1  DB Roles — 雙角色架構 (v5.10)
 -- =====================================================================
+
+-- 角色 1: BFF 應用角色（強制 RLS）
+-- 所有來自使用者請求的 Lambda handler 使用此角色。
+-- RLS 策略要求 app.current_org_id 必須已設定，否則返回空結果。
+CREATE ROLE solfacil_app LOGIN PASSWORD :'APP_DB_PASSWORD';
+GRANT CONNECT ON DATABASE solfacil_vpp TO solfacil_app;
+GRANT USAGE ON SCHEMA public TO solfacil_app;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO solfacil_app;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO solfacil_app;
+
+-- 角色 2: 服務角色（繞過 RLS）
+-- Cron Jobs（M2 Schedule Generator、M3 Command Dispatcher、M4 Daily Billing）使用此角色。
+-- BYPASSRLS 是 PostgreSQL 內建屬性，明確、可審計、不依賴 session variable 魔法。
+CREATE ROLE solfacil_service LOGIN PASSWORD :'SERVICE_DB_PASSWORD' BYPASSRLS;
+GRANT CONNECT ON DATABASE solfacil_vpp TO solfacil_service;
+GRANT USAGE ON SCHEMA public TO solfacil_service;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO solfacil_service;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO solfacil_service;
+```
+
+### §RLS.2 連線池設計
+
+```typescript
+// src/shared/db/pool.ts — v5.10 雙連線池
+
+// Pool 1: BFF handlers 使用 — 強制 RLS
+export const appPool = new Pool({
+  connectionString: process.env.APP_DATABASE_URL,  // user=solfacil_app
+  max: 20,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+});
+
+// Pool 2: Cron Jobs 使用 — BYPASSRLS
+export const servicePool = new Pool({
+  connectionString: process.env.SERVICE_DATABASE_URL,  // user=solfacil_service
+  max: 10,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+});
+
+// 向下相容：原有 `pool` export 指向 appPool
+export const pool = appPool;
+```
+
+### §RLS.3 RLS 策略（純租戶隔離，無 Admin Bypass）
+
+```sql
+-- =====================================================================
+-- §RLS.3  Row-Level Security — 純租戶隔離 (v5.10)
+-- =====================================================================
+-- 所有 RLS 策略僅檢查 org_id = current_setting('app.current_org_id')。
+-- 不再有 "IS NULL OR = ''" 的 admin bypass 條件。
+-- Cron jobs 使用 solfacil_service 角色（BYPASSRLS），不受 RLS 影響。
 
 -- assets
 ALTER TABLE assets ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_assets_tenant ON assets
   USING (org_id = current_setting('app.current_org_id', true));
-CREATE POLICY rls_assets_admin_bypass ON assets
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
 
 -- trades
 ALTER TABLE trades ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_trades_tenant ON trades
   USING (org_id = current_setting('app.current_org_id', true));
-CREATE POLICY rls_trades_admin_bypass ON trades
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
 
 -- revenue_daily
 ALTER TABLE revenue_daily ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_revenue_daily_tenant ON revenue_daily
   USING (org_id = current_setting('app.current_org_id', true));
-CREATE POLICY rls_revenue_daily_admin_bypass ON revenue_daily
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
 
 -- dispatch_records
 ALTER TABLE dispatch_records ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_dispatch_records_tenant ON dispatch_records
   USING (org_id = current_setting('app.current_org_id', true));
-CREATE POLICY rls_dispatch_records_admin_bypass ON dispatch_records
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
 
 -- dispatch_commands (v5.10 新增 RLS)
 ALTER TABLE dispatch_commands ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_dispatch_commands_tenant ON dispatch_commands
   USING (org_id = current_setting('app.current_org_id', true));
-CREATE POLICY rls_dispatch_commands_admin_bypass ON dispatch_commands
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
 
 -- tariff_schedules
 ALTER TABLE tariff_schedules ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_tariff_schedules_tenant ON tariff_schedules
   USING (org_id = current_setting('app.current_org_id', true));
-CREATE POLICY rls_tariff_schedules_admin_bypass ON tariff_schedules
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
 
 -- vpp_strategies
 ALTER TABLE vpp_strategies ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_vpp_strategies_tenant ON vpp_strategies
   USING (org_id = current_setting('app.current_org_id', true));
-CREATE POLICY rls_vpp_strategies_admin_bypass ON vpp_strategies
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
 
 -- parser_rules（NULL org_id = 全局規則，所有人可見）
 ALTER TABLE parser_rules ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_parser_rules_tenant ON parser_rules
   USING (org_id IS NULL OR org_id = current_setting('app.current_org_id', true));
-CREATE POLICY rls_parser_rules_admin_bypass ON parser_rules
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
 
 -- feature_flags（NULL org_id = 全局 flag，所有人可見）
 ALTER TABLE feature_flags ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_feature_flags_tenant ON feature_flags
   USING (org_id IS NULL OR org_id = current_setting('app.current_org_id', true));
-CREATE POLICY rls_feature_flags_admin_bypass ON feature_flags
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
 
 -- trade_schedules（v5.5 新增）
 ALTER TABLE trade_schedules ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_trade_schedules_tenant ON trade_schedules
   USING (org_id::TEXT = current_setting('app.current_org_id', true));
-CREATE POLICY rls_trade_schedules_admin_bypass ON trade_schedules
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
 
 -- algorithm_metrics（v5.5 新增）
 ALTER TABLE algorithm_metrics ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_algorithm_metrics_tenant ON algorithm_metrics
   USING (org_id::TEXT = current_setting('app.current_org_id', true));
-CREATE POLICY rls_algorithm_metrics_admin_bypass ON algorithm_metrics
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
 ```
 
 ---
@@ -530,7 +559,6 @@ CREATE POLICY rls_algorithm_metrics_admin_bypass ON algorithm_metrics
 -- ============================================================
 
 -- 步驟 1: 移除無效的 table-level UNIQUE constraint（如果存在）
--- 注意：若原約束建立失敗（語法錯誤），此步驟可能無操作
 ALTER TABLE feature_flags DROP CONSTRAINT IF EXISTS feature_flags_flag_name_coalesce_key;
 
 -- 步驟 2: 建立正確的 UNIQUE INDEX
@@ -538,7 +566,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_feature_flags_name_org
   ON feature_flags (flag_name, COALESCE(org_id, ''));
 
 -- ============================================================
--- v5.10 Migration: dispatch_commands 啟用 RLS
+-- v5.10 Migration: dispatch_commands 啟用 RLS（純租戶隔離）
 -- ============================================================
 
 ALTER TABLE dispatch_commands ENABLE ROW LEVEL SECURITY;
@@ -546,75 +574,53 @@ ALTER TABLE dispatch_commands ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_dispatch_commands_tenant ON dispatch_commands
   USING (org_id = current_setting('app.current_org_id', true));
 
-CREATE POLICY rls_dispatch_commands_admin_bypass ON dispatch_commands
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
+-- ============================================================
+-- v5.10 Migration: dispatch_commands dashboard KPI 效能索引
+-- ============================================================
+-- 用途：GET /dashboard 每次載入時聚合 dispatch success rate
+-- 查詢模式：SELECT COUNT(*) FILTER (WHERE status = 'completed')
+--           FROM dispatch_commands WHERE org_id = $1 AND dispatched_at >= CURRENT_DATE
+-- 50,000+ 設備場景下，此索引將全表掃描優化為索引範圍掃描。
+
+CREATE INDEX IF NOT EXISTS idx_dispatch_commands_status_org
+  ON dispatch_commands (org_id, status, dispatched_at DESC);
 
 -- ============================================================
--- v5.10 Migration: 為所有 RLS 啟用表新增 Admin Bypass 策略
+-- v5.10 Migration: 移除所有 Admin Bypass RLS 策略（如存在）
 -- ============================================================
--- 注意：先 DROP 再 CREATE，避免重複策略
+-- v5.10 以雙角色架構（solfacil_app + solfacil_service BYPASSRLS）取代
+-- 危險的 "IS NULL OR = ''" admin bypass 條件。
+-- 若從舊版升級，需清除殘留的 admin bypass policies。
 
--- assets
-CREATE POLICY rls_assets_admin_bypass ON assets
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
+DROP POLICY IF EXISTS rls_assets_admin_bypass ON assets;
+DROP POLICY IF EXISTS rls_trades_admin_bypass ON trades;
+DROP POLICY IF EXISTS rls_revenue_daily_admin_bypass ON revenue_daily;
+DROP POLICY IF EXISTS rls_dispatch_records_admin_bypass ON dispatch_records;
+DROP POLICY IF EXISTS rls_dispatch_commands_admin_bypass ON dispatch_commands;
+DROP POLICY IF EXISTS rls_tariff_schedules_admin_bypass ON tariff_schedules;
+DROP POLICY IF EXISTS rls_vpp_strategies_admin_bypass ON vpp_strategies;
+DROP POLICY IF EXISTS rls_parser_rules_admin_bypass ON parser_rules;
+DROP POLICY IF EXISTS rls_feature_flags_admin_bypass ON feature_flags;
+DROP POLICY IF EXISTS rls_trade_schedules_admin_bypass ON trade_schedules;
+DROP POLICY IF EXISTS rls_algorithm_metrics_admin_bypass ON algorithm_metrics;
 
--- trades
-CREATE POLICY rls_trades_admin_bypass ON trades
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
+-- ============================================================
+-- v5.10 Migration: 建立 solfacil_service 角色（BYPASSRLS）
+-- ============================================================
+-- Cron Jobs（M2/M3/M4）使用此角色連線，合法繞過 RLS。
 
--- revenue_daily
-CREATE POLICY rls_revenue_daily_admin_bypass ON revenue_daily
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'solfacil_service') THEN
+    CREATE ROLE solfacil_service LOGIN PASSWORD 'CHANGE_ME_IN_PRODUCTION' BYPASSRLS;
+  END IF;
+END
+$$;
 
--- dispatch_records
-CREATE POLICY rls_dispatch_records_admin_bypass ON dispatch_records
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
-
--- tariff_schedules
-CREATE POLICY rls_tariff_schedules_admin_bypass ON tariff_schedules
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
-
--- vpp_strategies
-CREATE POLICY rls_vpp_strategies_admin_bypass ON vpp_strategies
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
-
--- parser_rules
-CREATE POLICY rls_parser_rules_admin_bypass ON parser_rules
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
-
--- feature_flags
-CREATE POLICY rls_feature_flags_admin_bypass ON feature_flags
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
-
--- trade_schedules
-CREATE POLICY rls_trade_schedules_admin_bypass ON trade_schedules
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
-
--- algorithm_metrics
-CREATE POLICY rls_algorithm_metrics_admin_bypass ON algorithm_metrics
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
+GRANT CONNECT ON DATABASE solfacil_vpp TO solfacil_service;
+GRANT USAGE ON SCHEMA public TO solfacil_service;
+GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO solfacil_service;
+GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO solfacil_service;
 ```
 
 ---
@@ -658,46 +664,73 @@ migration_v5.8 → migration_v5.10 → seed_v5.4 → seed_v5.5。順序錯誤會
 set -euo pipefail
 
 DB_NAME="${DB_NAME:-solfacil_vpp}"
+DB_ADMIN_USER="${DB_ADMIN_USER:-postgres}"  # superuser for role creation
 DB_USER="${DB_USER:-solfacil_app}"
 DB_HOST="${DB_HOST:-localhost}"
 DB_PORT="${DB_PORT:-5432}"
+APP_DB_PASSWORD="${APP_DB_PASSWORD:-app_password}"
+SERVICE_DB_PASSWORD="${SERVICE_DB_PASSWORD:-service_password}"
 
+PSQL_ADMIN="psql -h $DB_HOST -p $DB_PORT -U $DB_ADMIN_USER"
 PSQL="psql -h $DB_HOST -p $DB_PORT -U $DB_USER"
 
-echo "=== SOLFACIL VPP Database Bootstrap (v5.10) ==="
+echo "=== SOLFACIL VPP Database Bootstrap (v5.10 — Dual-Role Architecture) ==="
 
-# Step 0: Optional drop
+# Step 0: Optional drop + create
 if [[ "${1:-}" == "--drop-existing" ]]; then
-  echo "[0/6] Dropping existing database..."
-  dropdb -h $DB_HOST -p $DB_PORT -U $DB_USER --if-exists $DB_NAME
-  createdb -h $DB_HOST -p $DB_PORT -U $DB_USER $DB_NAME
+  echo "[0/7] Dropping existing database..."
+  $PSQL_ADMIN -c "DROP DATABASE IF EXISTS $DB_NAME;"
+  $PSQL_ADMIN -c "CREATE DATABASE $DB_NAME;"
 fi
 
-# Step 1: Base DDL (v5.4 schema — 15 core tables)
-echo "[1/6] Applying base DDL..."
-$PSQL -d $DB_NAME -f db/migrations/001_init.sql
+# Step 1: Create dual DB roles (requires superuser)
+echo "[1/7] Creating DB roles (solfacil_app + solfacil_service)..."
+$PSQL_ADMIN -d $DB_NAME -v APP_DB_PASSWORD="$APP_DB_PASSWORD" -v SERVICE_DB_PASSWORD="$SERVICE_DB_PASSWORD" <<'ROLES_SQL'
+DO $$
+BEGIN
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'solfacil_app') THEN
+    CREATE ROLE solfacil_app LOGIN PASSWORD :'APP_DB_PASSWORD';
+  END IF;
+  IF NOT EXISTS (SELECT 1 FROM pg_roles WHERE rolname = 'solfacil_service') THEN
+    CREATE ROLE solfacil_service LOGIN PASSWORD :'SERVICE_DB_PASSWORD' BYPASSRLS;
+  END IF;
+END
+$$;
+GRANT CONNECT ON DATABASE solfacil_vpp TO solfacil_app, solfacil_service;
+GRANT USAGE ON SCHEMA public TO solfacil_app, solfacil_service;
+ROLES_SQL
 
-# Step 2: v5.5 migrations (3 new tables + ALTER TABLE extensions)
-echo "[2/6] Applying v5.5 migrations..."
-$PSQL -d $DB_NAME -f db/migrations/002_v5.5_dual_tier.sql
+# Step 2: Base DDL (v5.4 schema — 15 core tables)
+echo "[2/7] Applying base DDL..."
+$PSQL_ADMIN -d $DB_NAME -f db/migrations/001_init.sql
 
-# Step 3: v5.6 migrations (dispatch_commands table)
-echo "[3/6] Applying v5.6 migrations..."
-$PSQL -d $DB_NAME -f db/migrations/003_v5.6_dispatch_commands.sql
+# Step 3: v5.5 migrations (3 new tables + ALTER TABLE extensions)
+echo "[3/7] Applying v5.5 migrations..."
+$PSQL_ADMIN -d $DB_NAME -f db/migrations/002_v5.5_dual_tier.sql
 
-# Step 4: v5.8 migrations (asset_hourly_metrics)
-echo "[4/6] Applying v5.8 migrations..."
-$PSQL -d $DB_NAME -f db/migrations/004_v5.8_hourly_metrics.sql
+# Step 4: v5.6 migrations (dispatch_commands table)
+echo "[4/7] Applying v5.6 migrations..."
+$PSQL_ADMIN -d $DB_NAME -f db/migrations/003_v5.6_dispatch_commands.sql
 
-# Step 5: v5.10 migrations (feature_flags fix + RLS admin bypass + dispatch_commands RLS)
-echo "[5/6] Applying v5.10 migrations..."
-$PSQL -d $DB_NAME -f db/migrations/005_v5.10_rls_admin_bypass.sql
+# Step 5: v5.8 migrations (asset_hourly_metrics)
+echo "[5/7] Applying v5.8 migrations..."
+$PSQL_ADMIN -d $DB_NAME -f db/migrations/004_v5.8_hourly_metrics.sql
 
-# Step 6: Seed data
-echo "[6/6] Seeding data..."
-$PSQL -d $DB_NAME -f db/seed/seed-db.sql
+# Step 6: v5.10 migrations (feature_flags fix + dual-role RLS + performance index)
+echo "[6/7] Applying v5.10 migrations..."
+$PSQL_ADMIN -d $DB_NAME -f db/migrations/005_v5.10_dual_role_rls.sql
+
+# Grant table permissions after all tables exist
+$PSQL_ADMIN -d $DB_NAME -c "GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO solfacil_app, solfacil_service;"
+$PSQL_ADMIN -d $DB_NAME -c "GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO solfacil_app, solfacil_service;"
+
+# Step 7: Seed data
+echo "[7/7] Seeding data..."
+$PSQL_ADMIN -d $DB_NAME -f db/seed/seed-db.sql
 
 echo "=== Bootstrap complete. Database '$DB_NAME' is ready. ==="
+echo "  - solfacil_app:     BFF handlers (RLS enforced)"
+echo "  - solfacil_service: Cron jobs (BYPASSRLS)"
 ```
 
 ### 設計約束
@@ -732,4 +765,4 @@ echo "=== Bootstrap complete. Database '$DB_NAME' is ready. ==="
 | v5.5 | 2026-02-28 | 雙層經濟模型：+3 表 (pld_horario/trade_schedules/algorithm_metrics)，擴充 assets/revenue_daily/vpp_strategies，18 張表 |
 | v5.7 | 2026-02-28 | External Ingestion：pld_horario 改為由 M7 Inbound Webhook 動態更新；weather_cache 啟用 M7 Webhook 寫入；dispatch_commands 表（v5.6 已建）補記文件 |
 | v5.8 | 2026-03-02 | Closed-loop Billing via Data Contract: asset_hourly_metrics 新增，M1 Aggregator Job，M4 切換真實度數結算，19 張表 |
-| **v5.10** | **2026-03-05** | **DB Bootstrap Fix & RLS Admin Bypass: (1) feature_flags UNIQUE 約束語法修復, (2) seed 腳本移除不存在欄位引用, (3) 所有 RLS 表新增 Admin Bypass 策略, (4) dispatch_commands 啟用 RLS + 租戶隔離 + Admin Bypass, (5) 統一 bootstrap.sh 設計** |
+| **v5.10** | **2026-03-05** | **DB Bootstrap Fix & Dual-Role RLS Architecture: (1) feature_flags UNIQUE 約束語法修復, (2) seed 腳本移除不存在欄位引用, (3) 以雙角色架構 (solfacil_app + solfacil_service BYPASSRLS) 取代危險的 Admin Bypass RLS 策略, (4) dispatch_commands 啟用 RLS 純租戶隔離, (5) 新增 idx_dispatch_commands_status_org 複合索引 (dashboard KPI 效能), (6) 雙連線池設計 (appPool + servicePool), (7) 統一 bootstrap.sh 含雙角色建立** |

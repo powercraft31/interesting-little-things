@@ -1,10 +1,11 @@
 # Shared Layer — 公共型別定義與 API 契約
 
 > **模組版本**: v5.10
-> **變更**: v5.10 — 新增 `src/shared/middleware/tenant-context.ts`，從 BFF 遷移 `extractTenantContext`、`requireRole`、`apiError` 至 Shared Layer
+> **變更**: v5.10 — 新增 `src/shared/middleware/tenant-context.ts`，提供純函數 `verifyTenantToken`、`requireRole`（零框架依賴）。
+> `extractTenantContext`（HTTP 適配器）和 `apiError`（HTTP 回應建構器）保留在 BFF 層。
 > **上層文件**: [00_MASTER_ARCHITECTURE_v5.10.md](./00_MASTER_ARCHITECTURE_v5.10.md)
 > **最後更新**: 2026-03-05
-> **說明**: 公共 TypeScript 型別定義、API 契約、EventSchema、目錄結構、全局資料隔離策略、**Shared Middleware**
+> **說明**: 公共 TypeScript 型別定義、API 契約、EventSchema、目錄結構、全局資料隔離策略、**Shared Middleware（純函數，零框架依賴）**
 
 ---
 
@@ -28,15 +29,14 @@ org_id = Organization ID (e.g., "ORG_ENERGIA_001")
 ### PostgreSQL RLS Pattern
 
 ```sql
--- Lambda middleware sets: SET app.current_org_id = 'ORG_ENERGIA_001'
+-- BFF handlers (solfacil_app role): middleware sets org_id
+-- SET app.current_org_id = 'ORG_ENERGIA_001'
 CREATE POLICY tenant_isolation ON {table}
   USING (org_id = current_setting('app.current_org_id', true));
 
--- v5.10: Admin bypass for cron jobs (no org_id set)
-CREATE POLICY admin_bypass ON {table}
-  FOR ALL
-  USING (current_setting('app.current_org_id', true) IS NULL
-      OR current_setting('app.current_org_id', true) = '');
+-- v5.10: Cron jobs use solfacil_service role (BYPASSRLS attribute)
+-- No admin bypass policy needed — PostgreSQL BYPASSRLS is explicit and auditable.
+-- See 10_DATABASE_SCHEMA_v5.10.md §RLS.1 for role definitions.
 ```
 
 ---
@@ -48,29 +48,36 @@ CREATE POLICY admin_bypass ON {table}
 v5.9 代碼中，`extractTenantContext`、`requireRole`、`apiError` 三個函數位於 `src/bff/middleware/tenant-context.ts`。
 M4 Market & Billing 和 M8 Admin Control 均跨界 import 了 BFF 的 middleware，違反限界上下文原則。
 
-v5.10 將這三個函數遷移至 Shared Layer（`src/shared/middleware/tenant-context.ts`），
-使 M4、M5、M8 均從 Shared Layer import，消除跨模組依賴。
+**v5.10 設計原則：Shared Layer 必須是純域邏輯，零框架依賴。**
+
+`extractTenantContext(event: APIGatewayProxyEventV2)` 直接依賴 `aws-lambda` 類型（HTTP/雲框架概念），
+`apiError()` 構建 HTTP 回應物件 — 兩者都不應進入 Shared Layer。
+
+v5.10 採用**兩層模式**：
+- **Shared Layer**：導出純函數 `verifyTenantToken(token: string)` 和 `requireRole(ctx, roles)` — 零框架 import
+- **BFF Layer**：保留 HTTP 適配器 `extractTenantContext(event)` 和 `apiError()` — 從 HTTP event 提取 token，調用 Shared Layer 純函數
 
 ### 2.1 模組路徑
 
 ```
-src/shared/middleware/tenant-context.ts    ← v5.10 新增
+src/shared/middleware/tenant-context.ts    ← v5.10 新增（純函數，零框架依賴）
+src/bff/middleware/auth.ts                 ← v5.10 重構（HTTP 適配器，調用 Shared Layer）
 ```
 
-### 2.2 完整導出契約
-
-以下為 `src/shared/middleware/tenant-context.ts` 的完整導出函數簽名，
-從 `src/bff/middleware/tenant-context.ts` 原封不動遷移：
+### 2.2 Shared Layer 導出契約（純函數）
 
 ```typescript
 // src/shared/middleware/tenant-context.ts
+// ⚠️ 注意：此文件不得 import 任何 HTTP/雲框架類型
+//    （不可 import APIGatewayProxyEventV2、Request、Response 等）
 
-import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
 import { Role, type TenantContext } from '../types/auth';
-import { fail } from '../types/api';
+
+const VALID_ROLES = new Set<string>(Object.values(Role));
 
 /**
- * 從 Authorization header 提取租戶上下文。
+ * 驗證租戶 token 並返回 TenantContext。
+ * 純函數：接受原始 token 字串，不涉及 HTTP 概念。
  *
  * 支援兩種格式：
  *   1. 原始 JSON 字串：{"userId":"u1","orgId":"ORG_ENERGIA_001","role":"ORG_MANAGER"}
@@ -78,19 +85,48 @@ import { fail } from '../types/api';
  *
  * 失敗時拋出 { statusCode, message }。
  */
-export function extractTenantContext(event: APIGatewayProxyEventV2): TenantContext;
+export function verifyTenantToken(token: string): TenantContext {
+  if (!token) {
+    throw { statusCode: 401, message: 'Unauthorized' };
+  }
+
+  let claims: Record<string, unknown>;
+
+  try {
+    if (token.trim().startsWith('{')) {
+      claims = JSON.parse(token);
+    } else {
+      const parts = token.replace(/^Bearer\s+/i, '').split('.');
+      if (parts.length < 2) {
+        throw new Error('malformed token');
+      }
+      const payload = Buffer.from(parts[1], 'base64').toString('utf-8');
+      claims = JSON.parse(payload);
+    }
+  } catch {
+    throw { statusCode: 401, message: 'Invalid token' };
+  }
+
+  const { userId, orgId, role } = claims as { userId?: string; orgId?: string; role?: string };
+
+  if (!userId || !orgId || !role || !VALID_ROLES.has(role)) {
+    throw { statusCode: 401, message: 'Invalid token' };
+  }
+
+  return { userId, orgId, role: role as Role };
+}
 
 /**
  * 強制執行 RBAC 角色檢查。
  * SOLFACIL_ADMIN 跳過所有角色檢查。
  * 失敗時拋出 { statusCode: 403, message: "Forbidden" }。
  */
-export function requireRole(ctx: TenantContext, allowedRoles: Role[]): void;
-
-/**
- * 構建標準 API Gateway 錯誤回應。
- */
-export function apiError(statusCode: number, message: string): APIGatewayProxyResultV2;
+export function requireRole(ctx: TenantContext, allowedRoles: Role[]): void {
+  if (ctx.role === Role.SOLFACIL_ADMIN) return;
+  if (!allowedRoles.includes(ctx.role)) {
+    throw { statusCode: 403, message: 'Forbidden' };
+  }
+}
 ```
 
 ### 2.3 依賴的 Shared Types
@@ -118,16 +154,22 @@ export function fail(message: string): { success: false; error: string };
 
 ### 2.4 消費模組 Import 路徑對照
 
-| 消費模組 | 舊 import 路徑 (v5.9) | 新 import 路徑 (v5.10) |
-|---------|----------------------|----------------------|
-| M4 Market & Billing | `../../bff/middleware/tenant-context` | `../../shared/middleware/tenant-context` |
-| M5 BFF | `../middleware/tenant-context` (本地) | `../../shared/middleware/tenant-context` |
-| M8 Admin Control | `../../bff/middleware/tenant-context` | `../../shared/middleware/tenant-context` |
+| 消費模組 | 需要的函數 | import 來源 (v5.10) |
+|---------|-----------|-------------------|
+| M4 Market & Billing | `verifyTenantToken`, `requireRole` | `../../shared/middleware/tenant-context` |
+| M5 BFF handlers | `extractTenantContext`, `apiError` | `../middleware/auth`（BFF 內部 HTTP 適配器） |
+| M8 Admin Control | `verifyTenantToken`, `requireRole` | `../../shared/middleware/tenant-context` |
+
+> **關鍵區別**：
+> - M4、M8 直接調用 Shared Layer 的 `verifyTenantToken(token)` — 從各自的 HTTP event/request 中提取 token 後傳入
+> - M5 BFF 使用自己的 HTTP 適配器 `extractTenantContext(event)` — 內部調用 `verifyTenantToken`
+> - `apiError()` 構建 HTTP 回應物件，僅在 BFF 層使用，不進入 Shared Layer
 
 ### 2.5 BFF 原檔案處置
 
-`src/bff/middleware/tenant-context.ts` 在 v5.10 中**刪除**。
-不保留 re-export wrapper，避免未來其他模組再次誤 import BFF 內部路徑。
+`src/bff/middleware/tenant-context.ts` 在 v5.10 中**重構為** `src/bff/middleware/auth.ts`。
+新文件是 HTTP 適配器，調用 Shared Layer 的 `verifyTenantToken` 純函數。
+詳見 `05_BFF_MODULE_v5.10.md` 的 HTTP 適配器設計。
 
 ---
 
@@ -164,7 +206,7 @@ export interface VppEvent<T> {
 
 ```typescript
 // src/shared/types/auth.ts (unchanged)
-// src/shared/middleware/tenant-context.ts (v5.10: moved from BFF)
+// src/shared/middleware/tenant-context.ts (v5.10: pure functions — verifyTenantToken, requireRole)
 // See §2 above for full contract
 ```
 
@@ -239,7 +281,7 @@ backend/
 │   │   ├── db/
 │   │   │   └── pool.ts                  # v5.4 PostgreSQL Connection Pool
 │   │   ├── middleware/                    # v5.10 新增目錄
-│   │   │   └── tenant-context.ts         # v5.10: 從 BFF 遷移（extractTenantContext, requireRole, apiError）
+│   │   │   └── tenant-context.ts         # v5.10: 純函數（verifyTenantToken, requireRole）— 零框架依賴
 │   │   ├── event-bridge-client.ts
 │   │   ├── logger.ts
 │   │   ├── middleware.ts
@@ -256,33 +298,49 @@ backend/
 │   ├── iot-hub/                          # Module 1
 │   ├── optimization-engine/              # Module 2
 │   ├── dr-dispatcher/                    # Module 3
-│   ├── market-billing/                   # Module 4 — v5.10: import from shared/middleware
-│   ├── bff/                              # Module 5 — v5.10: middleware/tenant-context.ts DELETED
+│   ├── market-billing/                   # Module 4 — v5.10: import verifyTenantToken from shared/middleware
+│   ├── bff/                              # Module 5 — v5.10: middleware/auth.ts (HTTP adapter → shared verifyTenantToken)
 │   ├── auth/                             # Module 6
 │   ├── open-api/                         # Module 7
-│   └── admin-control-plane/              # Module 8 — v5.10: import from shared/middleware
+│   └── admin-control-plane/              # Module 8 — v5.10: import verifyTenantToken from shared/middleware
 ```
 
 ---
 
 ## 6. Database Connection Pool（v5.4 新增）
 
-### 使用方式
+### 使用方式（v5.10: 雙連線池）
 
 ```typescript
-// src/shared/db/pool.ts
+// src/shared/db/pool.ts — v5.10 雙角色連線池
 import { Pool } from 'pg';
 
-export const pool = new Pool({
-  connectionString: process.env.DATABASE_URL,
+// BFF handlers 使用 — solfacil_app 角色，強制 RLS
+export const appPool = new Pool({
+  connectionString: process.env.APP_DATABASE_URL,  // user=solfacil_app
   max: 20,
   idleTimeoutMillis: 30_000,
   connectionTimeoutMillis: 5_000,
 });
 
-// 各模組使用方式
+// Cron Jobs (M2/M3/M4) 使用 — solfacil_service 角色，BYPASSRLS
+export const servicePool = new Pool({
+  connectionString: process.env.SERVICE_DATABASE_URL,  // user=solfacil_service
+  max: 10,
+  idleTimeoutMillis: 30_000,
+  connectionTimeoutMillis: 5_000,
+});
+
+// 向下相容：原有 pool export 指向 appPool
+export const pool = appPool;
+
+// BFF handler 使用方式
 import { pool } from '../../shared/db/pool';
 const result = await pool.query('SELECT * FROM assets WHERE org_id = $1', [orgId]);
+
+// Cron Job 使用方式
+import { servicePool } from '../../shared/db/pool';
+const allOrgs = await servicePool.query('SELECT * FROM organizations');
 ```
 
 ### 鐵律：跨模組邊界
@@ -301,7 +359,7 @@ const result = await pool.query('SELECT * FROM assets WHERE org_id = $1', [orgId
 | v5.3 | 2026-02-27 | 移除 unidades，新增 capacity_kwh，對齊 HEMS 單戶場景 |
 | v5.4 | 2026-02-27 | 新增 Database Connection Pool 章節；PostgreSQL 取代 DynamoDB/Timestream |
 | v5.5 | 2026-02-28 | TradeRecord 單位 R$/MWh 標示、DashboardKPI 雙層結構、雙層經濟模型 API 契約說明 |
-| **v5.10** | **2026-03-05** | **新增 `src/shared/middleware/tenant-context.ts`：從 BFF 遷移 extractTenantContext、requireRole、apiError。定義消費模組 import 路徑變更。BFF 原檔案刪除。** |
+| **v5.10** | **2026-03-05** | **新增 `src/shared/middleware/tenant-context.ts`：純函數 verifyTenantToken（零框架依賴）+ requireRole。extractTenantContext（HTTP 適配器）和 apiError（HTTP 回應）保留在 BFF 層。消除 Shared Layer 對 aws-lambda 類型的污染。** |
 
 ---
 
@@ -310,5 +368,5 @@ const result = await pool.query('SELECT * FROM assets WHERE org_id = $1', [orgId
 | 依賴方向 | 說明 |
 |---------|------|
 | **被依賴** | 所有模組文件引用本 Shared Layer 的型別定義 |
-| **被依賴 (v5.10)** | M4、M5、M8 import `shared/middleware/tenant-context`（原在 BFF，v5.10 遷移） |
+| **被依賴 (v5.10)** | M4、M8 import `shared/middleware/tenant-context` 的 `verifyTenantToken`；M5 BFF 透過 `bff/middleware/auth.ts` 間接調用 |
 | **依賴** | [00_MASTER_ARCHITECTURE](./00_MASTER_ARCHITECTURE_v5.10.md)（上層文件） |

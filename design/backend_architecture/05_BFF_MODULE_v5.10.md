@@ -4,7 +4,7 @@
 > **上層文件**: [00_MASTER_ARCHITECTURE_v5.10.md](./00_MASTER_ARCHITECTURE_v5.10.md)
 > **最後更新**: 2026-03-05
 > **說明**: 聚合後端數據，為前端 Admin UI 提供統一 REST API（Cognito 授權、租戶隔離）、De-hardcoding、
-> **v5.10: middleware 遷移至 Shared Layer、dispatch KPI de-hardcoding、API Gap Analysis**
+> **v5.10: HTTP 適配器模式（extractTenantContext 保留在 BFF，調用 Shared Layer 的 verifyTenantToken 純函數）、dispatch KPI de-hardcoding、API Gap Analysis**
 
 ---
 
@@ -14,35 +14,94 @@ M5 BFF 是前端 Dashboard 的唯一 API 入口。職責：
 
 - 聚合 M1（遙測）、M2（策略）、M3（調度）、M4（計費）的數據為統一 REST 回應
 - Cognito JWT 認證 + RBAC 角色鑑權
-- `extractTenantContext()` 中間件確保所有查詢都帶 `org_id` 過濾（**v5.10: 從 Shared Layer import**）
+- `extractTenantContext()` 中間件確保所有查詢都帶 `org_id` 過濾（**v5.10: BFF 內部 HTTP 適配器，調用 Shared Layer 的 `verifyTenantToken` 純函數**）
 - 發佈 `DRCommandIssued` 事件觸發 M3 調度
 
 ---
 
-## § v5.10 變更一：Middleware 遷移至 Shared Layer
+## § v5.10 變更一：HTTP 適配器模式（Shared Layer / BFF 責任分離）
 
 ### 問題陳述
 
 `src/bff/middleware/tenant-context.ts` 包含 `extractTenantContext`、`requireRole`、`apiError` 三個函數。
 M4 和 M8 跨界 import 了此文件，違反 DDD 邊界。
 
-### 修正
+**更深層的問題**：直接將 `extractTenantContext(event: APIGatewayProxyEventV2)` 移入 Shared Layer
+會引入 `aws-lambda` 類型依賴，污染 Shared Layer 的框架中立性。
 
-1. **移動**：將 `src/bff/middleware/tenant-context.ts` 的內容遷移至 `src/shared/middleware/tenant-context.ts`
-2. **刪除**：刪除 `src/bff/middleware/tenant-context.ts`
-3. **更新 BFF import**：BFF 所有 handler 改為從 `../../shared/middleware/tenant-context` import
+### 修正：兩層模式
+
+| 層 | 函數 | 職責 | 框架依賴 |
+|---|------|------|---------|
+| **Shared Layer** | `verifyTenantToken(token: string)` | 純域邏輯：解析 token → TenantContext | **無** |
+| **Shared Layer** | `requireRole(ctx, roles)` | 純域邏輯：RBAC 角色檢查 | **無** |
+| **BFF Layer** | `extractTenantContext(event)` | HTTP 適配器：從 event.headers 提取 token，調用 `verifyTenantToken` | `aws-lambda` |
+| **BFF Layer** | `apiError(statusCode, message)` | HTTP 回應建構器：構建 API Gateway 錯誤回應 | `aws-lambda` |
+
+### BFF HTTP 適配器設計
+
+```typescript
+// src/bff/middleware/auth.ts (BFF 內部，不在 Shared Layer)
+// 這是 HTTP 適配器，調用 Shared Layer 的純函數
+
+import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
+import { verifyTenantToken } from '../../shared/middleware/tenant-context';
+import type { TenantContext } from '../../shared/types/auth';
+import { fail } from '../../shared/types/api';
+
+/**
+ * HTTP 適配器：從 API Gateway event 提取 Authorization header，
+ * 委託給 Shared Layer 的 verifyTenantToken 純函數。
+ */
+export function extractTenantContext(event: APIGatewayProxyEventV2): TenantContext {
+  const token = event.headers?.['authorization'] ?? event.headers?.['Authorization'] ?? '';
+  return verifyTenantToken(token);  // ← 調用 Shared Layer 純函數
+}
+
+/**
+ * 構建標準 API Gateway 錯誤回應。
+ * 僅在 BFF 使用 — 不進入 Shared Layer。
+ */
+export function apiError(statusCode: number, message: string): APIGatewayProxyResultV2 {
+  return {
+    statusCode,
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify(fail(message)),
+  };
+}
+```
+
+### 設計決策摘要
+
+| 決策 | 說明 |
+|------|------|
+| `verifyTenantToken()` 在 Shared Layer | 純函數，可測試，零框架依賴。M4、M8 直接調用。 |
+| `extractTenantContext()` 在 BFF | HTTP 適配器，從 headers 提取 token。BFF handlers 調用。 |
+| `apiError()` 在 BFF | 構建 HTTP 回應物件，僅 BFF 需要。 |
+| M4、M8 調用 `verifyTenantToken()` | 從 Shared Layer import，不依賴 BFF。各模組自行從 event 提取 token。 |
+| `requireRole()` 在 Shared Layer | 純域邏輯，所有模組均可使用。 |
 
 ### BFF Handler Import 變更
 
 | Handler 文件 | 舊 import (v5.9) | 新 import (v5.10) |
 |-------------|------------------|-------------------|
-| `get-dashboard.ts` | `../middleware/tenant-context` | `../../shared/middleware/tenant-context` |
-| `get-assets.ts` | `../middleware/tenant-context` | `../../shared/middleware/tenant-context` |
-| `get-trades.ts` | `../middleware/tenant-context` | `../../shared/middleware/tenant-context` |
-| `get-revenue-trend.ts` | `../middleware/tenant-context` | `../../shared/middleware/tenant-context` |
-| `post-dispatch.ts` | `../middleware/tenant-context` | `../../shared/middleware/tenant-context` |
-| `post-dr-test.ts` | `../middleware/tenant-context` | `../../shared/middleware/tenant-context` |
-| `get-dispatch-status.ts` | `../middleware/tenant-context` | `../../shared/middleware/tenant-context` |
+| `get-dashboard.ts` | `../middleware/tenant-context` | `../middleware/auth` |
+| `get-assets.ts` | `../middleware/tenant-context` | `../middleware/auth` |
+| `get-trades.ts` | `../middleware/tenant-context` | `../middleware/auth` |
+| `get-revenue-trend.ts` | `../middleware/tenant-context` | `../middleware/auth` |
+| `post-dispatch.ts` | `../middleware/tenant-context` | `../middleware/auth` |
+| `post-dr-test.ts` | `../middleware/tenant-context` | `../middleware/auth` |
+| `get-dispatch-status.ts` | `../middleware/tenant-context` | `../middleware/auth` |
+
+### M4 / M8 Handler Import 變更
+
+| Handler 文件 | 舊 import (v5.9) | 新 import (v5.10) |
+|-------------|------------------|-------------------|
+| M4 `get-tariff-schedule.ts` | `../../bff/middleware/tenant-context` | `../../shared/middleware/tenant-context` (import `verifyTenantToken`) |
+| M8 `get-parser-rules.ts` | `../../bff/middleware/tenant-context` | `../../shared/middleware/tenant-context` (import `verifyTenantToken`) |
+| M8 `create-parser-rule.ts` | `../../bff/middleware/tenant-context` | `../../shared/middleware/tenant-context` (import `verifyTenantToken`) |
+| M8 `get-vpp-strategies.ts` | `../../bff/middleware/tenant-context` | `../../shared/middleware/tenant-context` (import `verifyTenantToken`) |
+| M8 `update-vpp-strategy.ts` | `../../bff/middleware/tenant-context` | `../../shared/middleware/tenant-context` (import `verifyTenantToken`) |
 
 ---
 
@@ -176,9 +235,10 @@ src/bff/
 │   ├── get-dispatch-status.ts    # GET /dispatch/:id
 │   └── get-revenue-trend.ts      # GET /revenue/trend — v5.5: dual-track
 ├── middleware/
+│   ├── auth.ts                   # v5.10: HTTP adapter (extractTenantContext → verifyTenantToken, apiError)
 │   ├── cors.ts                   # CORS headers
 │   └── rate-limit.ts             # API throttling
-│   # NOTE: tenant-context.ts DELETED in v5.10 (moved to src/shared/middleware/)
+│   # NOTE: tenant-context.ts REPLACED by auth.ts in v5.10
 └── __tests__/
     ├── get-dashboard.test.ts     # v5.10: dispatch KPI tests updated
     ├── get-assets.test.ts
@@ -195,7 +255,7 @@ src/bff/
 | v5.3 | 2026-02-27 | HEMS 單戶場景對齊，capacity_kwh |
 | v5.5 | 2026-02-28 | BFF 淨化行動：移除 hardcode，改為 SQL 讀取 trade_schedules / revenue_daily / algorithm_metrics |
 | v5.9 | 2026-03-02 | De-hardcoding: vpp_strategies JOIN, dashboard KPI from DB |
-| **v5.10** | **2026-03-05** | **(1) middleware/tenant-context.ts 遷移至 Shared Layer，BFF 原檔刪除; (2) get-dashboard.ts dispatch KPIs (156/160) de-hardcoding 完成; (3) API Gap Analysis: frontend-v2 完全使用 mock 數據，與後端 API 零整合** |
+| **v5.10** | **2026-03-05** | **(1) HTTP 適配器模式：extractTenantContext + apiError 保留在 BFF (auth.ts)，調用 Shared Layer 的 verifyTenantToken 純函數；M4/M8 直接 import verifyTenantToken; (2) get-dashboard.ts dispatch KPIs (156/160) de-hardcoding 完成; (3) API Gap Analysis: frontend-v2 完全使用 mock 數據，與後端 API 零整合** |
 
 ---
 
@@ -209,5 +269,5 @@ src/bff/
 | **依賴** | M4 (Market & Billing) | PostgreSQL 查詢收益/電價 |
 | **依賴** | M6 (Identity) | Cognito Authorizer、JWT 驗證 |
 | **依賴** | M8 (Admin Control) | AppConfig feature-flags 讀取；vpp_strategies JOIN |
-| **依賴** | Shared Layer | **v5.10: import `shared/middleware/tenant-context`（原在本模組內部）** |
+| **依賴** | Shared Layer | **v5.10: BFF `auth.ts` 調用 `shared/middleware/tenant-context` 的 `verifyTenantToken` 純函數** |
 | **被依賴** | Frontend Dashboard | 唯一 API 消費者 |
