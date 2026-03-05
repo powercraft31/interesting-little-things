@@ -1,8 +1,15 @@
-import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
-import { ok } from '../../shared/types/api';
-import { Role } from '../../shared/types/auth';
-import { extractTenantContext, requireRole, apiError } from '../middleware/tenant-context';
-import { queryWithOrg } from '../../shared/db';
+import type {
+  APIGatewayProxyEventV2,
+  APIGatewayProxyResultV2,
+} from "aws-lambda";
+import { ok } from "../../shared/types/api";
+import { Role } from "../../shared/types/auth";
+import {
+  extractTenantContext,
+  requireRole,
+  apiError,
+} from "../middleware/auth";
+import { queryWithOrg } from "../../shared/db";
 
 /**
  * GET /revenue-trend
@@ -16,10 +23,15 @@ export async function handler(
   let ctx;
   try {
     ctx = extractTenantContext(event);
-    requireRole(ctx, [Role.SOLFACIL_ADMIN, Role.ORG_MANAGER, Role.ORG_OPERATOR, Role.ORG_VIEWER]);
+    requireRole(ctx, [
+      Role.SOLFACIL_ADMIN,
+      Role.ORG_MANAGER,
+      Role.ORG_OPERATOR,
+      Role.ORG_VIEWER,
+    ]);
   } catch (err: unknown) {
     const e = err as { statusCode?: number; message?: string };
-    return apiError(e.statusCode ?? 500, e.message ?? 'Error');
+    return apiError(e.statusCode ?? 500, e.message ?? "Error");
   }
 
   const { rows } = await queryWithOrg(
@@ -41,13 +53,17 @@ export async function handler(
 
   const revenueTrend = {
     // 舊 field names（前端折線圖依賴，保持不變）
-    receita: rows.map(r => Number(r.legacy_receita) || Number(r.arbitrage_profit)),
-    custo:   rows.map(r => Number(r.legacy_custo)),
-    lucro:   rows.map(r => Number(r.legacy_lucro) || Number(r.arbitrage_profit)),
+    receita: rows.map(
+      (r) => Number(r.legacy_receita) || Number(r.arbitrage_profit),
+    ),
+    custo: rows.map((r) => Number(r.legacy_custo)),
+    lucro: rows.map(
+      (r) => Number(r.legacy_lucro) || Number(r.arbitrage_profit),
+    ),
     // v5.5 新增：雙層收益（前端 Phase 3 會用）
-    vppArbitrageProfit: rows.map(r => Number(r.arbitrage_profit)),
-    clientSavings:      rows.map(r => Number(r.client_savings)),
-    dates: rows.map(r => r.date),
+    vppArbitrageProfit: rows.map((r) => Number(r.arbitrage_profit)),
+    clientSavings: rows.map((r) => Number(r.client_savings)),
+    dates: rows.map((r) => r.date),
     _tenant: { orgId: ctx.orgId, role: ctx.role },
   };
 
@@ -55,7 +71,7 @@ export async function handler(
 
   return {
     statusCode: 200,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   };
 }

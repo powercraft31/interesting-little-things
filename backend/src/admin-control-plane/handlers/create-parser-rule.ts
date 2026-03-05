@@ -17,10 +17,9 @@ import type {
   DeviceParserRule,
 } from "../../shared/types/api";
 import {
-  extractTenantContext,
+  verifyTenantToken,
   requireRole,
-  apiError,
-} from "../../bff/middleware/tenant-context";
+} from "../../shared/middleware/tenant-context";
 
 // ---------------------------------------------------------------------------
 // 数据库连接池
@@ -32,7 +31,9 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 // 输入验证
 // ---------------------------------------------------------------------------
 
-function validateParserRule(body: CreateDeviceParserRuleRequest): string | null {
+function validateParserRule(
+  body: CreateDeviceParserRuleRequest,
+): string | null {
   if (!body.manufacturer || typeof body.manufacturer !== "string") {
     return "manufacturer is required";
   }
@@ -60,14 +61,19 @@ export async function handler(
 ): Promise<APIGatewayProxyStructuredResultV2> {
   let tenant;
   try {
-    tenant = extractTenantContext(event);
+    const token =
+      event.headers?.["authorization"] ??
+      event.headers?.["Authorization"] ??
+      "";
+    tenant = verifyTenantToken(token);
     requireRole(tenant, ALLOWED_ROLES);
   } catch (err: unknown) {
     const e = err as { statusCode?: number; message?: string };
-    return apiError(
-      e.statusCode ?? 401,
-      e.message ?? "Unauthorized",
-    ) as APIGatewayProxyStructuredResultV2;
+    return {
+      statusCode: e.statusCode ?? 401,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: e.message ?? "Unauthorized" }),
+    };
   }
 
   let body: CreateDeviceParserRuleRequest;
@@ -147,11 +153,18 @@ export async function handler(
       return {
         statusCode: 409,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "Parser rule for this manufacturer/version already exists" }),
+        body: JSON.stringify({
+          error: "Parser rule for this manufacturer/version already exists",
+        }),
       };
     }
     console.error(
-      JSON.stringify({ level: "ERROR", module: "M8", action: "create_parser_rule", error: msg }),
+      JSON.stringify({
+        level: "ERROR",
+        module: "M8",
+        action: "create_parser_rule",
+        error: msg,
+      }),
     );
     return {
       statusCode: 500,

@@ -1,8 +1,15 @@
-import type { APIGatewayProxyEventV2, APIGatewayProxyResultV2 } from 'aws-lambda';
-import { ok } from '../../shared/types/api';
-import { Role } from '../../shared/types/auth';
-import { extractTenantContext, requireRole, apiError } from '../middleware/tenant-context';
-import { queryWithOrg } from '../../shared/db';
+import type {
+  APIGatewayProxyEventV2,
+  APIGatewayProxyResultV2,
+} from "aws-lambda";
+import { ok } from "../../shared/types/api";
+import { Role } from "../../shared/types/auth";
+import {
+  extractTenantContext,
+  requireRole,
+  apiError,
+} from "../middleware/auth";
+import { queryWithOrg } from "../../shared/db";
 
 /**
  * GET /trades
@@ -16,10 +23,15 @@ export async function handler(
   let ctx;
   try {
     ctx = extractTenantContext(event);
-    requireRole(ctx, [Role.SOLFACIL_ADMIN, Role.ORG_MANAGER, Role.ORG_OPERATOR, Role.ORG_VIEWER]);
+    requireRole(ctx, [
+      Role.SOLFACIL_ADMIN,
+      Role.ORG_MANAGER,
+      Role.ORG_OPERATOR,
+      Role.ORG_VIEWER,
+    ]);
   } catch (err: unknown) {
     const e = err as { statusCode?: number; message?: string };
-    return apiError(e.statusCode ?? 500, e.message ?? 'Error');
+    return apiError(e.statusCode ?? 500, e.message ?? "Error");
   }
 
   const { rows } = await queryWithOrg(
@@ -40,32 +52,44 @@ export async function handler(
     ctx.role === Role.SOLFACIL_ADMIN ? null : ctx.orgId,
   );
 
-  const trades = rows.map(row => {
+  const trades = rows.map((row) => {
     const plannedTime = new Date(row.planned_time as string);
     const hour = plannedTime.getHours();
     const isPeak = hour >= 17 && hour < 20;
     const isOffPeak = (hour >= 0 && hour < 6) || hour >= 22;
-    const tarifa = isPeak ? 'peak' : isOffPeak ? 'off_peak' : 'intermediate';
+    const tarifa = isPeak ? "peak" : isOffPeak ? "off_peak" : "intermediate";
 
     const volKwh = parseFloat(String(row.expected_volume_kwh));
-    const pld = row.target_pld_price ? parseFloat(String(row.target_pld_price)) : 0;
+    const pld = row.target_pld_price
+      ? parseFloat(String(row.target_pld_price))
+      : 0;
     const resultReais = (pld / 1000) * volKwh; // R$/MWh ÷ 1000 × kWh = R$
-    const isSell = row.action === 'discharge';
-    const resultFormatted = pld > 0
-      ? (isSell ? '+' : '-') + 'R$ ' + Math.round(isSell ? resultReais : resultReais).toLocaleString('pt-BR')
-      : 'R$ 0';
+    const isSell = row.action === "discharge";
+    const resultFormatted =
+      pld > 0
+        ? (isSell ? "+" : "-") +
+          "R$ " +
+          Math.round(isSell ? resultReais : resultReais).toLocaleString("pt-BR")
+        : "R$ 0";
 
     return {
       // 舊有 field names（前端依賴，必須保留）
-      time: plannedTime.toLocaleTimeString('pt-BR', {
-        hour: '2-digit', minute: '2-digit', timeZone: 'America/Sao_Paulo',
+      time: plannedTime.toLocaleTimeString("pt-BR", {
+        hour: "2-digit",
+        minute: "2-digit",
+        timeZone: "America/Sao_Paulo",
       }),
-      tarifa,                                                           // ← 補上：前端渲染必需
-      operacao: row.action === 'charge' ? 'buy' : row.action === 'discharge' ? 'sell' : 'hold',
-      preco: pld > 0 ? `R$ ${pld.toFixed(0)}/MWh` : '\u2014',
+      tarifa, // ← 補上：前端渲染必需
+      operacao:
+        row.action === "charge"
+          ? "buy"
+          : row.action === "discharge"
+            ? "sell"
+            : "hold",
+      preco: pld > 0 ? `R$ ${pld.toFixed(0)}/MWh` : "\u2014",
       volume: volKwh.toFixed(1),
-      resultado: resultFormatted,                                       // ← 補上：前端結果欄
-      status: plannedTime < new Date() ? 'executed' : 'scheduled',
+      resultado: resultFormatted, // ← 補上：前端結果欄
+      status: plannedTime < new Date() ? "executed" : "scheduled",
       // v5.5 新增（批發市場視角）
       assetId: row.asset_id,
       assetName: row.asset_name,
@@ -78,7 +102,7 @@ export async function handler(
 
   return {
     statusCode: 200,
-    headers: { 'Content-Type': 'application/json' },
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   };
 }

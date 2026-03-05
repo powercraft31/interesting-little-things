@@ -14,10 +14,9 @@ import type { PoolClient } from "pg";
 import { ok, fail } from "../../shared/types/api";
 import { Role } from "../../shared/types/auth";
 import {
-  extractTenantContext,
+  verifyTenantToken,
   requireRole,
-  apiError,
-} from "../../bff/middleware/tenant-context";
+} from "../../shared/middleware/tenant-context";
 
 // ---------------------------------------------------------------------------
 // 数据库连接池（每次 Lambda 冷启动实例化一次）
@@ -47,14 +46,19 @@ export async function handler(
 ): Promise<APIGatewayProxyStructuredResultV2> {
   let tenant;
   try {
-    tenant = extractTenantContext(event);
+    const token =
+      event.headers?.["authorization"] ??
+      event.headers?.["Authorization"] ??
+      "";
+    tenant = verifyTenantToken(token);
     requireRole(tenant, ALLOWED_ROLES);
   } catch (err: unknown) {
     const e = err as { statusCode?: number; message?: string };
-    return apiError(
-      e.statusCode ?? 401,
-      e.message ?? "Unauthorized",
-    ) as APIGatewayProxyStructuredResultV2;
+    return {
+      statusCode: e.statusCode ?? 401,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(fail(e.message ?? "Unauthorized")),
+    };
   }
 
   let client: PoolClient | undefined;

@@ -17,10 +17,9 @@ import type {
   VppStrategy,
 } from "../../shared/types/api";
 import {
-  extractTenantContext,
+  verifyTenantToken,
   requireRole,
-  apiError,
-} from "../../bff/middleware/tenant-context";
+} from "../../shared/middleware/tenant-context";
 
 // ---------------------------------------------------------------------------
 // 数据库连接池
@@ -32,23 +31,30 @@ const pool = new Pool({ connectionString: process.env.DATABASE_URL });
 // 输入验证
 // ---------------------------------------------------------------------------
 
-function validateSocConstraints(update: UpdateVppStrategyRequest): string | null {
+function validateSocConstraints(
+  update: UpdateVppStrategyRequest,
+): string | null {
   const { minSoc, maxSoc, emergencySoc, profitMargin } = update;
 
   if (minSoc !== undefined) {
-    if (minSoc < 10 || minSoc > 50) return `minSoc must be between 10 and 50, got ${minSoc}`;
+    if (minSoc < 10 || minSoc > 50)
+      return `minSoc must be between 10 and 50, got ${minSoc}`;
   }
   if (maxSoc !== undefined) {
-    if (maxSoc < 70 || maxSoc > 100) return `maxSoc must be between 70 and 100, got ${maxSoc}`;
+    if (maxSoc < 70 || maxSoc > 100)
+      return `maxSoc must be between 70 and 100, got ${maxSoc}`;
   }
   if (emergencySoc !== undefined) {
-    if (emergencySoc < 5 || emergencySoc > 20) return `emergencySoc must be between 5 and 20, got ${emergencySoc}`;
+    if (emergencySoc < 5 || emergencySoc > 20)
+      return `emergencySoc must be between 5 and 20, got ${emergencySoc}`;
   }
   if (minSoc !== undefined && maxSoc !== undefined) {
-    if (minSoc >= maxSoc) return `minSoc (${minSoc}) must be less than maxSoc (${maxSoc})`;
+    if (minSoc >= maxSoc)
+      return `minSoc (${minSoc}) must be less than maxSoc (${maxSoc})`;
   }
   if (emergencySoc !== undefined && minSoc !== undefined) {
-    if (emergencySoc >= minSoc) return `emergencySoc (${emergencySoc}) must be less than minSoc (${minSoc})`;
+    if (emergencySoc >= minSoc)
+      return `emergencySoc (${emergencySoc}) must be less than minSoc (${minSoc})`;
   }
   if (profitMargin !== undefined) {
     if (profitMargin < 0.01 || profitMargin > 0.5) {
@@ -69,14 +75,19 @@ export async function handler(
 ): Promise<APIGatewayProxyStructuredResultV2> {
   let tenant;
   try {
-    tenant = extractTenantContext(event);
+    const token =
+      event.headers?.["authorization"] ??
+      event.headers?.["Authorization"] ??
+      "";
+    tenant = verifyTenantToken(token);
     requireRole(tenant, ALLOWED_ROLES);
   } catch (err: unknown) {
     const e = err as { statusCode?: number; message?: string };
-    return apiError(
-      e.statusCode ?? 401,
-      e.message ?? "Unauthorized",
-    ) as APIGatewayProxyStructuredResultV2;
+    return {
+      statusCode: e.statusCode ?? 401,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: e.message ?? "Unauthorized" }),
+    };
   }
 
   const strategyId = event.pathParameters?.id;
@@ -217,7 +228,9 @@ export async function handler(
       return {
         statusCode: 400,
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ error: "emergency_soc must be less than min_soc" }),
+        body: JSON.stringify({
+          error: "emergency_soc must be less than min_soc",
+        }),
       };
     }
     if (msg.includes("vpp_strategies_min_soc_range")) {
@@ -235,7 +248,12 @@ export async function handler(
       };
     }
     console.error(
-      JSON.stringify({ level: "ERROR", module: "M8", action: "update_vpp_strategy", error: msg }),
+      JSON.stringify({
+        level: "ERROR",
+        module: "M8",
+        action: "update_vpp_strategy",
+        error: msg,
+      }),
     );
     return {
       statusCode: 500,

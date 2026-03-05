@@ -9,7 +9,7 @@ import {
   extractTenantContext,
   requireRole,
   apiError,
-} from "../middleware/tenant-context";
+} from "../middleware/auth";
 import { queryWithOrg } from "../../shared/db";
 
 // ---------------------------------------------------------------------------

@@ -1,5 +1,10 @@
 -- ==========================================================================
--- Seed Data — Rich metadata for demo / integration tests
+-- DEPRECATED (v5.10): This file references non-existent columns
+-- (organizations.metadata, assets.metadata). These columns were removed in
+-- v5.4 when PostgreSQL replaced DynamoDB. Do NOT run this file.
+-- Use scripts/bootstrap.sh instead, which runs seed_v5.4.sql + seed_v5.5.sql.
+-- ==========================================================================
+-- Seed Data — Rich metadata for demo / integration tests (DEPRECATED)
 -- ==========================================================================
 
 -- ── Organization metadata ─────────────────────────────────────────────────

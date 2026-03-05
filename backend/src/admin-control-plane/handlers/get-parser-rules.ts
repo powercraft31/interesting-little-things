@@ -11,12 +11,14 @@ import type {
 import { Pool } from "pg";
 import type { PoolClient } from "pg";
 import { Role } from "../../shared/types/auth";
-import type { AdminListResponse, DeviceParserRule } from "../../shared/types/api";
+import type {
+  AdminListResponse,
+  DeviceParserRule,
+} from "../../shared/types/api";
 import {
-  extractTenantContext,
+  verifyTenantToken,
   requireRole,
-  apiError,
-} from "../../bff/middleware/tenant-context";
+} from "../../shared/middleware/tenant-context";
 
 // ---------------------------------------------------------------------------
 // 数据库连接池（每次 Lambda 冷启动实例化一次）
@@ -39,14 +41,19 @@ export async function handler(
 ): Promise<APIGatewayProxyStructuredResultV2> {
   let tenant;
   try {
-    tenant = extractTenantContext(event);
+    const token =
+      event.headers?.["authorization"] ??
+      event.headers?.["Authorization"] ??
+      "";
+    tenant = verifyTenantToken(token);
     requireRole(tenant, ALLOWED_ROLES);
   } catch (err: unknown) {
     const e = err as { statusCode?: number; message?: string };
-    return apiError(
-      e.statusCode ?? 401,
-      e.message ?? "Unauthorized",
-    ) as APIGatewayProxyStructuredResultV2;
+    return {
+      statusCode: e.statusCode ?? 401,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ error: e.message ?? "Unauthorized" }),
+    };
   }
 
   let client: PoolClient | undefined;
@@ -93,7 +100,12 @@ export async function handler(
       await client.query("ROLLBACK").catch(() => {});
     }
     console.error(
-      JSON.stringify({ level: "ERROR", module: "M8", action: "get_parser_rules", error: String(err) }),
+      JSON.stringify({
+        level: "ERROR",
+        module: "M8",
+        action: "get_parser_rules",
+        error: String(err),
+      }),
     );
     return {
       statusCode: 500,
