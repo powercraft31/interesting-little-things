@@ -153,7 +153,103 @@ export async function closePool(): Promise<void> {
 }
 ```
 
-### 1.2 連線字串模式
+### 1.2 Transaction Helpers — Pool-Aware Design (v5.11 Defect Fix)
+
+#### 1.2.1 問題陳述
+
+`queryWithOrg()` 內部使用 `BEGIN / SET LOCAL / COMMIT` 交易語義。v5.10 代碼中它硬編碼使用 `getPool()`（即 app pool）。在 v5.11 dual pool 架構下，必須確保：
+
+1. **`queryWithOrg()` 只能使用 App Pool** — 因為它呼叫 `set_config('app.current_org_id', ...)` 設定 RLS 上下文。Service pool 的角色是 `solfacil_service`（BYPASSRLS），設定 `app.current_org_id` 對它毫無意義。
+2. **Cron jobs 使用 Service Pool 時，嚴禁呼叫 `queryWithOrg()`** — 否則會導致語義混亂（在 BYPASSRLS 連線上設定 RLS GUC 是 no-op，但暗示了設計缺陷）。
+
+#### 1.2.2 queryWithOrg() 的 Pool 綁定
+
+`queryWithOrg()` 內部明確呼叫 `getAppPool()`，而非接受外部傳入的 pool：
+
+```typescript
+export async function queryWithOrg<T extends Record<string, unknown>>(
+  sql: string,
+  params: unknown[],
+  orgId: string | null,
+): Promise<{ rows: T[] }> {
+  // v5.11: orgId=null (SOLFACIL_ADMIN) → service pool (BYPASSRLS) for cross-tenant access
+  // orgId present → app pool + SET LOCAL for RLS scoping
+  const pool = orgId ? getAppPool() : getServicePool();
+  const client: PoolClient = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    if (orgId) {
+      await client.query(`SELECT set_config('app.current_org_id', $1, true)`, [orgId]);
+    }
+    const result = await client.query(sql, params);
+    await client.query("COMMIT");
+    return { rows: result.rows as T[] };
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+```
+
+#### 1.2.3 withTransaction() — Pool-Parameterized Helper
+
+若未來需要通用交易 helper，設計必須接受 pool 參數：
+
+```typescript
+/**
+ * Execute a callback within a database transaction.
+ * Caller chooses which pool to use — enforcing explicit pool selection.
+ */
+export async function withTransaction<T>(
+  pool: Pool,
+  fn: (client: PoolClient) => Promise<T>,
+): Promise<T> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+    const result = await fn(client);
+    await client.query("COMMIT");
+    return result;
+  } catch (err) {
+    await client.query("ROLLBACK");
+    throw err;
+  } finally {
+    client.release();
+  }
+}
+```
+
+**使用範例：**
+
+```typescript
+// BFF handler — app pool + RLS
+const result = await withTransaction(getAppPool(), async (client) => {
+  await client.query(`SELECT set_config('app.current_org_id', $1, true)`, [orgId]);
+  return client.query('SELECT * FROM assets');
+});
+
+// Cron job — service pool + BYPASSRLS
+const result = await withTransaction(getServicePool(), async (client) => {
+  return client.query('SELECT * FROM assets WHERE is_active = true');
+});
+```
+
+#### 1.2.4 鐵律：Transaction + Pool 選擇矩陣
+
+| 場景 | Pool | 可否呼叫 `queryWithOrg()` | 可否呼叫 `withTransaction()` | 說明 |
+|------|------|-------------------------|--------------------------|------|
+| BFF handler (有 JWT) | App Pool | **是** (orgId ≠ null) | 是 (getAppPool()) | RLS 按 org 過濾 |
+| BFF handler (SOLFACIL_ADMIN) | Service Pool | **是** (orgId = null → 自動切換 service pool) | 是 (getServicePool()) | BYPASSRLS 看全部 |
+| Cron job (M2/M3/M4/M1) | Service Pool | **嚴禁** | 是 (getServicePool()) | BYPASSRLS，無需設定 org_id |
+| 測試 setup/teardown | Service Pool | **嚴禁** | 是 (getServicePool()) | 測試數據跨租戶操作 |
+
+> **⚠️ 嚴禁在 Service Pool 連線上呼叫 `queryWithOrg(orgId)` (orgId ≠ null)。**
+> `set_config('app.current_org_id', ...)` 在 BYPASSRLS 角色上是 no-op，會產生「以為有 RLS 保護實際沒有」的安全假象。
+> Lint rule（未來）：`grep -rn 'queryWithOrg' src/optimization-engine/ src/dr-dispatcher/ src/market-billing/ src/iot-hub/services/` 應返回 0 結果。
+
+### 1.3 連線字串模式
 
 | 環境變數 | 角色 | 用途 |
 |---------|------|------|
@@ -168,7 +264,7 @@ export async function closePool(): Promise<void> {
 1. **推薦**：在 local PostgreSQL 中建立雙角色（`bootstrap.sh` 已包含），設定兩個不同的 URL
 2. **快速啟動**：只設定 `DATABASE_URL` 指向 superuser (`postgres`)，兩個 pool 都 fallback 到 superuser（superuser 天生 BYPASSRLS）
 
-### 1.3 哪些模組使用哪個 Pool
+### 1.4 哪些模組使用哪個 Pool
 
 | Pool | Module | File | Function |
 |------|--------|------|----------|
@@ -181,7 +277,7 @@ export async function closePool(): Promise<void> {
 | **Service Pool** | M4 | `src/market-billing/services/daily-billing-job.ts` | `startBillingJob(servicePool)` |
 | **Service Pool** | M1 | `src/iot-hub/services/telemetry-aggregator.ts` | `startTelemetryAggregator(servicePool)` |
 
-### 1.4 local-server.ts 啟動變更
+### 1.5 local-server.ts 啟動變更
 
 ```typescript
 // scripts/local-server.ts — v5.11 dual pool startup
@@ -293,7 +389,7 @@ const allAssets = await pool.query('SELECT * FROM assets WHERE is_active = true'
 | v5.4 | 2026-02-27 | 新增 Database Connection Pool 章節 |
 | v5.5 | 2026-02-28 | TradeRecord、DashboardKPI 雙層結構 |
 | v5.10 | 2026-03-05 | 新增 Shared Middleware (verifyTenantToken, requireRole) |
-| **v5.11** | **2026-03-05** | **Dual Pool Factory: (1) `getAppPool()` — solfacil_app, RLS enforced, for BFF; (2) `getServicePool()` — solfacil_service, BYPASSRLS, for cron jobs; (3) `closeAllPools()` — graceful shutdown + test teardown; (4) `getPool()` + `closePool()` deprecated but kept for backward compat; (5) `queryWithOrg()` unchanged, uses app pool; (6) local-server.ts dual pool startup pattern** |
+| **v5.11** | **2026-03-05** | **Dual Pool Factory: (1) `getAppPool()` — solfacil_app, RLS enforced, for BFF; (2) `getServicePool()` — solfacil_service, BYPASSRLS, for cron jobs; (3) `closeAllPools()` — graceful shutdown + test teardown; (4) `getPool()` + `closePool()` deprecated but kept for backward compat; (5) `queryWithOrg()` orgId=null→service pool, orgId present→app pool; (6) local-server.ts dual pool startup pattern; (7) Transaction helpers: `queryWithOrg()` pool-binding rules + `withTransaction(pool, fn)` design; (8) 鐵律: cron jobs 嚴禁呼叫 `queryWithOrg()`** |
 
 ---
 

@@ -12,7 +12,7 @@
 | # | 文件名 | 路徑 | 說明 |
 |---|--------|------|------|
 | 00 | **MASTER_ARCHITECTURE** | `00_MASTER_ARCHITECTURE_v5.11.md` | 系統總控藍圖（本文件） |
-| M1 | **IOT_HUB_MODULE** | [01_IOT_HUB_MODULE_v5.8.md](./01_IOT_HUB_MODULE_v5.8.md) | IoT Hub — MQTT 接入、動態解析器、Asset Shadow、Telemetry Ingestion、Hourly Aggregator Job |
+| M1 | **IOT_HUB_MODULE** | [01_IOT_HUB_MODULE_v5.11.md](./01_IOT_HUB_MODULE_v5.11.md) | IoT Hub — **v5.11: Service Pool for telemetry-webhook + telemetry-aggregator** |
 | M2 | **OPTIMIZATION_ENGINE_MODULE** | [02_OPTIMIZATION_ENGINE_MODULE_v5.11.md](./02_OPTIMIZATION_ENGINE_MODULE_v5.11.md) | Optimization Engine — **v5.11: Service Pool for cross-tenant schedule generation** |
 | M3 | **DR_DISPATCHER_MODULE** | [03_DR_DISPATCHER_MODULE_v5.11.md](./03_DR_DISPATCHER_MODULE_v5.11.md) | DR Dispatcher — **v5.11: Service Pool for command dispatcher + timeout checker** |
 | M4 | **MARKET_BILLING_MODULE** | [04_MARKET_BILLING_MODULE_v5.11.md](./04_MARKET_BILLING_MODULE_v5.11.md) | Market & Billing — **v5.11: Service Pool for daily billing batch job** |
@@ -59,8 +59,8 @@
 > 3. **M2/M3/M4 Pool Switch** — 所有 cron job 從 `getPool()` 切換到 `getServicePool()`
 > 4. **Test Environment Repair** — Cron job 測試注入 service pool；BFF 測試確保 org_id 正確設定
 >
-> **連鎖升版模組：** Shared Layer (v5.10→v5.11)、Database Schema (v5.10→v5.11)、
->                   M2 (v5.9→v5.11)、M3 (v5.9→v5.11)、M4 (v5.10→v5.11)
+> **連鎖升版模組（6 個）：** Shared Layer (v5.10→v5.11)、Database Schema (v5.10→v5.11)、
+>                   M1 (v5.8→v5.11)、M2 (v5.9→v5.11)、M3 (v5.9→v5.11)、M4 (v5.10→v5.11)
 >
 > **v5.11 Out of Scope（明確排除）：**
 > - 不新增 `org_id` 欄位到 `trades`/`revenue_daily`/`dispatch_records`（Breaking DDL change, 留待 v6.0）
@@ -96,7 +96,7 @@
 |---------|---------|---------|------|---------|
 | Shared | Shared Layer | **v5.11** | [09_SHARED_LAYER](./09_SHARED_LAYER_v5.11.md) | 公共型別、**Dual Pool Factory**、雙層 KPI、Shared Middleware |
 | Shared | Database Schema | **v5.11** | [10_DATABASE_SCHEMA](./10_DATABASE_SCHEMA_v5.11.md) | PostgreSQL — 19 張表、**RLS Scope Formalization** |
-| M1 | IoT Hub | **v5.8** | [01_IOT_HUB](./01_IOT_HUB_MODULE_v5.8.md) | Lambda + IoT Core + DynamoDB |
+| M1 | IoT Hub | **v5.11** | [01_IOT_HUB](./01_IOT_HUB_MODULE_v5.11.md) | Lambda + IoT Core + DynamoDB + **Service Pool** |
 | M2 | Optimization Engine | **v5.11** | [02_OPTIMIZATION_ENGINE](./02_OPTIMIZATION_ENGINE_MODULE_v5.11.md) | Lambda + AppConfig + **Service Pool** |
 | M3 | DR Dispatcher | **v5.11** | [03_DR_DISPATCHER](./03_DR_DISPATCHER_MODULE_v5.11.md) | Lambda + EventBridge + MQTT + **Service Pool** |
 | M4 | Market & Billing | **v5.11** | [04_MARKET_BILLING](./04_MARKET_BILLING_MODULE_v5.11.md) | Lambda + DynamoDB + **Service Pool** |
@@ -113,7 +113,8 @@
 > - M2 Optimization Engine v5.9 → v5.11（schedule-generator 切換到 service pool）
 > - M3 DR Dispatcher v5.9 → v5.11（command-dispatcher + timeout-checker 切換到 service pool）
 > - M4 Market & Billing v5.10 → v5.11（daily-billing-job 切換到 service pool）
-> - M1/M5/M6/M7/M8 版本維持不變（不受此變更影響）
+> - M1 IoT Hub v5.8 → v5.11（telemetry-webhook + telemetry-aggregator 切換到 service pool — 硬體數據無 JWT，RLS 會阻擋）
+> - M5/M6/M7/M8 版本維持不變（不受此變更影響）
 
 ---
 
@@ -171,4 +172,4 @@ M8 (Admin Control)     --publishes-->  ConfigUpdated, SchemaEvolved
 | v5.8 | 2026-03-02 | 遙測閉環與 Data Contract |
 | v5.9 | 2026-03-02 | 邏輯閉環與去硬編碼 |
 | v5.10 | 2026-03-05 | 三維修正：DB Bootstrap Fix + Architecture Boundary Fix + BFF De-hardcoding |
-| **v5.11** | **2026-03-05** | **Dual Connection Pool: (1) DDL RLS scope formalization — trades/revenue_daily/dispatch_records confirmed no RLS (missing org_id); (2) Shared Layer dual pool factory — getAppPool() + getServicePool() + closeAllPools(); (3) M2/M3/M4 cron jobs switch to service pool (BYPASSRLS); (4) M1 telemetry-aggregator switch to service pool; (5) Test environment repair — 20 failing tests fixed via correct pool injection + org_id setup; (6) local-server.ts dual pool startup** |
+| **v5.11** | **2026-03-05** | **Dual Connection Pool: (1) DDL RLS scope formalization — trades/revenue_daily/dispatch_records confirmed no RLS (missing org_id); (2) Shared Layer dual pool factory — getAppPool() + getServicePool() + closeAllPools() + withTransaction(pool, fn); (3) M1/M2/M3/M4 cron jobs + telemetry handlers switch to service pool (BYPASSRLS); (4) M1 IoT Hub v5.8→v5.11 — telemetry-webhook + telemetry-aggregator need service pool (no JWT from hardware); (5) Transaction helpers: queryWithOrg() pool-binding rules, cron jobs 嚴禁呼叫 queryWithOrg(); (6) Test environment repair — 22 test files' teardown updated to closeAllPools(); (7) local-server.ts dual pool startup + graceful shutdown via closeAllPools()** |
