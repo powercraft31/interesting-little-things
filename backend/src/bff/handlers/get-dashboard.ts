@@ -39,56 +39,94 @@ export async function handler(
   const isAdmin = ctx.role === Role.SOLFACIL_ADMIN;
   const rlsOrgId = isAdmin ? null : ctx.orgId;
 
-  // ── 並行查詢 4 個資料來源 ──────────────────────────────
-  const [assetResult, revenueResult, metricsResult, dispatchResult] =
-    await Promise.all([
-      // 查詢 1：資產聚合（assets JOIN device_state）
-      queryWithOrg(
-        `SELECT
+  // ── 並行查詢 7 個資料來源 (v5.12: de-hardcoded) ──────────
+  const [
+    assetResult,
+    revenueResult,
+    metricsResult,
+    dispatchResult,
+    monthlyResult,
+    deltaResult,
+    accuracyLatencyResult,
+  ] = await Promise.all([
+    // 查詢 1：資產聚合（assets JOIN device_state）
+    queryWithOrg(
+      `SELECT
          COUNT(a.asset_id)::int                                      AS total_assets,
          COUNT(d.is_online) FILTER (WHERE d.is_online = true)::int   AS online_assets,
          COALESCE(AVG(d.battery_soc), 0)                             AS avg_soc,
          COALESCE(SUM(d.load_power), 0)                              AS total_load_kw,
-         COALESCE(SUM(d.pv_power), 0)                                AS total_pv_kw
+         COALESCE(SUM(d.pv_power), 0)                                AS total_pv_kw,
+         ROUND(100.0 * COUNT(d.is_online) FILTER (WHERE d.is_online = true)
+           / NULLIF(COUNT(a.asset_id), 0), 1)                        AS online_rate
        FROM assets a
        LEFT JOIN device_state d ON d.asset_id = a.asset_id
        WHERE a.is_active = true`,
-        [],
-        rlsOrgId,
-      ),
-      // 查詢 2：今日雙層收益（revenue_daily）
-      queryWithOrg(
-        `SELECT
+      [],
+      rlsOrgId,
+    ),
+    // 查詢 2：今日雙層收益（revenue_daily）
+    queryWithOrg(
+      `SELECT
          COALESCE(SUM(vpp_arbitrage_profit_reais), 0) AS vpp_profit,
          COALESCE(SUM(client_savings_reais), 0)        AS client_savings,
          COALESCE(SUM(profit_reais), 0)                AS legacy_profit
        FROM revenue_daily
        WHERE date = CURRENT_DATE`,
-        [],
-        rlsOrgId,
-      ),
-      // 查詢 3：最新 self_consumption（algorithm_metrics）
-      queryWithOrg(
-        `SELECT self_consumption_pct
+      [],
+      rlsOrgId,
+    ),
+    // 查詢 3：最新 self_consumption（algorithm_metrics）
+    queryWithOrg(
+      `SELECT self_consumption_pct
        FROM algorithm_metrics
        WHERE date <= CURRENT_DATE
        ORDER BY date DESC
        LIMIT 1`,
-        [],
-        rlsOrgId,
-      ),
-      // 查詢 4：v5.10 dispatch KPIs from dispatch_commands
-      // Hits idx_dispatch_commands_status_org composite index
-      queryWithOrg(
-        `SELECT
+      [],
+      rlsOrgId,
+    ),
+    // 查詢 4：v5.10 dispatch KPIs from dispatch_commands
+    queryWithOrg(
+      `SELECT
          COUNT(*) FILTER (WHERE status = 'completed')::int AS success_count,
          COUNT(*)::int AS total_count
        FROM dispatch_commands
        WHERE dispatched_at >= CURRENT_DATE`,
-        [],
-        rlsOrgId,
-      ),
-    ]);
+      [],
+      rlsOrgId,
+    ),
+    // 查詢 5 (v5.12): monthly revenue
+    queryWithOrg(
+      `SELECT COALESCE(SUM(revenue_reais), 0) AS monthly_revenue
+       FROM revenue_daily
+       WHERE date >= date_trunc('month', CURRENT_DATE)`,
+      [],
+      rlsOrgId,
+    ),
+    // 查詢 6 (v5.12): self-consumption delta (today vs yesterday)
+    queryWithOrg(
+      `SELECT
+         (SELECT self_consumption_pct FROM algorithm_metrics
+          WHERE date = CURRENT_DATE ORDER BY date DESC LIMIT 1) -
+         (SELECT self_consumption_pct FROM algorithm_metrics
+          WHERE date = CURRENT_DATE - 1 ORDER BY date DESC LIMIT 1) AS delta`,
+      [],
+      rlsOrgId,
+    ),
+    // 查詢 7 (v5.12): dispatch accuracy + latency from dispatch_records (last 7 days)
+    queryWithOrg(
+      `SELECT
+         ROUND(100.0 * COUNT(*) FILTER (WHERE success = true)
+           / NULLIF(COUNT(*), 0), 1) AS accuracy,
+         ROUND(AVG(response_latency_ms) / 1000.0, 1) AS avg_latency_s
+       FROM dispatch_records
+       WHERE dispatched_at >= CURRENT_DATE - 7
+         AND response_latency_ms IS NOT NULL`,
+      [],
+      rlsOrgId,
+    ),
+  ]);
 
   const agg = assetResult.rows[0] as Record<string, unknown>;
   const rev = revenueResult.rows[0] as Record<string, unknown>;
@@ -105,6 +143,24 @@ export async function handler(
   const dispatchTotalCount = Number(dispatchRow?.total_count ?? 0);
   const dispatchSuccessRate = `${dispatchSuccessCount}/${dispatchTotalCount}`;
 
+  // v5.12: de-hardcoded values
+  const monthlyRevenueReais = Math.round(
+    Number(
+      (monthlyResult.rows[0] as Record<string, unknown>)?.monthly_revenue ?? 0,
+    ),
+  );
+  const selfConsumptionDelta = parseFloat(
+    String((deltaResult.rows[0] as Record<string, unknown>)?.delta ?? 0),
+  ).toFixed(1);
+  const onlineRate = parseFloat(String(agg.online_rate ?? 0));
+  const systemHealthBlock =
+    onlineRate >= 95 ? "OPTIMAL" : onlineRate >= 85 ? "DEGRADED" : "CRITICAL";
+  const accLatRow = accuracyLatencyResult.rows[0] as
+    | Record<string, unknown>
+    | undefined;
+  const vppDispatchAccuracy = parseFloat(String(accLatRow?.accuracy ?? 0));
+  const drResponseLatency = parseFloat(String(accLatRow?.avg_latency_s ?? 0));
+
   const body = ok({
     // === DB 真實聚合：資產統計 ===
     totalAssets: agg.total_assets as number,
@@ -115,18 +171,18 @@ export async function handler(
 
     // === DB 真實聚合：財務 KPI（v5.5 雙層） ===
     dailyRevenueReais: Math.round(Number(rev.vpp_profit)),
-    monthlyRevenueReais: 0,
+    monthlyRevenueReais,
 
     // === DB 真實聚合：演算法 KPI ===
-    selfConsumption: { value: selfConsumptionPct, delta: "0.0" },
+    selfConsumption: { value: selfConsumptionPct, delta: selfConsumptionDelta },
     dispatchSuccessCount,
     dispatchTotalCount,
-    systemHealthBlock: "OPTIMAL",
+    systemHealthBlock,
 
-    // === 其他維持格式相容（前端 DOM ID 依賴）===
-    vppDispatchAccuracy: 97.5,
-    drResponseLatency: 1.8,
-    gatewayUptime: 99.9,
+    // === v5.12: de-hardcoded from dispatch_records ===
+    vppDispatchAccuracy,
+    drResponseLatency,
+    gatewayUptime: 99.9, // TODO: derive from daily_uptime_snapshots
     dispatchSuccessRate,
 
     // === Revenue Breakdown（圓環圖）— v5.5 雙層：B端 + C端 + 其他 ===

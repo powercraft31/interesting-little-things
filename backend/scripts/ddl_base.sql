@@ -38,6 +38,20 @@ CREATE TABLE IF NOT EXISTS user_org_roles (
 );
 
 -- ============================================================
+-- v5.12: Homes (must precede assets ALTER for FK)
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS homes (
+  home_id     VARCHAR(50)  PRIMARY KEY,
+  org_id      VARCHAR(50)  NOT NULL REFERENCES organizations(org_id),
+  name        VARCHAR(200) NOT NULL,
+  address     TEXT,
+  created_at  TIMESTAMPTZ  DEFAULT NOW(),
+  updated_at  TIMESTAMPTZ  DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_homes_org ON homes(org_id);
+
+-- ============================================================
 -- M1 IoT Hub
 -- ============================================================
 
@@ -53,11 +67,20 @@ CREATE TABLE IF NOT EXISTS assets (
       CHECK (submercado IN ('SUDESTE','SUL','NORDESTE','NORTE')),
   retail_buy_rate_kwh  NUMERIC(8,4) NOT NULL DEFAULT 0.80,
   retail_sell_rate_kwh NUMERIC(8,4) NOT NULL DEFAULT 0.25,
+  asset_type     VARCHAR(30)  NOT NULL DEFAULT 'INVERTER_BATTERY'
+      CHECK (asset_type IN ('INVERTER_BATTERY','SMART_METER','HVAC','EV_CHARGER','SOLAR_PANEL')),
+  home_id        VARCHAR(50)  REFERENCES homes(home_id),
+  brand          VARCHAR(100),
+  model          VARCHAR(100),
+  serial_number  VARCHAR(100),
+  commissioned_at TIMESTAMPTZ,
   is_active      BOOLEAN      NOT NULL DEFAULT true,
   created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_assets_org ON assets (org_id);
+CREATE INDEX IF NOT EXISTS idx_assets_home ON assets (home_id);
+CREATE INDEX IF NOT EXISTS idx_assets_type ON assets (asset_type);
 
 CREATE TABLE IF NOT EXISTS device_state (
   asset_id        VARCHAR(50)  PRIMARY KEY REFERENCES assets(asset_id) ON DELETE CASCADE,
@@ -73,6 +96,7 @@ CREATE TABLE IF NOT EXISTS device_state (
   inverter_temp   DECIMAL(5,2),
   is_online       BOOLEAN      NOT NULL DEFAULT false,
   grid_frequency  DECIMAL(6,3),
+  telemetry_json  JSONB        DEFAULT '{}',
   updated_at      TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
@@ -106,6 +130,38 @@ CREATE INDEX IF NOT EXISTS idx_telemetry_asset_time
   ON telemetry_history (asset_id, recorded_at DESC);
 
 -- ============================================================
+-- v5.12: Offline Events
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS offline_events (
+  id            SERIAL       PRIMARY KEY,
+  asset_id      VARCHAR(50)  NOT NULL REFERENCES assets(asset_id),
+  org_id        VARCHAR(50)  NOT NULL REFERENCES organizations(org_id),
+  started_at    TIMESTAMPTZ  NOT NULL,
+  ended_at      TIMESTAMPTZ,
+  cause         VARCHAR(50)  DEFAULT 'unknown',
+  backfill      BOOLEAN      DEFAULT false,
+  created_at    TIMESTAMPTZ  DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_offline_events_asset ON offline_events(asset_id, started_at DESC);
+
+-- ============================================================
+-- v5.12: Daily Uptime Snapshots
+-- ============================================================
+
+CREATE TABLE IF NOT EXISTS daily_uptime_snapshots (
+  id            SERIAL       PRIMARY KEY,
+  org_id        VARCHAR(50)  NOT NULL REFERENCES organizations(org_id),
+  date          DATE         NOT NULL,
+  total_assets  INTEGER      NOT NULL,
+  online_assets INTEGER      NOT NULL,
+  uptime_pct    DECIMAL(5,2) NOT NULL,
+  created_at    TIMESTAMPTZ  DEFAULT NOW(),
+  UNIQUE (org_id, date)
+);
+CREATE INDEX IF NOT EXISTS idx_uptime_org_date ON daily_uptime_snapshots(org_id, date DESC);
+
+-- ============================================================
 -- Shared Contract Tables (v5.8)
 -- ============================================================
 
@@ -136,6 +192,10 @@ CREATE TABLE IF NOT EXISTS tariff_schedules (
   peak_rate      DECIMAL(8,4) NOT NULL,
   offpeak_rate   DECIMAL(8,4) NOT NULL,
   feed_in_rate   DECIMAL(8,4) NOT NULL,
+  intermediate_rate  DECIMAL(8,4),
+  intermediate_start TIME,
+  intermediate_end   TIME,
+  disco          VARCHAR(50),
   currency       VARCHAR(3)   NOT NULL DEFAULT 'BRL',
   effective_from DATE         NOT NULL,
   effective_to   DATE,
@@ -356,5 +416,18 @@ CREATE POLICY rls_trade_schedules_tenant ON trade_schedules
 ALTER TABLE algorithm_metrics ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_algorithm_metrics_tenant ON algorithm_metrics
   USING (org_id::TEXT = current_setting('app.current_org_id', true));
+
+-- v5.12: RLS for new tables
+ALTER TABLE homes ENABLE ROW LEVEL SECURITY;
+CREATE POLICY rls_homes_tenant ON homes
+  USING (org_id = current_setting('app.current_org_id', true));
+
+ALTER TABLE offline_events ENABLE ROW LEVEL SECURITY;
+CREATE POLICY rls_offline_events_tenant ON offline_events
+  USING (org_id = current_setting('app.current_org_id', true));
+
+ALTER TABLE daily_uptime_snapshots ENABLE ROW LEVEL SECURITY;
+CREATE POLICY rls_uptime_tenant ON daily_uptime_snapshots
+  USING (org_id = current_setting('app.current_org_id', true));
 
 -- COMMIT;

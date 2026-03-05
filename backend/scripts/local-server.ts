@@ -9,6 +9,22 @@ import { handler as dashboardHandler } from "../src/bff/handlers/get-dashboard";
 import { handler as assetsHandler } from "../src/bff/handlers/get-assets";
 import { handler as revenueTrendHandler } from "../src/bff/handlers/get-revenue-trend";
 import { handler as tradesHandler } from "../src/bff/handlers/get-trades";
+// v5.12: 15 new BFF handlers
+import { handler as fleetOverviewHandler } from "../src/bff/handlers/get-fleet-overview";
+import { handler as fleetIntegradoresHandler } from "../src/bff/handlers/get-fleet-integradores";
+import { handler as fleetOfflineEventsHandler } from "../src/bff/handlers/get-fleet-offline-events";
+import { handler as fleetUptimeTrendHandler } from "../src/bff/handlers/get-fleet-uptime-trend";
+import { handler as devicesHandler } from "../src/bff/handlers/get-devices";
+import { handler as homesHandler } from "../src/bff/handlers/get-homes";
+import { handler as homeEnergyHandler } from "../src/bff/handlers/get-home-energy";
+import { handler as homesSummaryHandler } from "../src/bff/handlers/get-homes-summary";
+import { handler as hemsOverviewHandler } from "../src/bff/handlers/get-hems-overview";
+import { handler as hemsDispatchHandler } from "../src/bff/handlers/post-hems-dispatch";
+import { handler as vppCapacityHandler } from "../src/bff/handlers/get-vpp-capacity";
+import { handler as vppLatencyHandler } from "../src/bff/handlers/get-vpp-latency";
+import { handler as vppDrEventsHandler } from "../src/bff/handlers/get-vpp-dr-events";
+import { handler as perfScorecardHandler } from "../src/bff/handlers/get-performance-scorecard";
+import { handler as perfSavingsHandler } from "../src/bff/handlers/get-performance-savings";
 import { handleCceeWebhook } from "../src/open-api/handlers/ccee-webhook";
 import { handleWeatherWebhook } from "../src/open-api/handlers/weather-webhook";
 import { createTelemetryWebhookHandler } from "../src/iot-hub/handlers/telemetry-webhook";
@@ -32,15 +48,29 @@ function makeStubEvent(
   method: string,
   path: string,
 ): APIGatewayProxyEventV2 {
+  // Build actual path from request (supports :params in Express routes)
+  const actualPath = req.originalUrl.split("?")[0];
+  const qs = req.originalUrl.includes("?") ? req.originalUrl.split("?")[1] : "";
+  const qsParams: Record<string, string> = {};
+  if (qs) {
+    for (const pair of qs.split("&")) {
+      const [k, v] = pair.split("=");
+      if (k) qsParams[decodeURIComponent(k)] = decodeURIComponent(v ?? "");
+    }
+  }
+
   return {
     version: "2.0",
     routeKey: `${method} ${path}`,
-    rawPath: path,
-    rawQueryString: "",
+    rawPath: actualPath,
+    rawQueryString: qs,
     headers: {
       authorization: (req.headers.authorization as string) ?? "",
       "content-type": (req.headers["content-type"] as string) ?? "",
     },
+    queryStringParameters:
+      Object.keys(qsParams).length > 0 ? qsParams : undefined,
+    body: req.body ? JSON.stringify(req.body) : undefined,
     requestContext: {
       accountId: "local",
       apiId: "local",
@@ -48,7 +78,7 @@ function makeStubEvent(
       domainPrefix: "localhost",
       http: {
         method,
-        path,
+        path: actualPath,
         protocol: "HTTP/1.1",
         sourceIp: "127.0.0.1",
         userAgent: "local-server",
@@ -123,6 +153,68 @@ app.get(
 );
 app.get("/trades", wrapHandler(tradesHandler, "GET", "/trades"));
 
+// ── v5.12 BFF Endpoints (15 new) ─────────────────────────────────────────
+// Fleet
+app.get(
+  "/api/fleet/overview",
+  wrapHandler(fleetOverviewHandler, "GET", "/api/fleet/overview"),
+);
+app.get(
+  "/api/fleet/integradores",
+  wrapHandler(fleetIntegradoresHandler, "GET", "/api/fleet/integradores"),
+);
+app.get(
+  "/api/fleet/offline-events",
+  wrapHandler(fleetOfflineEventsHandler, "GET", "/api/fleet/offline-events"),
+);
+app.get(
+  "/api/fleet/uptime-trend",
+  wrapHandler(fleetUptimeTrendHandler, "GET", "/api/fleet/uptime-trend"),
+);
+// Devices & Homes
+app.get("/api/devices", wrapHandler(devicesHandler, "GET", "/api/devices"));
+app.get(
+  "/api/homes/summary",
+  wrapHandler(homesSummaryHandler, "GET", "/api/homes/summary"),
+);
+app.get(
+  "/api/homes/:homeId/energy",
+  wrapHandler(homeEnergyHandler, "GET", "/api/homes/:homeId/energy"),
+);
+app.get("/api/homes", wrapHandler(homesHandler, "GET", "/api/homes"));
+// HEMS
+app.get(
+  "/api/hems/overview",
+  wrapHandler(hemsOverviewHandler, "GET", "/api/hems/overview"),
+);
+app.post(
+  "/api/hems/dispatch",
+  wrapHandler(hemsDispatchHandler, "POST", "/api/hems/dispatch"),
+);
+// VPP
+app.get(
+  "/api/vpp/capacity",
+  wrapHandler(vppCapacityHandler, "GET", "/api/vpp/capacity"),
+);
+app.get(
+  "/api/vpp/latency",
+  wrapHandler(vppLatencyHandler, "GET", "/api/vpp/latency"),
+);
+app.get(
+  "/api/vpp/dr-events",
+  wrapHandler(vppDrEventsHandler, "GET", "/api/vpp/dr-events"),
+);
+// Performance
+app.get(
+  "/api/performance/scorecard",
+  wrapHandler(perfScorecardHandler, "GET", "/api/performance/scorecard"),
+);
+app.get(
+  "/api/performance/savings",
+  wrapHandler(perfSavingsHandler, "GET", "/api/performance/savings"),
+);
+// ────────────────────────────────────────────────────────────────────────
+
 // ── v5.7 Inbound Webhooks ────────────────────────────────────────────────
 app.post("/webhooks/ccee-pld", handleCceeWebhook);
 app.post("/webhooks/weather", handleWeatherWebhook);
@@ -157,10 +249,25 @@ console.log(
 app.listen(PORT, () => {
   console.log(`Local API Gateway emulator running at http://localhost:${PORT}`);
   console.log("Routes:");
-  console.log("  GET /dashboard");
-  console.log("  GET /assets");
-  console.log("  GET /revenue-trend");
-  console.log("  GET /trades");
+  console.log("  GET  /dashboard");
+  console.log("  GET  /assets");
+  console.log("  GET  /revenue-trend");
+  console.log("  GET  /trades");
+  console.log("  GET  /api/fleet/overview          (v5.12)");
+  console.log("  GET  /api/fleet/integradores       (v5.12)");
+  console.log("  GET  /api/fleet/offline-events      (v5.12)");
+  console.log("  GET  /api/fleet/uptime-trend        (v5.12)");
+  console.log("  GET  /api/devices                   (v5.12)");
+  console.log("  GET  /api/homes                     (v5.12)");
+  console.log("  GET  /api/homes/:homeId/energy      (v5.12)");
+  console.log("  GET  /api/homes/summary             (v5.12)");
+  console.log("  GET  /api/hems/overview             (v5.12)");
+  console.log("  POST /api/hems/dispatch             (v5.12)");
+  console.log("  GET  /api/vpp/capacity              (v5.12)");
+  console.log("  GET  /api/vpp/latency               (v5.12)");
+  console.log("  GET  /api/vpp/dr-events             (v5.12)");
+  console.log("  GET  /api/performance/scorecard     (v5.12)");
+  console.log("  GET  /api/performance/savings       (v5.12)");
   console.log("  POST /webhooks/ccee-pld");
   console.log("  POST /webhooks/weather");
   console.log("  POST /api/telemetry/mock");

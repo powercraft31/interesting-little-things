@@ -35,9 +35,9 @@ describe("schedule-generator (M2)", () => {
     );
     const countAfter = parseInt(after.rows[0].count, 10);
 
-    // 4 個 active assets × 24 小時 = 96 筆（generator 先 DELETE 再 INSERT，所以是絕對值）
-    expect(countAfter).toBe(96);
-    // 因為 DELETE 舊排程再 INSERT，count 應該是固定的 96，不是累加
+    // 47 個 active assets × 24 小時 = 1128 筆（generator 先 DELETE 再 INSERT，所以是絕對值）
+    expect(countAfter).toBe(1128);
+    // 因為 DELETE 舊排程再 INSERT，count 應該是固定的 1128，不是累加
   });
 
   it("產生的排程 action 只能是 charge 或 discharge", async () => {
