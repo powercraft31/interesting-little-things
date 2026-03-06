@@ -13,11 +13,10 @@ import { queryWithOrg } from "../../shared/db";
 
 /**
  * GET /dashboard
- * v5.5: VPP 儀表盤聚合 KPI
- * - 資產統計（assets JOIN device_state）
- * - 今日雙層收益（revenue_daily）
- * - 自消費率（algorithm_metrics）
- * - 移除 alpha / mape（不再使用技術精度指標）
+ * v5.13: VPP Dashboard KPIs
+ * - Revenue KPIs switched to Tarifa Branca client_savings
+ * - Self-consumption from revenue_daily.actual_self_consumption_pct
+ * - Gateway uptime from daily_uptime_snapshots (de-hardcoded)
  */
 export async function handler(
   event: APIGatewayProxyEventV2,
@@ -39,17 +38,17 @@ export async function handler(
   const isAdmin = ctx.role === Role.SOLFACIL_ADMIN;
   const rlsOrgId = isAdmin ? null : ctx.orgId;
 
-  // ── 並行查詢 7 個資料來源 (v5.12: de-hardcoded) ──────────
   const [
     assetResult,
     revenueResult,
-    metricsResult,
+    selfConsumptionResult,
     dispatchResult,
     monthlyResult,
     deltaResult,
     accuracyLatencyResult,
+    uptimeResult,
   ] = await Promise.all([
-    // 查詢 1：資產聚合（assets JOIN device_state）
+    // Query 1: Asset aggregation (assets JOIN device_state)
     queryWithOrg(
       `SELECT
          COUNT(a.asset_id)::int                                      AS total_assets,
@@ -65,28 +64,27 @@ export async function handler(
       [],
       rlsOrgId,
     ),
-    // 查詢 2：今日雙層收益（revenue_daily）
+    // Query 2: Today's revenue — v5.13: use client_savings as primary
     queryWithOrg(
       `SELECT
          COALESCE(SUM(vpp_arbitrage_profit_reais), 0) AS vpp_profit,
          COALESCE(SUM(client_savings_reais), 0)        AS client_savings,
-         COALESCE(SUM(profit_reais), 0)                AS legacy_profit
+         COALESCE(SUM(client_savings_reais), 0)        AS legacy_profit
        FROM revenue_daily
        WHERE date = CURRENT_DATE`,
       [],
       rlsOrgId,
     ),
-    // 查詢 3：最新 self_consumption（algorithm_metrics）
+    // Query 3: v5.13: Self-consumption from revenue_daily instead of algorithm_metrics
     queryWithOrg(
-      `SELECT self_consumption_pct
-       FROM algorithm_metrics
-       WHERE date <= CURRENT_DATE
-       ORDER BY date DESC
-       LIMIT 1`,
+      `SELECT ROUND(AVG(actual_self_consumption_pct), 1) AS self_consumption_pct
+       FROM revenue_daily
+       WHERE date >= CURRENT_DATE - 7
+         AND actual_self_consumption_pct IS NOT NULL`,
       [],
       rlsOrgId,
     ),
-    // 查詢 4：v5.10 dispatch KPIs from dispatch_commands
+    // Query 4: dispatch KPIs from dispatch_commands
     queryWithOrg(
       `SELECT
          COUNT(*) FILTER (WHERE status = 'completed')::int AS success_count,
@@ -96,25 +94,25 @@ export async function handler(
       [],
       rlsOrgId,
     ),
-    // 查詢 5 (v5.12): monthly revenue
+    // Query 5: v5.13: monthly revenue — use client_savings
     queryWithOrg(
-      `SELECT COALESCE(SUM(revenue_reais), 0) AS monthly_revenue
+      `SELECT COALESCE(SUM(client_savings_reais), 0) AS monthly_revenue
        FROM revenue_daily
        WHERE date >= date_trunc('month', CURRENT_DATE)`,
       [],
       rlsOrgId,
     ),
-    // 查詢 6 (v5.12): self-consumption delta (today vs yesterday)
+    // Query 6: self-consumption delta (today vs yesterday) — v5.13: from revenue_daily
     queryWithOrg(
       `SELECT
-         (SELECT self_consumption_pct FROM algorithm_metrics
-          WHERE date = CURRENT_DATE ORDER BY date DESC LIMIT 1) -
-         (SELECT self_consumption_pct FROM algorithm_metrics
-          WHERE date = CURRENT_DATE - 1 ORDER BY date DESC LIMIT 1) AS delta`,
+         (SELECT ROUND(AVG(actual_self_consumption_pct), 1) FROM revenue_daily
+          WHERE date = CURRENT_DATE AND actual_self_consumption_pct IS NOT NULL) -
+         (SELECT ROUND(AVG(actual_self_consumption_pct), 1) FROM revenue_daily
+          WHERE date = CURRENT_DATE - 1 AND actual_self_consumption_pct IS NOT NULL) AS delta`,
       [],
       rlsOrgId,
     ),
-    // 查詢 7 (v5.12): dispatch accuracy + latency from dispatch_records (last 7 days)
+    // Query 7: dispatch accuracy + latency from dispatch_records (last 7 days)
     queryWithOrg(
       `SELECT
          ROUND(100.0 * COUNT(*) FILTER (WHERE success = true)
@@ -126,24 +124,33 @@ export async function handler(
       [],
       rlsOrgId,
     ),
+    // Query 8: v5.13 NEW: Gateway uptime from daily_uptime_snapshots
+    queryWithOrg(
+      `SELECT ROUND(AVG(uptime_pct), 1) AS gateway_uptime
+       FROM daily_uptime_snapshots
+       WHERE date >= CURRENT_DATE - 7`,
+      [],
+      rlsOrgId,
+    ),
   ]);
 
   const agg = assetResult.rows[0] as Record<string, unknown>;
   const rev = revenueResult.rows[0] as Record<string, unknown>;
+
+  // v5.13: Self-consumption from revenue_daily
   const selfConsumptionPct =
-    metricsResult.rows.length > 0
-      ? parseFloat(String(metricsResult.rows[0].self_consumption_pct)).toFixed(
-          1,
-        )
+    selfConsumptionResult.rows.length > 0 &&
+    selfConsumptionResult.rows[0].self_consumption_pct !== null
+      ? parseFloat(
+          String(selfConsumptionResult.rows[0].self_consumption_pct),
+        ).toFixed(1)
       : "\u2014";
 
-  // v5.10: dispatch KPIs from DB (was hardcoded 156/160)
   const dispatchRow = dispatchResult.rows[0] as Record<string, unknown>;
   const dispatchSuccessCount = Number(dispatchRow?.success_count ?? 0);
   const dispatchTotalCount = Number(dispatchRow?.total_count ?? 0);
   const dispatchSuccessRate = `${dispatchSuccessCount}/${dispatchTotalCount}`;
 
-  // v5.12: de-hardcoded values
   const monthlyRevenueReais = Math.round(
     Number(
       (monthlyResult.rows[0] as Record<string, unknown>)?.monthly_revenue ?? 0,
@@ -161,39 +168,46 @@ export async function handler(
   const vppDispatchAccuracy = parseFloat(String(accLatRow?.accuracy ?? 0));
   const drResponseLatency = parseFloat(String(accLatRow?.avg_latency_s ?? 0));
 
+  // v5.13: Gateway uptime from DB (was hardcoded 99.9)
+  const gatewayUptime = parseFloat(
+    String(
+      (uptimeResult.rows[0] as Record<string, unknown>)?.gateway_uptime ?? 99.9,
+    ),
+  );
+
   const body = ok({
-    // === DB 真實聚合：資產統計 ===
+    // === DB: Asset statistics ===
     totalAssets: agg.total_assets as number,
     onlineAssets: agg.online_assets as number,
     avgSoc: Math.round(parseFloat(String(agg.avg_soc))),
     totalPowerKw: parseFloat(String(agg.total_load_kw)).toFixed(1),
     totalPvKw: parseFloat(String(agg.total_pv_kw)).toFixed(1),
 
-    // === DB 真實聚合：財務 KPI（v5.5 雙層） ===
-    dailyRevenueReais: Math.round(Number(rev.vpp_profit)),
+    // === v5.13: Revenue KPIs — Tarifa Branca client_savings as primary ===
+    dailyRevenueReais: Math.round(Number(rev.client_savings)),
     monthlyRevenueReais,
 
-    // === DB 真實聚合：演算法 KPI ===
+    // === v5.13: Self-consumption from revenue_daily ===
     selfConsumption: { value: selfConsumptionPct, delta: selfConsumptionDelta },
     dispatchSuccessCount,
     dispatchTotalCount,
     systemHealthBlock,
 
-    // === v5.12: de-hardcoded from dispatch_records ===
+    // === v5.13: de-hardcoded gatewayUptime ===
     vppDispatchAccuracy,
     drResponseLatency,
-    gatewayUptime: 99.9, // TODO: derive from daily_uptime_snapshots
+    gatewayUptime,
     dispatchSuccessRate,
 
-    // === Revenue Breakdown（圓環圖）— v5.5 雙層：B端 + C端 + 其他 ===
+    // === Revenue Breakdown — v5.13: Tarifa Branca Savings primary ===
     revenueBreakdown: {
       values: [
-        Math.round(Number(rev.vpp_profit)),
         Math.round(Number(rev.client_savings)),
+        Math.round(Number(rev.vpp_profit)),
         0,
       ],
-      colors: ["#3730a3", "#059669", "#d97706"],
-      labels: ["VPP Arbitrage", "Client Savings", "Other"],
+      colors: ["#059669", "#3730a3", "#d97706"],
+      labels: ["Tarifa Branca Savings", "VPP Arbitrage (Future)", "Other"],
     },
 
     _tenant: { orgId: ctx.orgId, role: ctx.role },

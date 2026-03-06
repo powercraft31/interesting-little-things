@@ -20,13 +20,25 @@ export async function runHourlyAggregation(pool: Pool): Promise<void> {
       asset_id: string;
       charge: string;
       discharge: string;
+      pv_generation: string;
+      grid_import: string;
+      grid_export: string;
+      load_consumption: string;
+      avg_soc: string;
+      peak_bat_power: string;
       count: string;
     }>(
       `SELECT
          asset_id,
-         SUM(CASE WHEN energy_kwh > 0 THEN energy_kwh ELSE 0 END) AS charge,
-         SUM(CASE WHEN energy_kwh < 0 THEN ABS(energy_kwh) ELSE 0 END) AS discharge,
-         COUNT(*) AS count
+         SUM(CASE WHEN battery_power > 0 THEN battery_power * (1.0/4) ELSE 0 END)     AS charge,
+         SUM(CASE WHEN battery_power < 0 THEN ABS(battery_power) * (1.0/4) ELSE 0 END) AS discharge,
+         SUM(COALESCE(pv_power, 0) * (1.0/4))                                           AS pv_generation,
+         SUM(CASE WHEN grid_power_kw > 0 THEN grid_power_kw * (1.0/4) ELSE 0 END)      AS grid_import,
+         SUM(CASE WHEN grid_power_kw < 0 THEN ABS(grid_power_kw) * (1.0/4) ELSE 0 END) AS grid_export,
+         SUM(COALESCE(load_power, 0) * (1.0/4))                                          AS load_consumption,
+         AVG(battery_soc)                                                                 AS avg_soc,
+         MAX(ABS(COALESCE(battery_power, 0)))                                             AS peak_bat_power,
+         COUNT(*)                                                                         AS count
        FROM telemetry_history
        WHERE recorded_at >= $1 AND recorded_at < $2
        GROUP BY asset_id`,
@@ -36,18 +48,33 @@ export async function runHourlyAggregation(pool: Pool): Promise<void> {
     for (const row of result.rows) {
       await pool.query(
         `INSERT INTO asset_hourly_metrics
-           (asset_id, hour_timestamp, total_charge_kwh, total_discharge_kwh, data_points_count, created_at, updated_at)
-         VALUES ($1, $2, $3, $4, $5, NOW(), NOW())
+           (asset_id, hour_timestamp, total_charge_kwh, total_discharge_kwh,
+            pv_generation_kwh, grid_import_kwh, grid_export_kwh,
+            load_consumption_kwh, avg_battery_soc, peak_battery_power_kw,
+            data_points_count, created_at, updated_at)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, NOW(), NOW())
          ON CONFLICT (asset_id, hour_timestamp) DO UPDATE SET
-           total_charge_kwh    = EXCLUDED.total_charge_kwh,
-           total_discharge_kwh = EXCLUDED.total_discharge_kwh,
-           data_points_count   = EXCLUDED.data_points_count,
-           updated_at          = NOW()`,
+           total_charge_kwh      = EXCLUDED.total_charge_kwh,
+           total_discharge_kwh   = EXCLUDED.total_discharge_kwh,
+           pv_generation_kwh     = EXCLUDED.pv_generation_kwh,
+           grid_import_kwh       = EXCLUDED.grid_import_kwh,
+           grid_export_kwh       = EXCLUDED.grid_export_kwh,
+           load_consumption_kwh  = EXCLUDED.load_consumption_kwh,
+           avg_battery_soc       = EXCLUDED.avg_battery_soc,
+           peak_battery_power_kw = EXCLUDED.peak_battery_power_kw,
+           data_points_count     = EXCLUDED.data_points_count,
+           updated_at            = NOW()`,
         [
           row.asset_id,
           hourStart.toISOString(),
           parseFloat(row.charge),
           parseFloat(row.discharge),
+          parseFloat(row.pv_generation),
+          parseFloat(row.grid_import),
+          parseFloat(row.grid_export),
+          parseFloat(row.load_consumption),
+          row.avg_soc ? parseFloat(row.avg_soc) : null,
+          row.peak_bat_power ? parseFloat(row.peak_bat_power) : null,
           parseInt(row.count, 10),
         ],
       );

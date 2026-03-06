@@ -14,7 +14,7 @@
 var DataSource = (function () {
   // ── Configuration ─────────────────────────────────────────
   var API_BASE = window.SOLFACIL_API_BASE || "http://localhost:3000";
-  var USE_LIVE_API = false; // Toggle: false = mock, true = live API
+  var USE_LIVE_API = true; // Toggle: false = mock, true = live API
 
   // ── Helpers ───────────────────────────────────────────────
   function apiGet(path) {

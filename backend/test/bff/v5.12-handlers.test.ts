@@ -76,14 +76,21 @@ function makeEvent(
 }
 
 function adminToken(): string {
-  return JSON.stringify({ userId: "admin", orgId: "SOLFACIL", role: "SOLFACIL_ADMIN" });
+  return JSON.stringify({
+    userId: "admin",
+    orgId: "SOLFACIL",
+    role: "SOLFACIL_ADMIN",
+  });
 }
 
 function orgToken(orgId = "ORG_ENERGIA_001", role = "ORG_MANAGER"): string {
   return JSON.stringify({ userId: "u1", orgId, role });
 }
 
-function parseBody(result: APIGatewayProxyStructuredResultV2): { success: boolean; data: Record<string, unknown> } {
+function parseBody(result: APIGatewayProxyStructuredResultV2): {
+  success: boolean;
+  data: Record<string, unknown>;
+} {
   return JSON.parse(result.body as string);
 }
 
@@ -102,16 +109,29 @@ beforeEach(() => {
 describe("GET /api/fleet/overview", () => {
   it("returns fleet aggregate KPIs (admin)", async () => {
     mockQueryWithOrg
-      .mockResolvedValueOnce({ rows: [{ total_devices: 47, online_count: 44, offline_count: 3, online_rate: 93.6 }] })
-      .mockResolvedValueOnce({ rows: [
-        { type: "INVERTER_BATTERY", count: 20, online: 19 },
-        { type: "SMART_METER", count: 12, online: 12 },
-      ] })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            total_devices: 47,
+            online_count: 44,
+            offline_count: 3,
+            online_rate: 93.6,
+          },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          { type: "INVERTER_BATTERY", count: 20, online: 19 },
+          { type: "SMART_METER", count: 12, online: 12 },
+        ],
+      })
       .mockResolvedValueOnce({ rows: [{ total_homes: 3 }] })
       .mockResolvedValueOnce({ rows: [{ total_integradores: 2 }] });
 
     const event = makeEvent("GET", "/api/fleet/overview", adminToken());
-    const result = (await fleetOverviewHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await fleetOverviewHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
@@ -125,7 +145,9 @@ describe("GET /api/fleet/overview", () => {
 
   it("returns 401 with empty auth", async () => {
     const event = makeEvent("GET", "/api/fleet/overview", "");
-    const result = (await fleetOverviewHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await fleetOverviewHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
     expect(result.statusCode).toBe(401);
   });
 });
@@ -138,17 +160,26 @@ describe("GET /api/fleet/integradores", () => {
   it("returns integrador list for admin", async () => {
     mockQueryWithOrg.mockResolvedValueOnce({
       rows: [
-        { org_id: "ORG_ENERGIA_001", name: "Solar São Paulo", device_count: 26, online_rate: 96.2, last_commission: "2024-11-15T10:00:00Z" },
+        {
+          org_id: "ORG_ENERGIA_001",
+          name: "Solar São Paulo",
+          device_count: 26,
+          online_rate: 96.2,
+          last_commission: "2024-11-15T10:00:00Z",
+        },
       ],
     });
 
     const event = makeEvent("GET", "/api/fleet/integradores", adminToken());
-    const result = (await fleetIntegradoresHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await fleetIntegradoresHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
     expect(body.data).toHaveProperty("integradores");
-    const integradores = (body.data as Record<string, unknown>).integradores as Array<Record<string, unknown>>;
+    const integradores = (body.data as Record<string, unknown>)
+      .integradores as Array<Record<string, unknown>>;
     expect(integradores.length).toBeGreaterThanOrEqual(1);
     expect(integradores[0]).toHaveProperty("orgId");
     expect(integradores[0]).toHaveProperty("deviceCount");
@@ -156,7 +187,9 @@ describe("GET /api/fleet/integradores", () => {
 
   it("returns 403 for non-admin", async () => {
     const event = makeEvent("GET", "/api/fleet/integradores", orgToken());
-    const result = (await fleetIntegradoresHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await fleetIntegradoresHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
     expect(result.statusCode).toBe(403);
   });
 });
@@ -169,12 +202,20 @@ describe("GET /api/fleet/offline-events", () => {
   it("returns offline events list", async () => {
     mockQueryWithOrg.mockResolvedValueOnce({
       rows: [
-        { device_id: "DEV-016", start: "2026-03-05T10:00:00Z", duration_hrs: 2.5, cause: "network", backfill: false },
+        {
+          device_id: "DEV-016",
+          start: "2026-03-05T10:00:00Z",
+          duration_hrs: 2.5,
+          cause: "network",
+          backfill: false,
+        },
       ],
     });
 
     const event = makeEvent("GET", "/api/fleet/offline-events", adminToken());
-    const result = (await fleetOfflineEventsHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await fleetOfflineEventsHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
@@ -196,12 +237,16 @@ describe("GET /api/fleet/uptime-trend", () => {
     });
 
     const event = makeEvent("GET", "/api/fleet/uptime-trend", adminToken());
-    const result = (await fleetUptimeTrendHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await fleetUptimeTrendHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
     expect(body.data).toHaveProperty("trend");
-    const trend = (body.data as Record<string, unknown>).trend as Array<Record<string, unknown>>;
+    const trend = (body.data as Record<string, unknown>).trend as Array<
+      Record<string, unknown>
+    >;
     expect(trend.length).toBe(2);
     expect(trend[0]).toHaveProperty("date");
     expect(trend[0]).toHaveProperty("uptime");
@@ -217,22 +262,33 @@ describe("GET /api/devices", () => {
     mockQueryWithOrg.mockResolvedValueOnce({
       rows: [
         {
-          device_id: "DEV-005", type: "INVERTER_BATTERY", brand: "Growatt",
-          model: "MIN 5000TL-XH", home_id: "HOME-001", home_name: "Casa Silva",
-          org_id: "ORG_ENERGIA_001", org_name: "Solar São Paulo",
-          status: "online", last_seen: "2026-03-05T12:00:00Z",
-          commission_date: "2024-04-01T10:00:00Z", telemetry: {},
+          device_id: "DEV-005",
+          type: "INVERTER_BATTERY",
+          brand: "Growatt",
+          model: "MIN 5000TL-XH",
+          home_id: "HOME-001",
+          home_name: "Casa Silva",
+          org_id: "ORG_ENERGIA_001",
+          org_name: "Solar São Paulo",
+          status: "online",
+          last_seen: "2026-03-05T12:00:00Z",
+          commission_date: "2024-04-01T10:00:00Z",
+          telemetry: {},
         },
       ],
     });
 
     const event = makeEvent("GET", "/api/devices", adminToken());
-    const result = (await devicesHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await devicesHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
     expect(body.data).toHaveProperty("devices");
-    const devices = (body.data as Record<string, unknown>).devices as Array<Record<string, unknown>>;
+    const devices = (body.data as Record<string, unknown>).devices as Array<
+      Record<string, unknown>
+    >;
     expect(devices[0]).toHaveProperty("deviceId", "DEV-005");
     expect(devices[0]).toHaveProperty("brand", "Growatt");
     expect(devices[0]).toHaveProperty("telemetry");
@@ -247,18 +303,34 @@ describe("GET /api/homes", () => {
   it("returns home list with device count", async () => {
     mockQueryWithOrg.mockResolvedValueOnce({
       rows: [
-        { id: "HOME-001", name: "Casa Silva", org_id: "ORG_ENERGIA_001", org_name: "Solar SP", device_count: 13 },
-        { id: "HOME-002", name: "Casa Santos", org_id: "ORG_ENERGIA_001", org_name: "Solar SP", device_count: 15 },
+        {
+          id: "HOME-001",
+          name: "Casa Silva",
+          org_id: "ORG_ENERGIA_001",
+          org_name: "Solar SP",
+          device_count: 13,
+        },
+        {
+          id: "HOME-002",
+          name: "Casa Santos",
+          org_id: "ORG_ENERGIA_001",
+          org_name: "Solar SP",
+          device_count: 15,
+        },
       ],
     });
 
     const event = makeEvent("GET", "/api/homes", adminToken());
-    const result = (await homesHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await homesHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
     expect(body.data).toHaveProperty("homes");
-    const homes = (body.data as Record<string, unknown>).homes as Array<Record<string, unknown>>;
+    const homes = (body.data as Record<string, unknown>).homes as Array<
+      Record<string, unknown>
+    >;
     expect(homes.length).toBe(2);
     expect(homes[0]).toHaveProperty("deviceCount");
   });
@@ -273,7 +345,9 @@ describe("GET /api/homes/:homeId/energy", () => {
     mockQueryWithOrg.mockResolvedValueOnce({ rows: [] }); // No telemetry data — returns zeros
 
     const event = makeEvent("GET", "/api/homes/HOME-001/energy", adminToken());
-    const result = (await homeEnergyHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await homeEnergyHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
@@ -284,7 +358,8 @@ describe("GET /api/homes/:homeId/energy", () => {
     expect(body.data).toHaveProperty("battery");
     expect(body.data).toHaveProperty("grid");
     expect(body.data).toHaveProperty("soc");
-    const labels = (body.data as Record<string, unknown>).timeLabels as string[];
+    const labels = (body.data as Record<string, unknown>)
+      .timeLabels as string[];
     expect(labels.length).toBe(96);
     expect(labels[0]).toBe("00:00");
     expect(labels[95]).toBe("23:45");
@@ -292,7 +367,9 @@ describe("GET /api/homes/:homeId/energy", () => {
 
   it("returns 400 when homeId is missing", async () => {
     const event = makeEvent("GET", "/api/homes//energy", adminToken());
-    const result = (await homeEnergyHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await homeEnergyHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
     expect(result.statusCode).toBe(400);
   });
 });
@@ -305,12 +382,22 @@ describe("GET /api/homes/summary", () => {
   it("returns cross-home comparison", async () => {
     mockQueryWithOrg.mockResolvedValueOnce({
       rows: [
-        { home_id: "HOME-001", name: "Casa Silva", self_cons: 87, grid_export: 5.2, grid_import: 2.1, peak_load: 8.5, mode: "self_consumption" },
+        {
+          home_id: "HOME-001",
+          name: "Casa Silva",
+          self_cons: 87,
+          grid_export: 5.2,
+          grid_import: 2.1,
+          peak_load: 8.5,
+          mode: "self_consumption",
+        },
       ],
     });
 
     const event = makeEvent("GET", "/api/homes/summary", adminToken());
-    const result = (await homesSummaryHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await homesSummaryHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
@@ -325,23 +412,41 @@ describe("GET /api/homes/summary", () => {
 describe("GET /api/hems/overview", () => {
   it("returns mode distribution + tarifa + last dispatch", async () => {
     mockQueryWithOrg
-      .mockResolvedValueOnce({ rows: [
-        { operation_mode: "self_consumption", device_count: 22 },
-        { operation_mode: "peak_valley_arbitrage", device_count: 18 },
-      ] })
-      .mockResolvedValueOnce({ rows: [
-        { disco: "CEMIG", peak: 0.89, off_peak: 0.41, intermediate: 0.62, feed_in: 0.24, effective_date: "2025-01-01", peak_start: "17:00", peak_end: "22:00", intermediate_start: "16:00", intermediate_end: "21:00" },
-      ] })
+      .mockResolvedValueOnce({
+        rows: [
+          { operation_mode: "self_consumption", device_count: 22 },
+          { operation_mode: "peak_valley_arbitrage", device_count: 18 },
+        ],
+      })
+      .mockResolvedValueOnce({
+        rows: [
+          {
+            disco: "CEMIG",
+            peak: 0.89,
+            off_peak: 0.41,
+            intermediate: 0.62,
+            feed_in: 0.24,
+            effective_date: "2025-01-01",
+            peak_start: "17:00",
+            peak_end: "22:00",
+            intermediate_start: "16:00",
+            intermediate_end: "21:00",
+          },
+        ],
+      })
       .mockResolvedValueOnce({ rows: [] });
 
     const event = makeEvent("GET", "/api/hems/overview", adminToken());
-    const result = (await hemsOverviewHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await hemsOverviewHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
     expect(body.data).toHaveProperty("modeDistribution");
     expect(body.data).toHaveProperty("tarifaRates");
-    const modes = (body.data as Record<string, unknown>).modeDistribution as Record<string, number>;
+    const modes = (body.data as Record<string, unknown>)
+      .modeDistribution as Record<string, number>;
     expect(modes.self_consumption).toBe(22);
   });
 });
@@ -362,11 +467,19 @@ describe("POST /api/hems/dispatch", () => {
     // Next calls: INSERT dispatch commands (one per asset)
     mockQueryWithOrg.mockResolvedValue({ rows: [] });
 
-    const event = makeEvent("POST", "/api/hems/dispatch",
-      JSON.stringify({ userId: "u1", orgId: "ORG_ENERGIA_001", role: "ORG_OPERATOR" }),
+    const event = makeEvent(
+      "POST",
+      "/api/hems/dispatch",
+      JSON.stringify({
+        userId: "u1",
+        orgId: "ORG_ENERGIA_001",
+        role: "ORG_OPERATOR",
+      }),
       { body: JSON.stringify({ targetMode: "peak_shaving" }) },
     );
-    const result = (await hemsDispatchHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await hemsDispatchHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
@@ -375,20 +488,36 @@ describe("POST /api/hems/dispatch", () => {
   });
 
   it("rejects invalid targetMode", async () => {
-    const event = makeEvent("POST", "/api/hems/dispatch",
-      JSON.stringify({ userId: "u1", orgId: "ORG_ENERGIA_001", role: "ORG_OPERATOR" }),
+    const event = makeEvent(
+      "POST",
+      "/api/hems/dispatch",
+      JSON.stringify({
+        userId: "u1",
+        orgId: "ORG_ENERGIA_001",
+        role: "ORG_OPERATOR",
+      }),
       { body: JSON.stringify({ targetMode: "invalid_mode" }) },
     );
-    const result = (await hemsDispatchHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await hemsDispatchHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
     expect(result.statusCode).toBe(400);
   });
 
   it("rejects viewer role", async () => {
-    const event = makeEvent("POST", "/api/hems/dispatch",
-      JSON.stringify({ userId: "u1", orgId: "ORG_ENERGIA_001", role: "ORG_VIEWER" }),
+    const event = makeEvent(
+      "POST",
+      "/api/hems/dispatch",
+      JSON.stringify({
+        userId: "u1",
+        orgId: "ORG_ENERGIA_001",
+        role: "ORG_VIEWER",
+      }),
       { body: JSON.stringify({ targetMode: "peak_shaving" }) },
     );
-    const result = (await hemsDispatchHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await hemsDispatchHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
     expect(result.statusCode).toBe(403);
   });
 });
@@ -400,18 +529,22 @@ describe("POST /api/hems/dispatch", () => {
 describe("GET /api/vpp/capacity", () => {
   it("returns aggregated VPP capacity", async () => {
     mockQueryWithOrg.mockResolvedValueOnce({
-      rows: [{
-        total_capacity_kwh: 145.4,
-        available_kwh: 87.2,
-        aggregate_soc: 60.0,
-        max_discharge_kw: 92.6,
-        max_charge_kw: 74.1,
-        dispatchable_devices: 44,
-      }],
+      rows: [
+        {
+          total_capacity_kwh: 145.4,
+          available_kwh: 87.2,
+          aggregate_soc: 60.0,
+          max_discharge_kw: 92.6,
+          max_charge_kw: 74.1,
+          dispatchable_devices: 44,
+        },
+      ],
     });
 
     const event = makeEvent("GET", "/api/vpp/capacity", adminToken());
-    const result = (await vppCapacityHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await vppCapacityHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
@@ -440,12 +573,16 @@ describe("GET /api/vpp/latency", () => {
     });
 
     const event = makeEvent("GET", "/api/vpp/latency", adminToken());
-    const result = (await vppLatencyHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await vppLatencyHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
     expect(body.data).toHaveProperty("tiers");
-    const tiers = (body.data as Record<string, unknown>).tiers as Array<Record<string, unknown>>;
+    const tiers = (body.data as Record<string, unknown>).tiers as Array<
+      Record<string, unknown>
+    >;
     expect(tiers.length).toBe(7);
     expect(tiers[0]).toHaveProperty("tier", "1s");
     expect(tiers[0]).toHaveProperty("successRate");
@@ -460,17 +597,30 @@ describe("GET /api/vpp/dr-events", () => {
   it("returns DR event history", async () => {
     mockQueryWithOrg.mockResolvedValueOnce({
       rows: [
-        { id: "1", type: "Discharge", triggered_at: "2026-03-05T18:00:00Z", target_kw: 50.0, achieved_kw: 48.5, accuracy: 97.0, participated: 40, failed: 2 },
+        {
+          id: "1",
+          type: "Discharge",
+          triggered_at: "2026-03-05T18:00:00Z",
+          target_kw: 50.0,
+          achieved_kw: 48.5,
+          accuracy: 97.0,
+          participated: 40,
+          failed: 2,
+        },
       ],
     });
 
     const event = makeEvent("GET", "/api/vpp/dr-events", adminToken());
-    const result = (await vppDrEventsHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await vppDrEventsHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
     expect(body.data).toHaveProperty("events");
-    const events = (body.data as Record<string, unknown>).events as Array<Record<string, unknown>>;
+    const events = (body.data as Record<string, unknown>).events as Array<
+      Record<string, unknown>
+    >;
     expect(events[0]).toHaveProperty("type", "Discharge");
     expect(events[0]).toHaveProperty("accuracy");
   });
@@ -485,19 +635,34 @@ describe("GET /api/performance/scorecard", () => {
     mockQueryWithOrg
       .mockResolvedValueOnce({ rows: [{ avg_uptime: 96.5 }] })
       .mockResolvedValueOnce({ rows: [{ accuracy: 97.2, avg_latency_s: 1.5 }] })
-      .mockResolvedValueOnce({ rows: [{ backfill_rate: 85.0 }] });
+      .mockResolvedValueOnce({ rows: [{ backfill_rate: 85.0 }] })
+      .mockResolvedValueOnce({
+        rows: [{ total_savings: 120.5, total_capacity: 100 }],
+      })
+      .mockResolvedValueOnce({ rows: [{ avg_sc: 78.5 }] })
+      .mockResolvedValueOnce({
+        rows: [{ peak_rate: 0.82, offpeak_rate: 0.25 }],
+      });
 
     const event = makeEvent("GET", "/api/performance/scorecard", adminToken());
-    const result = (await perfScorecardHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await perfScorecardHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
     expect(body.data).toHaveProperty("hardware");
     expect(body.data).toHaveProperty("optimization");
     expect(body.data).toHaveProperty("operations");
-    const hw = (body.data as Record<string, unknown>).hardware as Array<Record<string, unknown>>;
-    const opt = (body.data as Record<string, unknown>).optimization as Array<Record<string, unknown>>;
-    const ops = (body.data as Record<string, unknown>).operations as Array<Record<string, unknown>>;
+    const hw = (body.data as Record<string, unknown>).hardware as Array<
+      Record<string, unknown>
+    >;
+    const opt = (body.data as Record<string, unknown>).optimization as Array<
+      Record<string, unknown>
+    >;
+    const ops = (body.data as Record<string, unknown>).operations as Array<
+      Record<string, unknown>
+    >;
     expect(hw.length).toBe(4);
     expect(opt.length).toBe(4);
     expect(ops.length).toBe(4);
@@ -521,18 +686,36 @@ describe("GET /api/performance/savings", () => {
   it("returns per-home savings breakdown", async () => {
     mockQueryWithOrg.mockResolvedValueOnce({
       rows: [
-        { home: "Casa Silva", total: 1250.50, alpha: 87.5, sc: 687.78, tou: 375.15, ps: 187.58 },
-        { home: "Casa Santos", total: 980.00, alpha: 82.1, sc: 539.00, tou: 294.00, ps: 147.00 },
+        {
+          home: "Casa Silva",
+          total: 1250.5,
+          alpha: 87.5,
+          sc: 687.78,
+          tou: 375.15,
+          ps: 187.58,
+        },
+        {
+          home: "Casa Santos",
+          total: 980.0,
+          alpha: 82.1,
+          sc: 539.0,
+          tou: 294.0,
+          ps: 147.0,
+        },
       ],
     });
 
     const event = makeEvent("GET", "/api/performance/savings", adminToken());
-    const result = (await perfSavingsHandler(event)) as APIGatewayProxyStructuredResultV2;
+    const result = (await perfSavingsHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
     expect(body.data).toHaveProperty("savings");
-    const savings = (body.data as Record<string, unknown>).savings as Array<Record<string, unknown>>;
+    const savings = (body.data as Record<string, unknown>).savings as Array<
+      Record<string, unknown>
+    >;
     expect(savings.length).toBe(2);
     expect(savings[0]).toHaveProperty("home", "Casa Silva");
     expect(savings[0]).toHaveProperty("total");
@@ -548,22 +731,82 @@ describe("GET /api/performance/savings", () => {
 
 describe("Auth enforcement on all v5.12 handlers", () => {
   const handlers = [
-    { name: "fleet/overview", handler: fleetOverviewHandler, method: "GET" as const, path: "/api/fleet/overview" },
-    { name: "fleet/uptime-trend", handler: fleetUptimeTrendHandler, method: "GET" as const, path: "/api/fleet/uptime-trend" },
-    { name: "devices", handler: devicesHandler, method: "GET" as const, path: "/api/devices" },
-    { name: "homes", handler: homesHandler, method: "GET" as const, path: "/api/homes" },
-    { name: "homes/summary", handler: homesSummaryHandler, method: "GET" as const, path: "/api/homes/summary" },
-    { name: "hems/overview", handler: hemsOverviewHandler, method: "GET" as const, path: "/api/hems/overview" },
-    { name: "vpp/capacity", handler: vppCapacityHandler, method: "GET" as const, path: "/api/vpp/capacity" },
-    { name: "vpp/latency", handler: vppLatencyHandler, method: "GET" as const, path: "/api/vpp/latency" },
-    { name: "vpp/dr-events", handler: vppDrEventsHandler, method: "GET" as const, path: "/api/vpp/dr-events" },
-    { name: "performance/scorecard", handler: perfScorecardHandler, method: "GET" as const, path: "/api/performance/scorecard" },
-    { name: "performance/savings", handler: perfSavingsHandler, method: "GET" as const, path: "/api/performance/savings" },
+    {
+      name: "fleet/overview",
+      handler: fleetOverviewHandler,
+      method: "GET" as const,
+      path: "/api/fleet/overview",
+    },
+    {
+      name: "fleet/uptime-trend",
+      handler: fleetUptimeTrendHandler,
+      method: "GET" as const,
+      path: "/api/fleet/uptime-trend",
+    },
+    {
+      name: "devices",
+      handler: devicesHandler,
+      method: "GET" as const,
+      path: "/api/devices",
+    },
+    {
+      name: "homes",
+      handler: homesHandler,
+      method: "GET" as const,
+      path: "/api/homes",
+    },
+    {
+      name: "homes/summary",
+      handler: homesSummaryHandler,
+      method: "GET" as const,
+      path: "/api/homes/summary",
+    },
+    {
+      name: "hems/overview",
+      handler: hemsOverviewHandler,
+      method: "GET" as const,
+      path: "/api/hems/overview",
+    },
+    {
+      name: "vpp/capacity",
+      handler: vppCapacityHandler,
+      method: "GET" as const,
+      path: "/api/vpp/capacity",
+    },
+    {
+      name: "vpp/latency",
+      handler: vppLatencyHandler,
+      method: "GET" as const,
+      path: "/api/vpp/latency",
+    },
+    {
+      name: "vpp/dr-events",
+      handler: vppDrEventsHandler,
+      method: "GET" as const,
+      path: "/api/vpp/dr-events",
+    },
+    {
+      name: "performance/scorecard",
+      handler: perfScorecardHandler,
+      method: "GET" as const,
+      path: "/api/performance/scorecard",
+    },
+    {
+      name: "performance/savings",
+      handler: perfSavingsHandler,
+      method: "GET" as const,
+      path: "/api/performance/savings",
+    },
   ];
 
-  it.each(handlers)("$name returns 401 with empty auth", async ({ handler, method, path }) => {
-    const event = makeEvent(method, path, "");
-    const result = (await handler(event)) as APIGatewayProxyStructuredResultV2;
-    expect(result.statusCode).toBe(401);
-  });
+  it.each(handlers)(
+    "$name returns 401 with empty auth",
+    async ({ handler, method, path }) => {
+      const event = makeEvent(method, path, "");
+      const result = (await handler(
+        event,
+      )) as APIGatewayProxyStructuredResultV2;
+      expect(result.statusCode).toBe(401);
+    },
+  );
 });

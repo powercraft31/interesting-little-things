@@ -10,6 +10,7 @@ import {
   apiError,
 } from "../middleware/auth";
 import { queryWithOrg } from "../../shared/db";
+import { calculateOptimizationAlpha } from "../../shared/tarifa";
 
 interface Metric {
   readonly name: string;
@@ -43,66 +44,203 @@ export async function handler(
   const isAdmin = ctx.role === Role.SOLFACIL_ADMIN;
   const rlsOrgId = isAdmin ? null : ctx.orgId;
 
-  const [uptimeResult, dispatchResult, offlineResult] = await Promise.all([
-    // 4-week uptime average
-    queryWithOrg(
-      `SELECT ROUND(AVG(uptime_pct), 1) AS avg_uptime
-       FROM daily_uptime_snapshots
-       WHERE date >= CURRENT_DATE - 28`,
-      [],
-      rlsOrgId,
-    ),
-    // Dispatch accuracy (last 7 days)
-    queryWithOrg(
-      `SELECT
-         ROUND(100.0 * COUNT(*) FILTER (WHERE success = true) / NULLIF(COUNT(*), 0), 1) AS accuracy,
-         ROUND(AVG(response_latency_ms) / 1000.0, 1) AS avg_latency_s
-       FROM dispatch_records
-       WHERE dispatched_at >= CURRENT_DATE - 7
-         AND response_latency_ms IS NOT NULL`,
-      [],
-      rlsOrgId,
-    ),
-    // Offline resilience (backfill rate)
-    queryWithOrg(
-      `SELECT
-         ROUND(100.0 * COUNT(*) FILTER (WHERE backfill = true) / NULLIF(COUNT(*), 0), 1) AS backfill_rate
-       FROM offline_events`,
-      [],
-      rlsOrgId,
-    ),
-  ]);
+  const [uptimeResult, dispatchResult, offlineResult, savingsResult, scResult] =
+    await Promise.all([
+      // 4-week uptime average
+      queryWithOrg(
+        `SELECT ROUND(AVG(uptime_pct), 1) AS avg_uptime
+         FROM daily_uptime_snapshots
+         WHERE date >= CURRENT_DATE - 28`,
+        [],
+        rlsOrgId,
+      ),
+      // Dispatch accuracy (last 7 days)
+      queryWithOrg(
+        `SELECT
+           ROUND(100.0 * COUNT(*) FILTER (WHERE success = true) / NULLIF(COUNT(*), 0), 1) AS accuracy,
+           ROUND(AVG(response_latency_ms) / 1000.0, 1) AS avg_latency_s
+         FROM dispatch_records
+         WHERE dispatched_at >= CURRENT_DATE - 7
+           AND response_latency_ms IS NOT NULL`,
+        [],
+        rlsOrgId,
+      ),
+      // Offline resilience (backfill rate)
+      queryWithOrg(
+        `SELECT
+           ROUND(100.0 * COUNT(*) FILTER (WHERE backfill = true) / NULLIF(COUNT(*), 0), 1) AS backfill_rate
+         FROM offline_events`,
+        [],
+        rlsOrgId,
+      ),
+      // v5.13: Savings Alpha — last 30 days
+      queryWithOrg(
+        `SELECT
+           COALESCE(SUM(rd.client_savings_reais), 0) AS total_savings,
+           COALESCE(SUM(a.capacity_kwh), 0) AS total_capacity
+         FROM revenue_daily rd
+         JOIN assets a ON a.asset_id = rd.asset_id AND a.is_active = true
+         WHERE rd.date >= CURRENT_DATE - 30`,
+        [],
+        rlsOrgId,
+      ),
+      // v5.13: Self-Consumption — latest 7-day average
+      queryWithOrg(
+        `SELECT ROUND(AVG(actual_self_consumption_pct), 1) AS avg_sc
+         FROM revenue_daily
+         WHERE date >= CURRENT_DATE - 7
+           AND actual_self_consumption_pct IS NOT NULL`,
+        [],
+        rlsOrgId,
+      ),
+    ]);
 
-  const avgUptime = parseFloat(String((uptimeResult.rows[0] as Record<string, unknown>)?.avg_uptime ?? 95));
-  const dispatchRow = dispatchResult.rows[0] as Record<string, unknown> | undefined;
+  const avgUptime = parseFloat(
+    String(
+      (uptimeResult.rows[0] as Record<string, unknown>)?.avg_uptime ?? 95,
+    ),
+  );
+  const dispatchRow = dispatchResult.rows[0] as
+    | Record<string, unknown>
+    | undefined;
   const dispatchAccuracy = parseFloat(String(dispatchRow?.accuracy ?? 0));
-  const backfillRate = parseFloat(String((offlineResult.rows[0] as Record<string, unknown>)?.backfill_rate ?? 0));
+  const backfillRate = parseFloat(
+    String(
+      (offlineResult.rows[0] as Record<string, unknown>)?.backfill_rate ?? 0,
+    ),
+  );
 
-  function evalStatus(value: number, target: number, nearThreshold: number): "pass" | "near" | "warn" {
+  // v5.13: Savings Alpha calculation
+  const savingsRow = savingsResult.rows[0] as Record<string, unknown>;
+  const totalSavings = parseFloat(String(savingsRow?.total_savings ?? 0));
+  const totalCapacity = parseFloat(String(savingsRow?.total_capacity ?? 0));
+
+  // Fetch tariff schedule for org (or use defaults)
+  const tariffRow = await queryWithOrg(
+    `SELECT peak_rate, offpeak_rate FROM tariff_schedules
+     WHERE effective_from <= CURRENT_DATE
+       AND (effective_to IS NULL OR effective_to >= CURRENT_DATE)
+     ORDER BY effective_from DESC LIMIT 1`,
+    [],
+    rlsOrgId,
+  );
+  const tariff = tariffRow.rows[0] as Record<string, unknown> | undefined;
+  const schedule = {
+    peakRate: parseFloat(String(tariff?.peak_rate ?? 0.82)),
+    offpeakRate: parseFloat(String(tariff?.offpeak_rate ?? 0.25)),
+    intermediateRate: null,
+  };
+
+  const savingsAlpha =
+    totalCapacity > 0
+      ? calculateOptimizationAlpha(totalSavings, totalCapacity, schedule, 30)
+      : 0;
+
+  // v5.13: Self-consumption from query
+  const scRow = scResult.rows[0] as Record<string, unknown>;
+  const selfConsumptionPct = parseFloat(String(scRow?.avg_sc ?? 0));
+
+  function evalStatus(
+    value: number,
+    target: number,
+    nearThreshold: number,
+  ): "pass" | "near" | "warn" {
     if (value >= target) return "pass";
     if (value >= nearThreshold) return "near";
     return "warn";
   }
 
   const hardware: Metric[] = [
-    { name: "Commissioning Time", value: 45, unit: "min", target: 60, status: "pass" },
-    { name: "Offline Resilience", value: backfillRate, unit: "%", target: 80, status: evalStatus(backfillRate, 80, 60) },
-    { name: "Uptime (4 weeks)", value: avgUptime, unit: "%", target: 95, status: evalStatus(avgUptime, 95, 90) },
-    { name: "First Telemetry", value: 5, unit: "min", target: 10, status: "pass" },
+    {
+      name: "Commissioning Time",
+      value: 45,
+      unit: "min",
+      target: 60,
+      status: "pass",
+    },
+    {
+      name: "Offline Resilience",
+      value: backfillRate,
+      unit: "%",
+      target: 80,
+      status: evalStatus(backfillRate, 80, 60),
+    },
+    {
+      name: "Uptime (4 weeks)",
+      value: avgUptime,
+      unit: "%",
+      target: 95,
+      status: evalStatus(avgUptime, 95, 90),
+    },
+    {
+      name: "First Telemetry",
+      value: 5,
+      unit: "min",
+      target: 10,
+      status: "pass",
+    },
   ];
 
   const optimization: Metric[] = [
-    { name: "Savings Alpha", value: 12.5, unit: "%", target: 10, status: "pass" },
-    { name: "Self-Consumption", value: 87, unit: "%", target: 80, status: "pass" },
-    { name: "PV Forecast MAPE", value: 8.2, unit: "%", target: 15, status: "pass" },
-    { name: "Load Forecast Adapt", value: 92, unit: "%", target: 85, status: "pass" },
+    {
+      name: "Savings Alpha",
+      value: savingsAlpha,
+      unit: "%",
+      target: 10,
+      status: evalStatus(savingsAlpha, 10, 5),
+    },
+    {
+      name: "Self-Consumption",
+      value: selfConsumptionPct,
+      unit: "%",
+      target: 80,
+      status: evalStatus(selfConsumptionPct, 80, 60),
+    },
+    {
+      name: "PV Forecast MAPE",
+      value: 8.2,
+      unit: "%",
+      target: 15,
+      status: "pass",
+    },
+    {
+      name: "Load Forecast Adapt",
+      value: 92,
+      unit: "%",
+      target: 85,
+      status: "pass",
+    },
   ];
 
   const operations: Metric[] = [
-    { name: "Dispatch Accuracy", value: dispatchAccuracy, unit: "%", target: 95, status: evalStatus(dispatchAccuracy, 95, 85) },
-    { name: "Training Time", value: 2, unit: "hrs", target: 4, status: "pass" },
-    { name: "Manual Interventions", value: 0, unit: "/week", target: 2, status: "pass" },
-    { name: "App Uptime", value: 99.9, unit: "%", target: 99.5, status: "pass" },
+    {
+      name: "Dispatch Accuracy",
+      value: dispatchAccuracy,
+      unit: "%",
+      target: 95,
+      status: evalStatus(dispatchAccuracy, 95, 85),
+    },
+    {
+      name: "Training Time",
+      value: 2,
+      unit: "hrs",
+      target: 4,
+      status: "pass",
+    },
+    {
+      name: "Manual Interventions",
+      value: 0,
+      unit: "/week",
+      target: 2,
+      status: "pass",
+    },
+    {
+      name: "App Uptime",
+      value: 99.9,
+      unit: "%",
+      target: 99.5,
+      status: "pass",
+    },
   ];
 
   const body = ok({
