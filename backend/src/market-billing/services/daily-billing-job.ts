@@ -1,8 +1,11 @@
 import cron from "node-cron";
 import { Pool } from "pg";
 import {
-  calculateDailySavings,
+  calculateBaselineCost,
+  calculateActualCost,
+  calculateBestTouCost,
   calculateSelfConsumption,
+  calculateSelfSufficiency,
   type TariffSchedule,
 } from "../../shared/tarifa";
 
@@ -24,28 +27,38 @@ export async function runDailyBilling(pool: Pool): Promise<void> {
 
     // -- M4 BOUNDARY RULE: reads asset_hourly_metrics only. NEVER query telemetry_history directly.
 
-    // Step 1: Fetch hour-level metrics for yesterday, per asset
+    // Step 1: Fetch hour-level metrics for yesterday, per asset — v5.14: add load + soc + DP params
     const hourlyResult = await pool.query<{
       asset_id: string;
       org_id: string;
       capacity_kwh: string;
+      soc_min_pct: string | null;
+      max_charge_rate_kw: string | null;
+      max_discharge_rate_kw: string | null;
       hour: number;
       total_charge_kwh: string;
       total_discharge_kwh: string;
       pv_generation_kwh: string;
       grid_import_kwh: string;
       grid_export_kwh: string;
+      load_consumption_kwh: string;
+      avg_battery_soc: string | null;
     }>(
       `SELECT
          ahm.asset_id,
          a.org_id,
          a.capacity_kwh,
+         a.soc_min_pct,
+         a.max_charge_rate_kw,
+         a.max_discharge_rate_kw,
          EXTRACT(HOUR FROM ahm.hour_timestamp AT TIME ZONE 'America/Sao_Paulo')::INT AS hour,
          ahm.total_charge_kwh,
          ahm.total_discharge_kwh,
          ahm.pv_generation_kwh,
          ahm.grid_import_kwh,
-         ahm.grid_export_kwh
+         ahm.grid_export_kwh,
+         ahm.load_consumption_kwh,
+         ahm.avg_battery_soc
        FROM asset_hourly_metrics ahm
        JOIN assets a ON a.asset_id = ahm.asset_id
        WHERE DATE(ahm.hour_timestamp AT TIME ZONE 'America/Sao_Paulo') = $1::date
@@ -88,53 +101,101 @@ export async function runDailyBilling(pool: Pool): Promise<void> {
       {
         orgId: string;
         capacityKwh: number;
+        socMinPct: number;
+        maxChargeRateKw: number;
+        maxDischargeRateKw: number;
         hours: Array<{
           hour: number;
           chargeKwh: number;
           dischargeKwh: number;
+          loadKwh: number;
+          pvKwh: number;
+          gridImportKwh: number;
         }>;
+        initialSoc: number;
         totalPvKwh: number;
         totalGridImportKwh: number;
         totalGridExportKwh: number;
         totalDischargeKwh: number;
+        totalLoadKwh: number;
       }
     >();
 
     for (const row of hourlyResult.rows) {
+      const capacityKwh = Number(row.capacity_kwh);
       let entry = assetMap.get(row.asset_id);
       if (!entry) {
         entry = {
           orgId: row.org_id,
-          capacityKwh: Number(row.capacity_kwh),
+          capacityKwh,
+          socMinPct: row.soc_min_pct ? Number(row.soc_min_pct) : 10,
+          maxChargeRateKw: row.max_charge_rate_kw ? Number(row.max_charge_rate_kw) : capacityKwh,
+          maxDischargeRateKw: row.max_discharge_rate_kw ? Number(row.max_discharge_rate_kw) : capacityKwh,
           hours: [],
+          initialSoc: capacityKwh * 0.5, // fallback: 50%
           totalPvKwh: 0,
           totalGridImportKwh: 0,
           totalGridExportKwh: 0,
           totalDischargeKwh: 0,
+          totalLoadKwh: 0,
         };
         assetMap.set(row.asset_id, entry);
       }
+      const loadKwh = Number(row.load_consumption_kwh);
+      const pvKwh = Number(row.pv_generation_kwh);
+      const gridImportKwh = Number(row.grid_import_kwh);
       entry.hours.push({
         hour: row.hour,
         chargeKwh: Number(row.total_charge_kwh),
         dischargeKwh: Number(row.total_discharge_kwh),
+        loadKwh,
+        pvKwh,
+        gridImportKwh,
       });
-      entry.totalPvKwh += Number(row.pv_generation_kwh);
-      entry.totalGridImportKwh += Number(row.grid_import_kwh);
+      // Use hour 0 SoC as initial SoC for DP
+      if (row.hour === 0 && row.avg_battery_soc) {
+        entry.initialSoc = (Number(row.avg_battery_soc) / 100) * entry.capacityKwh;
+      }
+      entry.totalPvKwh += pvKwh;
+      entry.totalGridImportKwh += gridImportKwh;
       entry.totalGridExportKwh += Number(row.grid_export_kwh);
       entry.totalDischargeKwh += Number(row.total_discharge_kwh);
+      entry.totalLoadKwh += loadKwh;
     }
 
     // Step 4: Calculate and UPSERT per asset
     for (const [assetId, entry] of assetMap) {
       const schedule = tariffByOrg.get(entry.orgId) ?? DEFAULT_SCHEDULE;
 
-      const clientSavings = calculateDailySavings(entry.hours, schedule);
+      const hourlyLoads = entry.hours.map(h => ({ hour: h.hour, loadKwh: h.loadKwh }));
+      const hourlyGridImports = entry.hours.map(h => ({ hour: h.hour, gridImportKwh: h.gridImportKwh }));
+      const hourlyData = entry.hours.map(h => ({ hour: h.hour, loadKwh: h.loadKwh, pvKwh: h.pvKwh }));
+
+      const baselineCost = calculateBaselineCost(hourlyLoads, schedule);
+      const actualCost = calculateActualCost(hourlyGridImports, schedule);
+
+      const dpResult = calculateBestTouCost({
+        hourlyData,
+        schedule,
+        capacity: entry.capacityKwh,
+        socInitial: entry.initialSoc,
+        socMinPct: entry.socMinPct,
+        maxChargeRateKw: entry.maxChargeRateKw,
+        maxDischargeRateKw: entry.maxDischargeRateKw,
+      });
 
       const selfConsumption = calculateSelfConsumption(
         entry.totalPvKwh,
         entry.totalGridExportKwh,
       );
+
+      const selfSufficiency = calculateSelfSufficiency(
+        entry.totalLoadKwh,
+        entry.totalGridImportKwh,
+      );
+
+      // client_savings_reais = baseline - actual (simple, correct)
+      const clientSavings = Math.round((baselineCost - actualCost) * 100) / 100;
 
       // PLD arbitrage kept for future-proofing (placeholder until PLD data is real)
       const arbitrageProfit = 0;
@@ -146,8 +207,10 @@ export async function runDailyBilling(pool: Pool): Promise<void> {
             revenue_reais, cost_reais, profit_reais,
             actual_self_consumption_pct,
             pv_energy_kwh, grid_export_kwh, grid_import_kwh, bat_discharged_kwh,
+            baseline_cost_reais, actual_cost_reais, best_tou_cost_reais,
+            self_sufficiency_pct,
             calculated_at)
-         VALUES ($1, $2, $3, $4, $4, 0, $4, $5, $6, $7, $8, $9, NOW())
+         VALUES ($1, $2, $3, $4, $4, 0, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, NOW())
          ON CONFLICT (asset_id, date) DO UPDATE SET
            vpp_arbitrage_profit_reais  = EXCLUDED.vpp_arbitrage_profit_reais,
            client_savings_reais        = EXCLUDED.client_savings_reais,
@@ -158,6 +221,10 @@ export async function runDailyBilling(pool: Pool): Promise<void> {
            grid_export_kwh             = EXCLUDED.grid_export_kwh,
            grid_import_kwh             = EXCLUDED.grid_import_kwh,
            bat_discharged_kwh          = EXCLUDED.bat_discharged_kwh,
+           baseline_cost_reais         = EXCLUDED.baseline_cost_reais,
+           actual_cost_reais           = EXCLUDED.actual_cost_reais,
+           best_tou_cost_reais         = EXCLUDED.best_tou_cost_reais,
+           self_sufficiency_pct        = EXCLUDED.self_sufficiency_pct,
            calculated_at               = EXCLUDED.calculated_at`,
         [
           assetId,
@@ -169,6 +236,10 @@ export async function runDailyBilling(pool: Pool): Promise<void> {
           entry.totalGridExportKwh,
           entry.totalGridImportKwh,
           entry.totalDischargeKwh,
+          baselineCost,
+          actualCost,
+          dpResult.bestCost,
+          selfSufficiency,
         ],
       );
     }

@@ -631,18 +631,17 @@ describe("GET /api/vpp/dr-events", () => {
 // ---------------------------------------------------------------------------
 
 describe("GET /api/performance/scorecard", () => {
-  it("returns 12 metrics in 3 categories", async () => {
+  it("returns 14 metrics in 3 categories (v5.14: Actual Savings + Optimization Efficiency + Self-Sufficiency)", async () => {
     mockQueryWithOrg
-      .mockResolvedValueOnce({ rows: [{ avg_uptime: 96.5 }] })
-      .mockResolvedValueOnce({ rows: [{ accuracy: 97.2, avg_latency_s: 1.5 }] })
-      .mockResolvedValueOnce({ rows: [{ backfill_rate: 85.0 }] })
+      .mockResolvedValueOnce({ rows: [{ avg_uptime: 96.5 }] }) // uptime
+      .mockResolvedValueOnce({ rows: [{ accuracy: 97.2, avg_latency_s: 1.5 }] }) // dispatch
+      .mockResolvedValueOnce({ rows: [{ backfill_rate: 85.0 }] }) // offline
       .mockResolvedValueOnce({
-        rows: [{ total_savings: 120.5, total_capacity: 100 }],
+        // v5.14: costs
+        rows: [{ total_baseline: 100, total_actual: 30, total_best_tou: 20 }],
       })
-      .mockResolvedValueOnce({ rows: [{ avg_sc: 78.5 }] })
-      .mockResolvedValueOnce({
-        rows: [{ peak_rate: 0.82, offpeak_rate: 0.25 }],
-      });
+      .mockResolvedValueOnce({ rows: [{ avg_sc: 78.5 }] }) // self-consumption
+      .mockResolvedValueOnce({ rows: [{ avg_ss: 62.3 }] }); // v5.14: self-sufficiency
 
     const event = makeEvent("GET", "/api/performance/scorecard", adminToken());
     const result = (await perfScorecardHandler(
@@ -664,17 +663,64 @@ describe("GET /api/performance/scorecard", () => {
       Record<string, unknown>
     >;
     expect(hw.length).toBe(4);
-    expect(opt.length).toBe(4);
+    expect(opt.length).toBe(6); // v5.14: was 4, now 6
     expect(ops.length).toBe(4);
+
+    // v5.14: Verify old "Savings Alpha" is gone
+    const metricNames = opt.map((m) => m.name);
+    expect(metricNames).not.toContain("Savings Alpha");
+    // v5.14: Verify new metrics are present
+    expect(metricNames).toContain("Actual Savings");
+    expect(metricNames).toContain("Optimization Efficiency");
+    expect(metricNames).toContain("Self-Sufficiency");
+    expect(metricNames).toContain("Self-Consumption");
+
     // Each metric has required fields
     for (const m of [...hw, ...opt, ...ops]) {
       expect(m).toHaveProperty("name");
-      expect(m).toHaveProperty("value");
       expect(m).toHaveProperty("unit");
       expect(m).toHaveProperty("target");
       expect(m).toHaveProperty("status");
       expect(["pass", "near", "warn"]).toContain(m.status);
     }
+
+    // v5.14: Verify Actual Savings calculation
+    // (100 - 30) / 100 * 100 = 70%
+    const actualSavings = opt.find((m) => m.name === "Actual Savings");
+    expect(actualSavings!.value).toBe(70);
+
+    // v5.14: Optimization Efficiency = (100 - 30) / (100 - 20) * 100 = 87.5%
+    const optEff = opt.find((m) => m.name === "Optimization Efficiency");
+    expect(optEff!.value).toBe(87.5);
+
+    // v5.14: Self-Sufficiency from query
+    const ss = opt.find((m) => m.name === "Self-Sufficiency");
+    expect(ss!.value).toBe(62.3);
+  });
+
+  it("returns null for Optimization Efficiency when baseline equals best_tou (divide-by-zero)", async () => {
+    mockQueryWithOrg
+      .mockResolvedValueOnce({ rows: [{ avg_uptime: 96.5 }] })
+      .mockResolvedValueOnce({ rows: [{ accuracy: 97.2, avg_latency_s: 1.5 }] })
+      .mockResolvedValueOnce({ rows: [{ backfill_rate: 85.0 }] })
+      .mockResolvedValueOnce({
+        rows: [{ total_baseline: 50, total_actual: 50, total_best_tou: 50 }],
+      })
+      .mockResolvedValueOnce({ rows: [{ avg_sc: 78.5 }] })
+      .mockResolvedValueOnce({ rows: [{ avg_ss: 0 }] });
+
+    const event = makeEvent("GET", "/api/performance/scorecard", adminToken());
+    const result = (await perfScorecardHandler(
+      event,
+    )) as APIGatewayProxyStructuredResultV2;
+
+    expect(result.statusCode).toBe(200);
+    const body = parseBody(result);
+    const opt = (body.data as Record<string, unknown>).optimization as Array<
+      Record<string, unknown>
+    >;
+    const optEff = opt.find((m) => m.name === "Optimization Efficiency");
+    expect(optEff!.value).toBeNull();
   });
 });
 

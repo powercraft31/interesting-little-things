@@ -17,6 +17,16 @@ describe("XuhengAdapter — MSG#4 parser", () => {
             total_bat_power: "-3.2",
             total_bat_dailyChargedEnergy: "12.5",
             total_bat_dailyDischargedEnergy: "8.3",
+            // v5.14 new fields
+            total_bat_soh: "98.2",
+            total_bat_vlotage: "51.6",
+            total_bat_current: "-6.2",
+            total_bat_temperature: "28.5",
+            total_bat_maxChargeVoltage: "57.6",
+            total_bat_maxChargeCurrent: "25.0",
+            total_bat_maxDischargeCurrent: "25.0",
+            total_bat_totalChargedEnergy: "1250.8",
+            total_bat_totalDischargedEnergy: "1180.3",
           },
         },
       ],
@@ -72,6 +82,20 @@ describe("XuhengAdapter — MSG#4 parser", () => {
     expect(result!.flloadPowerKw).toBe(0.5);
   });
 
+  it("parses v5.14 battery deep telemetry fields", () => {
+    const result = adapter.parse(MSG4_FIXTURE);
+    expect(result).not.toBeNull();
+    expect(result!.batterySoh).toBe(98.2);
+    expect(result!.batteryVoltage).toBe(51.6);
+    expect(result!.batteryCurrent).toBe(-6.2);
+    expect(result!.batteryTemperature).toBe(28.5);
+    expect(result!.maxChargeVoltage).toBe(57.6);
+    expect(result!.maxChargeCurrent).toBe(25.0);
+    expect(result!.maxDischargeCurrent).toBe(25.0);
+    expect(result!.totalChargeKwh).toBe(1250.8);
+    expect(result!.totalDischargeKwh).toBe(1180.3);
+  });
+
   it("parses timestamp correctly", () => {
     const result = adapter.parse(MSG4_FIXTURE);
     expect(result!.recordedAt).toBeInstanceOf(Date);
@@ -119,6 +143,16 @@ describe("XuhengAdapter — MSG#4 parser", () => {
     expect(result!.gridPowerKw).toBe(0);
     expect(result!.loadPowerKw).toBe(0);
     expect(result!.flloadPowerKw).toBe(0);
+    // v5.14: missing bat fields default to 0
+    expect(result!.batterySoh).toBe(0);
+    expect(result!.batteryVoltage).toBe(0);
+    expect(result!.batteryCurrent).toBe(0);
+    expect(result!.batteryTemperature).toBe(0);
+    expect(result!.maxChargeVoltage).toBe(0);
+    expect(result!.maxChargeCurrent).toBe(0);
+    expect(result!.maxDischargeCurrent).toBe(0);
+    expect(result!.totalChargeKwh).toBe(0);
+    expect(result!.totalDischargeKwh).toBe(0);
   });
 
   it("handles non-numeric string values safely", () => {

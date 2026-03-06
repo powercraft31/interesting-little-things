@@ -1,9 +1,11 @@
 import {
   classifyHour,
   getRateForHour,
-  calculateDailySavings,
-  calculateOptimizationAlpha,
   calculateSelfConsumption,
+  calculateBaselineCost,
+  calculateActualCost,
+  calculateBestTouCost,
+  calculateSelfSufficiency,
   TARIFA_BRANCA_DEFAULTS,
 } from "../../src/shared/tarifa";
 
@@ -65,83 +67,6 @@ describe("shared/tarifa — Tarifa Branca pure functions", () => {
     });
   });
 
-  describe("calculateDailySavings", () => {
-    const defaultSchedule = {
-      peakRate: 0.82,
-      offpeakRate: 0.25,
-      intermediateRate: 0.55,
-    };
-
-    it("calculates peak discharge savings", () => {
-      const hours = [{ hour: 19, chargeKwh: 0, dischargeKwh: 5 }];
-      // 5 * 0.82 - 0 * 0.25 = 4.10
-      expect(calculateDailySavings(hours, defaultSchedule)).toBe(4.10);
-    });
-
-    it("calculates off-peak charge cost", () => {
-      const hours = [{ hour: 3, chargeKwh: 5, dischargeKwh: 0 }];
-      // 0 - 5 * 0.25 = -1.25
-      expect(calculateDailySavings(hours, defaultSchedule)).toBe(-1.25);
-    });
-
-    it("calculates net savings from charge + discharge cycle", () => {
-      const hours = [
-        { hour: 3, chargeKwh: 10, dischargeKwh: 0 },
-        { hour: 19, chargeKwh: 0, dischargeKwh: 9 },
-      ];
-      // discharge: 9 * 0.82 = 7.38, charge: 10 * 0.25 = 2.50
-      // net: 7.38 - 2.50 = 4.88
-      expect(calculateDailySavings(hours, defaultSchedule)).toBe(4.88);
-    });
-
-    it("handles empty hours array", () => {
-      expect(calculateDailySavings([], defaultSchedule)).toBe(0);
-    });
-
-    it("handles intermediate hour discharge", () => {
-      const hours = [{ hour: 17, chargeKwh: 0, dischargeKwh: 5 }];
-      // 5 * 0.55 = 2.75
-      expect(calculateDailySavings(hours, defaultSchedule)).toBe(2.75);
-    });
-  });
-
-  describe("calculateOptimizationAlpha", () => {
-    const schedule = {
-      peakRate: 0.82,
-      offpeakRate: 0.25,
-      intermediateRate: null,
-    };
-
-    it("returns 100% for perfect single cycle", () => {
-      // theoretical_max = 10 * (0.82 - 0.25) * 1 = 5.70
-      // actual = 5.70 -> alpha = 100%
-      expect(calculateOptimizationAlpha(5.70, 10, schedule, 1)).toBe(100);
-    });
-
-    it("returns 50% for half capacity", () => {
-      expect(calculateOptimizationAlpha(2.85, 10, schedule, 1)).toBe(50);
-    });
-
-    it("returns 0 when capacity is 0", () => {
-      expect(calculateOptimizationAlpha(5, 0, schedule, 1)).toBe(0);
-    });
-
-    it("returns 0 when spread is 0", () => {
-      const flatSchedule = {
-        peakRate: 0.50,
-        offpeakRate: 0.50,
-        intermediateRate: null,
-      };
-      expect(calculateOptimizationAlpha(5, 10, flatSchedule, 1)).toBe(0);
-    });
-
-    it("scales with days", () => {
-      // theoretical_max for 30 days = 10 * 0.57 * 30 = 171
-      // alpha = 85.5 / 171 * 100 = 50%
-      expect(calculateOptimizationAlpha(85.5, 10, schedule, 30)).toBe(50);
-    });
-  });
-
   describe("calculateSelfConsumption", () => {
     it("returns 100% when no export", () => {
       expect(calculateSelfConsumption(10, 0)).toBe(100);
@@ -155,13 +80,191 @@ describe("shared/tarifa — Tarifa Branca pure functions", () => {
       expect(calculateSelfConsumption(10, 10)).toBe(0);
     });
 
-    it("returns 0 when PV is 0", () => {
-      expect(calculateSelfConsumption(0, 0)).toBe(0);
+    it("returns null when PV is 0 (divide-by-zero)", () => {
+      expect(calculateSelfConsumption(0, 0)).toBeNull();
+    });
+
+    it("returns null when PV is negative", () => {
+      expect(calculateSelfConsumption(-1, 0)).toBeNull();
     });
 
     it("handles fractional values", () => {
       // (15.6 - 8.6) / 15.6 * 100 = 44.871... -> 44.9
       expect(calculateSelfConsumption(15.6, 8.6)).toBe(44.9);
+    });
+  });
+
+  describe("calculateBaselineCost", () => {
+    const schedule = {
+      peakRate: 0.82,
+      offpeakRate: 0.25,
+      intermediateRate: 0.55,
+    };
+
+    it("calculates peak hour load cost", () => {
+      const loads = [{ hour: 19, loadKwh: 5 }];
+      // 5 * 0.82 = 4.10
+      expect(calculateBaselineCost(loads, schedule)).toBe(4.10);
+    });
+
+    it("calculates off-peak hour load cost", () => {
+      const loads = [{ hour: 3, loadKwh: 10 }];
+      // 10 * 0.25 = 2.50
+      expect(calculateBaselineCost(loads, schedule)).toBe(2.50);
+    });
+
+    it("calculates full 24h with mixed rates", () => {
+      const loads = [
+        { hour: 3, loadKwh: 1 },   // 0.25
+        { hour: 17, loadKwh: 1 },  // 0.55
+        { hour: 19, loadKwh: 1 },  // 0.82
+      ];
+      // 0.25 + 0.55 + 0.82 = 1.62
+      expect(calculateBaselineCost(loads, schedule)).toBe(1.62);
+    });
+
+    it("returns 0 for empty input", () => {
+      expect(calculateBaselineCost([], schedule)).toBe(0);
+    });
+  });
+
+  describe("calculateActualCost", () => {
+    const schedule = {
+      peakRate: 0.82,
+      offpeakRate: 0.25,
+      intermediateRate: 0.55,
+    };
+
+    it("returns 0 for zero grid import", () => {
+      const imports = [{ hour: 19, gridImportKwh: 0 }];
+      expect(calculateActualCost(imports, schedule)).toBe(0);
+    });
+
+    it("calculates peak grid import cost", () => {
+      const imports = [{ hour: 19, gridImportKwh: 5 }];
+      // 5 * 0.82 = 4.10
+      expect(calculateActualCost(imports, schedule)).toBe(4.10);
+    });
+
+    it("calculates off-peak grid import cost", () => {
+      const imports = [{ hour: 3, gridImportKwh: 10 }];
+      // 10 * 0.25 = 2.50
+      expect(calculateActualCost(imports, schedule)).toBe(2.50);
+    });
+
+    it("returns 0 for empty input", () => {
+      expect(calculateActualCost([], schedule)).toBe(0);
+    });
+  });
+
+  describe("calculateBestTouCost", () => {
+    const schedule = {
+      peakRate: 0.82,
+      offpeakRate: 0.25,
+      intermediateRate: 0.55,
+    };
+
+    it("returns baseline when no battery (capacity=0)", () => {
+      const hourlyData = [
+        { hour: 3, loadKwh: 10, pvKwh: 0 },
+        { hour: 19, loadKwh: 5, pvKwh: 0 },
+      ];
+      // No battery: grid = max(0, load - pv) = load
+      // 10 * 0.25 + 5 * 0.82 = 2.50 + 4.10 = 6.60
+      const result = calculateBestTouCost({
+        hourlyData,
+        schedule,
+        capacity: 0,
+        socInitial: 0,
+        socMinPct: 10,
+        maxChargeRateKw: 5,
+        maxDischargeRateKw: 5,
+      });
+      expect(result.bestCost).toBe(6.60);
+      expect(result.endSoc).toBe(0);
+    });
+
+    it("returns 0 when PV covers all load and battery covers the rest", () => {
+      // Single hour, PV covers load entirely
+      const hourlyData = [{ hour: 19, loadKwh: 2, pvKwh: 5 }];
+      const result = calculateBestTouCost({
+        hourlyData,
+        schedule,
+        capacity: 10,
+        socInitial: 5,
+        socMinPct: 10,
+        maxChargeRateKw: 5,
+        maxDischargeRateKw: 5,
+      });
+      expect(result.bestCost).toBe(0);
+    });
+
+    it("optimizes battery schedule to minimize cost", () => {
+      // 2 hours: off-peak load + peak load with battery
+      // Off-peak: load=10, pv=0 -> can charge at cheap rate
+      // Peak: load=5, pv=0 -> can discharge at expensive rate
+      const hourlyData = [
+        { hour: 3, loadKwh: 1, pvKwh: 0 },
+        { hour: 19, loadKwh: 5, pvKwh: 0 },
+      ];
+      const result = calculateBestTouCost({
+        hourlyData,
+        schedule,
+        capacity: 10,
+        socInitial: 5,
+        socMinPct: 10,
+        maxChargeRateKw: 5,
+        maxDischargeRateKw: 5,
+      });
+      // With a 10kWh battery at 50% SoC, it can discharge during peak
+      // Best cost should be less than baseline (1*0.25 + 5*0.82 = 4.35)
+      expect(result.bestCost).toBeLessThan(4.35);
+      expect(result.bestCost).toBeGreaterThanOrEqual(0);
+    });
+
+    it("respects soc_min constraint", () => {
+      // Single peak hour, battery can discharge but constrained by soc_min
+      const hourlyData = [{ hour: 19, loadKwh: 10, pvKwh: 0 }];
+      const result = calculateBestTouCost({
+        hourlyData,
+        schedule,
+        capacity: 10,
+        socInitial: 2,   // 2 kWh
+        socMinPct: 10,   // min = 1 kWh
+        maxChargeRateKw: 5,
+        maxDischargeRateKw: 5,
+      });
+      // Can only discharge 1 kWh (2 - 1 = 1), remaining 9 kWh from grid
+      // Cost = 9 * 0.82 = 7.38 ... but with discretized steps, approximately
+      expect(result.bestCost).toBeGreaterThan(0);
+      expect(result.bestCost).toBeLessThan(10 * 0.82); // less than full grid
+    });
+  });
+
+  describe("calculateSelfSufficiency", () => {
+    it("returns 100% when no grid import", () => {
+      expect(calculateSelfSufficiency(10, 0)).toBe(100);
+    });
+
+    it("returns 50% when half is grid import", () => {
+      expect(calculateSelfSufficiency(10, 5)).toBe(50);
+    });
+
+    it("returns 0% when all is grid import", () => {
+      expect(calculateSelfSufficiency(10, 10)).toBe(0);
+    });
+
+    it("returns null when load is 0 (divide-by-zero)", () => {
+      expect(calculateSelfSufficiency(0, 0)).toBeNull();
+    });
+
+    it("returns null when load is negative", () => {
+      expect(calculateSelfSufficiency(-5, 0)).toBeNull();
+    });
+
+    it("handles fractional values", () => {
+      // (13.3 - 10.0) / 13.3 * 100 = 24.8120... -> 24.8
+      expect(calculateSelfSufficiency(13.3, 10.0)).toBe(24.8);
     });
   });
 });

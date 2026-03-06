@@ -5,7 +5,7 @@ jest.mock("node-cron", () => ({
   schedule: jest.fn(),
 }));
 
-describe("telemetry-aggregator (hourly rollup — v5.13 enhanced)", () => {
+describe("telemetry-aggregator (hourly rollup — v5.14 enhanced)", () => {
   let mockQuery: jest.Mock;
   let pool: Pool;
 
@@ -20,8 +20,8 @@ describe("telemetry-aggregator (hourly rollup — v5.13 enhanced)", () => {
     jest.restoreAllMocks();
   });
 
-  it("queries telemetry_history and UPSERTs into asset_hourly_metrics with all v5.13 columns", async () => {
-    // First call: SELECT from telemetry_history (v5.13 enhanced with 6 new columns)
+  it("queries telemetry_history and UPSERTs into asset_hourly_metrics with all v5.14 columns", async () => {
+    // First call: SELECT from telemetry_history (v5.14 enhanced with 3 new avg columns)
     mockQuery.mockResolvedValueOnce({
       rows: [
         {
@@ -34,6 +34,9 @@ describe("telemetry-aggregator (hourly rollup — v5.13 enhanced)", () => {
           load_consumption: "4.0000",
           avg_soc: "72.5",
           peak_bat_power: "5.5",
+          avg_battery_soh: "98.5",
+          avg_battery_voltage: "51.2",
+          avg_battery_temperature: "28.0",
           count: "12",
         },
         {
@@ -46,6 +49,9 @@ describe("telemetry-aggregator (hourly rollup — v5.13 enhanced)", () => {
           load_consumption: "6.1000",
           avg_soc: "45.0",
           peak_bat_power: "8.1",
+          avg_battery_soh: null,
+          avg_battery_voltage: null,
+          avg_battery_temperature: null,
           count: "8",
         },
       ],
@@ -64,17 +70,18 @@ describe("telemetry-aggregator (hourly rollup — v5.13 enhanced)", () => {
     expect(selectCall[0]).toContain("pv_power");
     expect(selectCall[0]).toContain("grid_power_kw");
     expect(selectCall[0]).toContain("load_power");
+    // v5.14: verify new AVG columns in SELECT
+    expect(selectCall[0]).toContain("AVG(battery_soh)");
+    expect(selectCall[0]).toContain("AVG(battery_voltage)");
+    expect(selectCall[0]).toContain("AVG(battery_temperature)");
 
-    // First UPSERT: ASSET_SP_001 — verify all 11 params
+    // First UPSERT: ASSET_SP_001 — verify all 14 params
     const upsert1 = mockQuery.mock.calls[1];
     expect(upsert1[0]).toContain("INSERT INTO asset_hourly_metrics");
     expect(upsert1[0]).toContain("ON CONFLICT");
-    expect(upsert1[0]).toContain("pv_generation_kwh");
-    expect(upsert1[0]).toContain("grid_import_kwh");
-    expect(upsert1[0]).toContain("grid_export_kwh");
-    expect(upsert1[0]).toContain("load_consumption_kwh");
-    expect(upsert1[0]).toContain("avg_battery_soc");
-    expect(upsert1[0]).toContain("peak_battery_power_kw");
+    expect(upsert1[0]).toContain("avg_battery_soh");
+    expect(upsert1[0]).toContain("avg_battery_voltage");
+    expect(upsert1[0]).toContain("avg_battery_temperature");
 
     expect(upsert1[1][0]).toBe("ASSET_SP_001");      // asset_id
     expect(upsert1[1][2]).toBeCloseTo(5.5);            // total_charge_kwh
@@ -85,14 +92,22 @@ describe("telemetry-aggregator (hourly rollup — v5.13 enhanced)", () => {
     expect(upsert1[1][7]).toBeCloseTo(4.0);            // load_consumption_kwh
     expect(upsert1[1][8]).toBeCloseTo(72.5);           // avg_battery_soc
     expect(upsert1[1][9]).toBeCloseTo(5.5);            // peak_battery_power_kw
-    expect(upsert1[1][10]).toBe(12);                    // data_points_count
+    // v5.14 new columns
+    expect(upsert1[1][10]).toBeCloseTo(98.5);          // avg_battery_soh
+    expect(upsert1[1][11]).toBeCloseTo(51.2);          // avg_battery_voltage
+    expect(upsert1[1][12]).toBeCloseTo(28.0);          // avg_battery_temperature
+    expect(upsert1[1][13]).toBe(12);                    // data_points_count
 
-    // Second UPSERT: ASSET_RJ_002
+    // Second UPSERT: ASSET_RJ_002 — verify NULL handling for missing battery data
     const upsert2 = mockQuery.mock.calls[2];
     expect(upsert2[1][0]).toBe("ASSET_RJ_002");
     expect(upsert2[1][2]).toBeCloseTo(0);               // no charge
     expect(upsert2[1][3]).toBeCloseTo(8.1);             // discharge
-    expect(upsert2[1][10]).toBe(8);
+    // v5.14: NULL when no battery state data
+    expect(upsert2[1][10]).toBeNull();                   // avg_battery_soh = null
+    expect(upsert2[1][11]).toBeNull();                   // avg_battery_voltage = null
+    expect(upsert2[1][12]).toBeNull();                   // avg_battery_temperature = null
+    expect(upsert2[1][13]).toBe(8);
   });
 
   it("handles empty telemetry_history gracefully (no assets to aggregate)", async () => {

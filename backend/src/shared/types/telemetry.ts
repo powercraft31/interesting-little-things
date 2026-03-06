@@ -11,6 +11,16 @@ export interface XuhengRawMessage {
         readonly total_bat_power: string;
         readonly total_bat_dailyChargedEnergy: string;
         readonly total_bat_dailyDischargedEnergy: string;
+        // v5.14 NEW — 9 additional fields
+        readonly total_bat_soh?: string;
+        readonly total_bat_vlotage?: string; // note: source typo "vlotage"
+        readonly total_bat_current?: string;
+        readonly total_bat_temperature?: string;
+        readonly total_bat_maxChargeVoltage?: string;
+        readonly total_bat_maxChargeCurrent?: string;
+        readonly total_bat_maxDischargeCurrent?: string;
+        readonly total_bat_totalChargedEnergy?: string;
+        readonly total_bat_totalDischargedEnergy?: string;
       };
     }>;
     readonly pvList?: ReadonlyArray<{
@@ -69,6 +79,16 @@ export interface ParsedTelemetry {
   readonly gridDailySellKwh: number;
   readonly loadPowerKw: number;
   readonly flloadPowerKw: number;
+  // v5.14 NEW — 9 battery deep telemetry fields
+  readonly batterySoh: number;
+  readonly batteryVoltage: number;
+  readonly batteryCurrent: number;
+  readonly batteryTemperature: number;
+  readonly maxChargeVoltage: number;
+  readonly maxChargeCurrent: number;
+  readonly maxDischargeCurrent: number;
+  readonly totalChargeKwh: number;
+  readonly totalDischargeKwh: number;
 }
 
 /** Xuheng message type discriminator */

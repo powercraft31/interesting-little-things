@@ -36,6 +36,16 @@ export class XuhengAdapter {
       gridDailySellKwh: safeFloat(grid?.properties.grid_dailySellEnergy),
       loadPowerKw: safeFloat(load?.properties.load1_totalPower),
       flloadPowerKw: safeFloat(flload?.properties.flload_totalPower),
+      // v5.14: 9 new bat.properties fields
+      batterySoh: safeFloat(bat.properties.total_bat_soh),
+      batteryVoltage: safeFloat(bat.properties.total_bat_vlotage), // note: source typo "vlotage"
+      batteryCurrent: safeFloat(bat.properties.total_bat_current),
+      batteryTemperature: safeFloat(bat.properties.total_bat_temperature),
+      maxChargeVoltage: safeFloat(bat.properties.total_bat_maxChargeVoltage),
+      maxChargeCurrent: safeFloat(bat.properties.total_bat_maxChargeCurrent),
+      maxDischargeCurrent: safeFloat(bat.properties.total_bat_maxDischargeCurrent),
+      totalChargeKwh: safeFloat(bat.properties.total_bat_totalChargedEnergy),
+      totalDischargeKwh: safeFloat(bat.properties.total_bat_totalDischargedEnergy),
     };
   }
 }

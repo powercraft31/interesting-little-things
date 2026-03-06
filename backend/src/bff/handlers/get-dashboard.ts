@@ -47,6 +47,8 @@ export async function handler(
     deltaResult,
     accuracyLatencyResult,
     uptimeResult,
+    selfSufficiencyResult,
+    selfSufficiencyDeltaResult,
   ] = await Promise.all([
     // Query 1: Asset aggregation (assets JOIN device_state)
     queryWithOrg(
@@ -132,6 +134,25 @@ export async function handler(
       [],
       rlsOrgId,
     ),
+    // Query 9: v5.14 NEW: Self-Sufficiency value
+    queryWithOrg(
+      `SELECT ROUND(AVG(self_sufficiency_pct)::numeric, 1) AS avg_ss
+       FROM revenue_daily
+       WHERE date >= CURRENT_DATE - 7
+         AND self_sufficiency_pct IS NOT NULL`,
+      [],
+      rlsOrgId,
+    ),
+    // Query 10: v5.14 NEW: Self-Sufficiency delta (today vs yesterday)
+    queryWithOrg(
+      `SELECT
+         (SELECT ROUND(AVG(self_sufficiency_pct)::numeric, 1) FROM revenue_daily
+          WHERE date = CURRENT_DATE AND self_sufficiency_pct IS NOT NULL) -
+         (SELECT ROUND(AVG(self_sufficiency_pct)::numeric, 1) FROM revenue_daily
+          WHERE date = CURRENT_DATE - 1 AND self_sufficiency_pct IS NOT NULL) AS delta`,
+      [],
+      rlsOrgId,
+    ),
   ]);
 
   const agg = assetResult.rows[0] as Record<string, unknown>;
@@ -175,6 +196,19 @@ export async function handler(
     ),
   );
 
+  // v5.14: Self-Sufficiency from revenue_daily
+  const selfSufficiencyPct =
+    selfSufficiencyResult.rows.length > 0 &&
+    selfSufficiencyResult.rows[0].avg_ss !== null
+      ? parseFloat(String(selfSufficiencyResult.rows[0].avg_ss)).toFixed(1)
+      : "\u2014";
+  const selfSufficiencyDelta = parseFloat(
+    String(
+      (selfSufficiencyDeltaResult.rows[0] as Record<string, unknown>)?.delta ??
+        0,
+    ),
+  ).toFixed(1);
+
   const body = ok({
     // === DB: Asset statistics ===
     totalAssets: agg.total_assets as number,
@@ -189,6 +223,8 @@ export async function handler(
 
     // === v5.13: Self-consumption from revenue_daily ===
     selfConsumption: { value: selfConsumptionPct, delta: selfConsumptionDelta },
+    // === v5.14: Self-sufficiency from revenue_daily ===
+    selfSufficiency: { value: selfSufficiencyPct, delta: selfSufficiencyDelta },
     dispatchSuccessCount,
     dispatchTotalCount,
     systemHealthBlock,
