@@ -27,6 +27,18 @@ v5.13 de-hardcodes the metrics that are **deterministically computable** from ex
 - All queries MUST use App Pool + `queryWithOrg` (RLS isolation enforced)
 - **Response envelope format unchanged** — frontend zero-change
 
+### 🛡 查詢分流紅線（Gemini 審查 R1 補強）
+
+BFF 所有讀取查詢必須遵守以下分流規則，**嚴禁違反**：
+
+| 查詢類型 | 允許的數據源 | 禁止的數據源 | 原因 |
+|----------|-------------|-------------|------|
+| **長天期聚合指標**（Scorecard、Revenue Trend、Dashboard KPI） | `asset_hourly_metrics`、`revenue_daily`、`device_state` | ~~`telemetry_history`~~ | Raw 時序表在設備數量增長後，長天期 SUM/GROUP BY 會打爆 App Pool CPU |
+| **近 24h 高解析度能源流**（P3 Energy Behavior） | `telemetry_history`（唯一例外） | — | 24h 窗口 + v5.12 複合索引，查詢量可控 |
+| **即時設備狀態**（Online/Offline） | `device_state` | ~~`telemetry_history`~~ | device_state 是 UPSERT 單行快照，O(1) |
+
+**實作約束：** Claude Code 在編寫 BFF handler 時，如果需要跨天聚合數據，**必須且只能**從 `asset_hourly_metrics` 或 `revenue_daily` 讀取。任何試圖直接 `SELECT ... FROM telemetry_history WHERE recorded_at > NOW() - INTERVAL '7 days'` 的寫法，視為 P0 缺陷。
+
 ---
 
 ## 1. Endpoint De-hardcoding Matrix
