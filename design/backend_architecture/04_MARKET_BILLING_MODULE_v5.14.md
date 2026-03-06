@@ -114,24 +114,27 @@ subject to:
 
 ### §2.2 State Space
 
+> ⚠️ **硬性約束（Gemini R1 防禦）**：SoC 離散化步長 **強制為電池容量的 5%**。狀態節點數 |S| **必須限制在 20 個以內**。禁止使用 0.1 kWh 或更細的步長，以防大容量電池（如 50 kWh）導致狀態爆炸。
+
 | Dimension | Range | Size |
 |-----------|-------|------|
 | Time (h) | 0..23 | T = 24 |
-| SoC level (s) | soc_min..capacity, step 0.1 kWh | S ~ 90 (for 10 kWh battery, 10% min) |
-| Action (battery_delta) | -max_discharge..+max_charge, step 0.1 kWh | A ~ 200 (for 10 kW charge + 10 kW discharge) |
+| SoC level (s) | soc_min..capacity, step = **capacity × 5%** | **S ≤ 20**（例：10 kWh 電池，5% 下限 → step=0.5 kWh → S=19） |
+| Action (battery_delta) | -max_discharge..+max_charge, step = same as SoC step | A ≤ 40（例：±5 kW inverter → ±10 steps） |
 
 ### §2.3 Complexity Analysis
 
-- **Time:** O(T * S * A) = 24 * 100 * 200 = **480,000 operations**
-- **Memory:** Two arrays of size S (current + next DP table) = 2 * 100 * 8 bytes = **1.6 KB**
-- **Execution:** Millisecond-level on any modern CPU. **No OOM risk.**
+- **Time:** O(T * S * A) = 24 * 20 * 40 = **19,200 operations**（最壞情況）
+- **Memory:** Two arrays of size S (current + next DP table) = 2 * 20 * 8 bytes = **320 bytes**
+- **Per-asset execution:** 微秒級。47 台設備總計 < 1 秒。**零 OOM 風險。**
 - **Dependencies:** Pure TypeScript. No external libraries.
 
 ### §2.4 Algorithm Pseudocode
 
 ```
 function calculateBestTouCost(params):
-  S = discretize SoC range [soc_min .. capacity] with step 0.1
+  step = capacity * 0.05    // 強制 5% 步長
+  S = discretize SoC range [soc_min .. capacity] with step
   dp_current = array of size |S|, initialized to Infinity
   dp_current[index_of(soc_initial)] = 0   // start state: known initial SoC, zero cost
 

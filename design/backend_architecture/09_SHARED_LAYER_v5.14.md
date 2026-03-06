@@ -174,7 +174,7 @@ export function calculateBestTouCost(params: BestTouInput): BestTouResult {
   } = params;
 
   const socMin = capacity * (socMinPct / 100);
-  const step = 0.1; // kWh discretization
+  const step = capacity * 0.05; // 強制 5% 步長，|S| ≤ 20
 
   // Edge case: no battery
   if (capacity <= 0) {
@@ -278,6 +278,20 @@ export function calculateSelfSufficiency(
 - Returns percentage (0-100), 1 decimal place
 - Handles load=0 safely (returns 0)
 - Always between 0-100 when gridImport <= load
+
+---
+
+### §2.5 除零防禦原則（Gemini R1 防禦）
+
+> ⚠️ **所有百分比計算函數必須遵守以下規則：**
+>
+> 1. 分母為零時回傳 `null`（不是 0，不是 NaN，不是 Infinity）
+> 2. TypeScript 回傳型別標記為 `number | null`
+> 3. 適用場景：
+>    - `calculateSelfConsumption`：pvGen = 0 → `null`
+>    - `calculateSelfSufficiency`：load = 0 → `null`（目前回傳 0，需改為 null）
+>    - BFF 計算 Optimization Efficiency：baseline - bestTou = 0 → `null`
+> 4. BFF 將 `null` 直接序列化進 JSON，前端收到 `null` 時顯示 `"—"` 或 `"N/A"`
 
 ---
 

@@ -77,6 +77,8 @@ All three derive from pre-computed `revenue_daily` columns (populated by M4 bill
 **Formula:** `(baseline_cost - actual_cost) / (baseline_cost - best_tou_cost) * 100`
 **Interpretation:** 91.5% means actual scheduling captures 91.5% of the theoretically possible savings. 100% = perfect.
 
+> ⚠️ **除零防禦（Gemini R1 防禦）**：若 `baseline_cost == best_tou_cost`（分母為零，例如設備剛上線無數據、整天關機、或 baseline 本身已是最優），此指標**必須回傳 `null`**。前端 JSON 型別定義為 `number | null`。BFF 不得回傳 `NaN`、`Infinity` 或 `0`。前端收到 `null` 時顯示 `"—"` 或 `"N/A"`。同樣規則適用於所有分母可能為零的 KPI（包括 Self-Consumption 的 pvGen=0、Self-Sufficiency 的 load=0）。
+
 ```json
 {
   "name": "Self-Sufficiency",
