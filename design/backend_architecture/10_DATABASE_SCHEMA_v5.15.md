@@ -375,18 +375,21 @@ COMMIT;
 ### Daily Cron Jobs (add to system crontab)
 
 ```cron
-# Create tomorrow+1 partition (23:00 daily, before midnight)
+# Create next 3 days' partitions (23:00 daily -- 72h buffer against cron failure)
 0 23 * * * psql -U solfacil_service -d solfacil_vpp -c "
 DO \$\$
 DECLARE
-    d DATE := CURRENT_DATE + 2;
-    pname TEXT := 'asset_5min_metrics_' || to_char(d, 'YYYYMMDD');
+    d DATE;
+    pname TEXT;
 BEGIN
-    EXECUTE format(
-        'CREATE TABLE IF NOT EXISTS %I PARTITION OF asset_5min_metrics
-         FOR VALUES FROM (%L) TO (%L)',
-        pname, d::TEXT || ' 00:00:00+00', (d+1)::TEXT || ' 00:00:00+00'
-    );
+    FOR d IN SELECT generate_series(CURRENT_DATE + 1, CURRENT_DATE + 3, '1 day'::interval)::date LOOP
+        pname := 'asset_5min_metrics_' || to_char(d, 'YYYYMMDD');
+        EXECUTE format(
+            'CREATE TABLE IF NOT EXISTS %I PARTITION OF asset_5min_metrics
+             FOR VALUES FROM (%L) TO (%L)',
+            pname, d::TEXT || ' 00:00:00+00', (d+1)::TEXT || ' 00:00:00+00'
+        );
+    END LOOP;
 END \$\$;"
 
 # Drop partition older than 30 days (01:00 daily, before billing at 02:00)
@@ -424,15 +427,136 @@ No new indexes needed on altered tables. The `target_mode` column is used in a J
 
 ---
 
-## 8. Migration Safety Notes
+## 8. Partition Lifecycle Management
+
+### 8.1 Initial Partition Pre-creation (Migration)
+
+The migration script MUST pre-create partitions for the current day plus the next 30 days.
+PostgreSQL does NOT auto-create partitions -- if a partition is missing when M1 INSERTs a row,
+the INSERT throws: `no partition of relation "asset_5min_metrics" found for row`, crashing
+the entire telemetry pipeline.
+
+The migration DDL in section 3 already handles this (`generate_series(CURRENT_DATE - 1, CURRENT_DATE + 31)`).
+
+### 8.2 Daily Partition Pre-creation Cron (Midnight Crash Prevention)
+
+**Problem:** After the initial 30-day window, new partitions must be created ahead of time.
+If the cron fails silently for a day and no partition exists when the clock crosses midnight,
+M1's INSERT will crash with a missing-partition error.
+
+**Solution:** The daily cron at 23:00 UTC pre-creates the next **3 days** of partitions
+(not just 1), providing a 72-hour buffer against cron failures.
+
+```sql
+-- Run at 23:00 UTC daily -- pre-create next 3 days of partitions
+DO $$
+DECLARE
+    d DATE;
+    pname TEXT;
+    start_ts TEXT;
+    end_ts TEXT;
+BEGIN
+    FOR d IN SELECT generate_series(
+        CURRENT_DATE + 1,
+        CURRENT_DATE + 3,
+        '1 day'::interval
+    )::date LOOP
+        pname := 'asset_5min_metrics_' || to_char(d, 'YYYYMMDD');
+        start_ts := d::TEXT || ' 00:00:00+00';
+        end_ts := (d + 1)::TEXT || ' 00:00:00+00';
+        EXECUTE format(
+            'CREATE TABLE IF NOT EXISTS %I PARTITION OF asset_5min_metrics
+             FOR VALUES FROM (%L) TO (%L)',
+            pname, start_ts, end_ts
+        );
+        RAISE NOTICE 'Ensured partition: %', pname;
+    END LOOP;
+END $$;
+```
+
+`CREATE TABLE IF NOT EXISTS` makes this idempotent -- safe to re-run without error.
+This cron job lives in M4 (or a shared maintenance module alongside the existing DROP cron).
+
+### 8.3 Partition DROP (Retention Cleanup)
+
+Existing DROP cron (section 6) runs at 01:00 UTC daily, dropping partitions older than 30 days.
+No changes needed.
+
+### 8.4 UTC Partition Boundary vs BRT Billing Window
+
+**Problem:** Partition boundaries are defined in UTC (midnight-to-midnight UTC).
+Brazil time (BRT) = UTC-3, so:
+
+- BRT midnight (00:00 BRT) = UTC 03:00
+- BRT 21:00 = UTC 00:00 (partition boundary!)
+- A single BRT billing day spans **two** UTC partitions
+
+If M4 daily-billing-job queries with BRT timestamps naively, PostgreSQL must scan
+parts of two partitions, causing performance regression at scale.
+
+**Rule: All time window queries in M4 use UTC. BRT offset (+3h) is applied only at
+the presentation layer (BFF/frontend).**
+
+M4 daily-billing-job MUST compute billing windows in UTC:
+
+```sql
+-- "Yesterday in BRT" expressed as a UTC range:
+--   BRT day starts at 03:00 UTC, ends at 03:00 UTC next day
+WHERE recorded_at >= (CURRENT_DATE - 1 + INTERVAL '3 hours')   -- yesterday 03:00 UTC
+  AND recorded_at <  (CURRENT_DATE     + INTERVAL '3 hours')   -- today 03:00 UTC
+```
+
+This ensures each BRT-day query touches at most 2 UTC partitions (the minimum possible),
+and partition pruning works correctly.
+
+### 8.5 NULL Fallback Rules for New Additive Columns
+
+Additive-only migration means existing rows have NULL for new columns until backfilled.
+All consuming modules MUST apply COALESCE defaults:
+
+**`assets.allow_export`** (DDL DEFAULT false, but existing rows = NULL until backfill):
+
+```sql
+-- M2 schedule generator: treat NULL as false (no export)
+SELECT COALESCE(allow_export, false) AS allow_export FROM assets WHERE ...;
+
+-- M3 command dispatcher: treat NULL as false (net_power constraint applies)
+IF COALESCE(asset.allow_export, false) = false THEN
+    net_power := LEAST(net_power, 0);  -- enforce no-export
+END IF;
+```
+
+**`dispatch_records.target_mode`** (NULL for all pre-v5.15 rows):
+
+```sql
+-- M4 attribution logic: treat NULL target_mode as 'UNASSIGNED'
+SELECT
+    COALESCE(dr.target_mode, 'UNASSIGNED') AS effective_mode,
+    m.*
+FROM asset_5min_metrics m
+LEFT JOIN dispatch_records dr ON ...;
+```
+
+UNASSIGNED bucket rules:
+- Savings are computed but NOT written to `sc_savings_reais` or `tou_savings_reais`
+- They contribute to `client_savings_reais` (total) only
+- This ensures legacy data before v5.15 doesn't cause TypeError or zero out savings
+- M4 MUST log a warning when UNASSIGNED windows are encountered (for monitoring/alerting)
+
+---
+
+## 9. Migration Safety Notes
 
 1. **`asset_5min_metrics` CREATE** -- new table, no impact on existing tables.
 2. **Partition DDL wrapped in DO block** -- `IF NOT EXISTS` makes it idempotent.
-3. **All ALTER TABLE ADD COLUMN use `IF NOT EXISTS`** -- safe to re-run.
-4. **`allow_export DEFAULT false`** -- safe default (no export until explicitly enabled).
-5. **`contracted_demand_kw` NULL** -- not used until v5.16, no impact.
-6. **Backfill `dispatch_records.target_mode`** -- UPDATE WHERE NULL, idempotent.
-7. **`sc_savings_reais` / `tou_savings_reais` NULL** -- nullable columns, no table rewrite.
+3. **Initial 30-day pre-creation** -- migration creates today-1 through today+31 partitions.
+4. **Daily cron creates 3 days ahead** -- 72h buffer against cron failure (see section 8.2).
+5. **All ALTER TABLE ADD COLUMN use `IF NOT EXISTS`** -- safe to re-run.
+6. **`allow_export DEFAULT false`** -- safe default; existing rows NULL handled via COALESCE (see section 8.5).
+7. **`contracted_demand_kw` NULL** -- not used until v5.16, no impact.
+8. **Backfill `dispatch_records.target_mode`** -- UPDATE WHERE NULL, idempotent. Pre-backfill NULLs handled as UNASSIGNED (see section 8.5).
+9. **`sc_savings_reais` / `tou_savings_reais` NULL** -- nullable columns, no table rewrite.
+10. **M4 billing windows use UTC** -- BRT offset applied at presentation layer only (see section 8.4).
 
 ---
 
@@ -448,4 +572,5 @@ No new indexes needed on altered tables. The `target_mode` column is used in a J
 | v5.11 | 2026-03-05 | DDL Fix -- RLS scope |
 | v5.13 | 2026-03-05 | CREATE ems_health + ALTER asset_hourly_metrics +6 cols; 23->24 tables |
 | v5.14 | 2026-03-06 | ALTER 4 tables +15 cols (telemetry deep + DP billing + DP params) |
-| **v5.15** | **2026-03-07** | **CREATE asset_5min_metrics (PARTITION BY RANGE daily, 30-day retention, DROP PARTITION cleanup); ALTER dispatch_records +target_mode; ALTER assets +allow_export; ALTER homes +contracted_demand_kw; ALTER revenue_daily +sc_savings_reais +tou_savings_reais; total 24->25 tables** |
+| v5.15 | 2026-03-07 | CREATE asset_5min_metrics (PARTITION BY RANGE daily, 30-day retention, DROP PARTITION cleanup); ALTER dispatch_records +target_mode; ALTER assets +allow_export; ALTER homes +contracted_demand_kw; ALTER revenue_daily +sc_savings_reais +tou_savings_reais; total 24->25 tables |
+| **v5.15-R1** | **2026-03-07** | **Defence patches: 3-day partition pre-creation buffer (Gap 1); UTC-first billing windows with BRT +3h offset (Gap 2); COALESCE NULL fallback rules for allow_export and target_mode UNASSIGNED bucket (Gap 3)** |
