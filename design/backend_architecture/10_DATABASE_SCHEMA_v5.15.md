@@ -73,7 +73,8 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_5min_asset_time
 -- Example for a single day:
 CREATE TABLE IF NOT EXISTS asset_5min_metrics_20260307
     PARTITION OF asset_5min_metrics
-    FOR VALUES FROM ('2026-03-07 00:00:00+00') TO ('2026-03-08 00:00:00+00');
+    FOR VALUES FROM ('2026-03-07 03:00:00+00') TO ('2026-03-08 03:00:00+00');
+-- Note: boundaries at 03:00 UTC = BRT midnight (UTC-3), business-aligned for M4 single-partition pruning
 
 -- Automated partition creation (run daily at 23:00 via cron):
 -- Creates partition for day-after-tomorrow to handle timezone edge cases
@@ -81,8 +82,8 @@ DO $$
 DECLARE
     partition_date DATE := CURRENT_DATE + 2;
     partition_name TEXT := 'asset_5min_metrics_' || to_char(partition_date, 'YYYYMMDD');
-    start_ts TEXT := partition_date::TEXT || ' 00:00:00+00';
-    end_ts TEXT := (partition_date + 1)::TEXT || ' 00:00:00+00';
+    start_ts TEXT := partition_date::TEXT || ' 03:00:00+00';
+    end_ts TEXT := (partition_date + 1)::TEXT || ' 03:00:00+00';
 BEGIN
     EXECUTE format(
         'CREATE TABLE IF NOT EXISTS %I PARTITION OF asset_5min_metrics
@@ -254,8 +255,8 @@ BEGIN
         '1 day'::interval
     )::date LOOP
         pname := 'asset_5min_metrics_' || to_char(d, 'YYYYMMDD');
-        start_ts := d::TEXT || ' 00:00:00+00';
-        end_ts := (d + 1)::TEXT || ' 00:00:00+00';
+        start_ts := d::TEXT || ' 03:00:00+00';
+        end_ts := (d + 1)::TEXT || ' 03:00:00+00';
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS %I PARTITION OF asset_5min_metrics
              FOR VALUES FROM (%L) TO (%L)',
@@ -387,7 +388,7 @@ BEGIN
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS %I PARTITION OF asset_5min_metrics
              FOR VALUES FROM (%L) TO (%L)',
-            pname, d::TEXT || ' 00:00:00+00', (d+1)::TEXT || ' 00:00:00+00'
+            pname, d::TEXT || ' 03:00:00+00', (d+1)::TEXT || ' 03:00:00+00'
         );
     END LOOP;
 END \$\$;"
@@ -462,8 +463,8 @@ BEGIN
         '1 day'::interval
     )::date LOOP
         pname := 'asset_5min_metrics_' || to_char(d, 'YYYYMMDD');
-        start_ts := d::TEXT || ' 00:00:00+00';
-        end_ts := (d + 1)::TEXT || ' 00:00:00+00';
+        start_ts := d::TEXT || ' 03:00:00+00';
+        end_ts := (d + 1)::TEXT || ' 03:00:00+00';
         EXECUTE format(
             'CREATE TABLE IF NOT EXISTS %I PARTITION OF asset_5min_metrics
              FOR VALUES FROM (%L) TO (%L)',
@@ -482,32 +483,33 @@ This cron job lives in M4 (or a shared maintenance module alongside the existing
 Existing DROP cron (section 6) runs at 01:00 UTC daily, dropping partitions older than 30 days.
 No changes needed.
 
-### 8.4 UTC Partition Boundary vs BRT Billing Window
+### 8.4 Business-Aligned Partition Boundaries (BRT-aligned, not UTC midnight)
 
-**Problem:** Partition boundaries are defined in UTC (midnight-to-midnight UTC).
-Brazil time (BRT) = UTC-3, so:
+**Strategy: Partition boundaries at 03:00 UTC = BRT midnight (UTC-3)**
 
-- BRT midnight (00:00 BRT) = UTC 03:00
-- BRT 21:00 = UTC 00:00 (partition boundary!)
-- A single BRT billing day spans **two** UTC partitions
+Brazil time (BRT) = UTC-3. A BRT business day runs 00:00 BRT → 23:59 BRT = 03:00 UTC → 02:59 UTC next day.
 
-If M4 daily-billing-job queries with BRT timestamps naively, PostgreSQL must scan
-parts of two partitions, causing performance regression at scale.
+**If partitions used UTC midnight (00:00 UTC) boundaries:**
+- BRT day 2026-03-07: UTC 03:00 Mar 7 → UTC 03:00 Mar 8
+- This spans TWO UTC partitions → PostgreSQL forced to scan 2 physical tables per billing job
+- At 50,000 devices × 14.4M rows/day: double I/O on every M4 daily run
 
-**Rule: All time window queries in M4 use UTC. BRT offset (+3h) is applied only at
+**Solution: BRT-aligned boundaries at 03:00 UTC**
+- Partition `20260307`: `[2026-03-07 03:00:00+00, 2026-03-08 03:00:00+00)`
+- M4 query for BRT Mar 7 = `WHERE recorded_at >= '2026-03-07 03:00:00+00' AND recorded_at < '2026-03-08 03:00:00+00'`
+- PostgreSQL partition pruning hits **exactly one physical partition** → optimal I/O
+
+**Rule: All time window queries in M4 use UTC timestamps. BRT offset (+3h) is applied only at
 the presentation layer (BFF/frontend).**
 
-M4 daily-billing-job MUST compute billing windows in UTC:
+M4 daily-billing-job MUST compute billing windows as:
 
 ```sql
--- "Yesterday in BRT" expressed as a UTC range:
---   BRT day starts at 03:00 UTC, ends at 03:00 UTC next day
-WHERE recorded_at >= (CURRENT_DATE - 1 + INTERVAL '3 hours')   -- yesterday 03:00 UTC
-  AND recorded_at <  (CURRENT_DATE     + INTERVAL '3 hours')   -- today 03:00 UTC
+-- "Yesterday in BRT" expressed as UTC range aligned to BRT-partition boundaries:
+WHERE recorded_at >= (CURRENT_DATE - 1 + INTERVAL '3 hours')   -- yesterday BRT midnight = UTC 03:00
+  AND recorded_at <  (CURRENT_DATE     + INTERVAL '3 hours')   -- today BRT midnight = UTC 03:00
+-- This hits exactly ONE partition → single-partition scan guaranteed
 ```
-
-This ensures each BRT-day query touches at most 2 UTC partitions (the minimum possible),
-and partition pruning works correctly.
 
 ### 8.5 NULL Fallback Rules for New Additive Columns
 
