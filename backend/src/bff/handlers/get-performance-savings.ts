@@ -53,10 +53,8 @@ export async function handler(
     `SELECT
        h.name AS home,
        COALESCE(SUM(rd.client_savings_reais), 0) AS total,
-       ROUND(COALESCE(AVG(rd.actual_self_consumption_pct), 0), 1) AS alpha,
-       ROUND(COALESCE(SUM(rd.client_savings_reais), 0) * 0.55, 2) AS sc,
-       ROUND(COALESCE(SUM(rd.client_savings_reais), 0) * 0.30, 2) AS tou,
-       ROUND(COALESCE(SUM(rd.client_savings_reais), 0) * 0.15, 2) AS ps
+       COALESCE(SUM(rd.sc_savings_reais), 0)     AS sc,
+       COALESCE(SUM(rd.tou_savings_reais), 0)    AS tou
      FROM revenue_daily rd
      JOIN assets a ON rd.asset_id = a.asset_id
      JOIN homes h ON a.home_id = h.home_id
@@ -71,10 +69,9 @@ export async function handler(
   const savings = rows.map((r: Record<string, unknown>) => ({
     home: r.home as string,
     total: Math.round(parseFloat(String(r.total)) * 100) / 100,
-    alpha: parseFloat(String(r.alpha)),
     sc: parseFloat(String(r.sc)),
     tou: parseFloat(String(r.tou)),
-    ps: parseFloat(String(r.ps)),
+    ps: null as number | null, // placeholder until v5.16
   }));
 
   const body = ok({ savings, _tenant: { orgId: ctx.orgId, role: ctx.role } });

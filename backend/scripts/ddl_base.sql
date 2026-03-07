@@ -42,12 +42,13 @@ CREATE TABLE IF NOT EXISTS user_org_roles (
 -- ============================================================
 
 CREATE TABLE IF NOT EXISTS homes (
-  home_id     VARCHAR(50)  PRIMARY KEY,
-  org_id      VARCHAR(50)  NOT NULL REFERENCES organizations(org_id),
-  name        VARCHAR(200) NOT NULL,
-  address     TEXT,
-  created_at  TIMESTAMPTZ  DEFAULT NOW(),
-  updated_at  TIMESTAMPTZ  DEFAULT NOW()
+  home_id              VARCHAR(50)  PRIMARY KEY,
+  org_id               VARCHAR(50)  NOT NULL REFERENCES organizations(org_id),
+  name                 VARCHAR(200) NOT NULL,
+  address              TEXT,
+  contracted_demand_kw REAL,  -- v5.15: peak shaving threshold (v5.16)
+  created_at           TIMESTAMPTZ  DEFAULT NOW(),
+  updated_at           TIMESTAMPTZ  DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_homes_org ON homes(org_id);
 
@@ -75,6 +76,7 @@ CREATE TABLE IF NOT EXISTS assets (
   serial_number  VARCHAR(100),
   commissioned_at TIMESTAMPTZ,
   is_active      BOOLEAN      NOT NULL DEFAULT true,
+  allow_export   BOOLEAN      NOT NULL DEFAULT false,  -- v5.15: grid export permission
   created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
@@ -230,6 +232,12 @@ CREATE TABLE IF NOT EXISTS revenue_daily (
   client_savings_reais       NUMERIC(12,2),
   actual_self_consumption_pct NUMERIC(5,2),
   tariff_schedule_id  INTEGER      REFERENCES tariff_schedules(id),
+  baseline_cost_reais  NUMERIC(10,2),
+  actual_cost_reais    NUMERIC(10,2),
+  best_tou_cost_reais  NUMERIC(10,2),
+  self_sufficiency_pct NUMERIC(5,2),
+  sc_savings_reais     NUMERIC(10,2),   -- v5.15: SC attribution
+  tou_savings_reais    NUMERIC(10,2),   -- v5.15: TOU attribution
   calculated_at       TIMESTAMPTZ,
   created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   UNIQUE (asset_id, date)
@@ -297,6 +305,7 @@ CREATE TABLE IF NOT EXISTS dispatch_records (
   success             BOOLEAN,
   response_latency_ms INTEGER,
   error_message       TEXT,
+  target_mode         VARCHAR(50),  -- v5.15: self_consumption | peak_valley_arbitrage | peak_shaving
   created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_dispatch_asset_time ON dispatch_records (asset_id, dispatched_at DESC);

@@ -36,6 +36,7 @@ import { startTimeoutChecker } from "../src/dr-dispatcher/handlers/timeout-check
 import { createAckHandler } from "../src/dr-dispatcher/handlers/collect-response";
 import { startBillingJob } from "../src/market-billing/services/daily-billing-job";
 import { startTelemetryAggregator } from "../src/iot-hub/services/telemetry-aggregator";
+import { startTelemetry5MinAggregator } from "../src/iot-hub/services/telemetry-5min-aggregator";
 
 type LambdaHandler = (
   event: APIGatewayProxyEventV2,
@@ -243,6 +244,13 @@ console.log("[v5.6] System heartbeat started: M2/M3/M4 pipelines active");
 startTelemetryAggregator(servicePool);
 console.log(
   "[v5.8] Telemetry aggregator started: hourly rollup to asset_hourly_metrics",
+);
+// ────────────────────────────────────────────────────────────────────────
+
+// ── v5.15 5-Min Telemetry Aggregator ─────────────────────────────────────
+startTelemetry5MinAggregator(servicePool);
+console.log(
+  "[v5.15] 5-min aggregator started: telemetry_history → asset_5min_metrics",
 );
 // ────────────────────────────────────────────────────────────────────────
 

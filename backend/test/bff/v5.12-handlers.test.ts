@@ -728,25 +728,21 @@ describe("GET /api/performance/scorecard", () => {
 // EP-15: GET /api/performance/savings
 // ---------------------------------------------------------------------------
 
-describe("GET /api/performance/savings", () => {
-  it("returns per-home savings breakdown", async () => {
+describe("GET /api/performance/savings (v5.15: real SC/TOU)", () => {
+  it("returns per-home savings with real sc, tou, and null ps", async () => {
     mockQueryWithOrg.mockResolvedValueOnce({
       rows: [
         {
           home: "Casa Silva",
           total: 1250.5,
-          alpha: 87.5,
           sc: 687.78,
           tou: 375.15,
-          ps: 187.58,
         },
         {
           home: "Casa Santos",
           total: 980.0,
-          alpha: 82.1,
           sc: 539.0,
           tou: 294.0,
-          ps: 147.0,
         },
       ],
     });
@@ -765,9 +761,29 @@ describe("GET /api/performance/savings", () => {
     expect(savings.length).toBe(2);
     expect(savings[0]).toHaveProperty("home", "Casa Silva");
     expect(savings[0]).toHaveProperty("total");
-    expect(savings[0]).toHaveProperty("sc");
-    expect(savings[0]).toHaveProperty("tou");
-    expect(savings[0]).toHaveProperty("ps");
+    expect(savings[0]).toHaveProperty("sc", 687.78);
+    expect(savings[0]).toHaveProperty("tou", 375.15);
+    expect(savings[0]).toHaveProperty("ps", null); // v5.15: placeholder until v5.16
+    // v5.15: no more alpha field
+    expect(savings[0]).not.toHaveProperty("alpha");
+  });
+
+  it("query reads real sc_savings_reais and tou_savings_reais from DB (no fake ratios)", async () => {
+    mockQueryWithOrg.mockResolvedValueOnce({ rows: [] });
+
+    const event = makeEvent("GET", "/api/performance/savings", adminToken());
+    await perfSavingsHandler(event);
+
+    const sql = mockQueryWithOrg.mock.calls[0][0] as string;
+    // v5.15: reads real columns from revenue_daily
+    expect(sql).toContain("sc_savings_reais");
+    expect(sql).toContain("tou_savings_reais");
+    // v5.15: no more fake 0.55/0.30/0.15 multipliers
+    expect(sql).not.toContain("0.55");
+    expect(sql).not.toContain("0.30");
+    expect(sql).not.toContain("0.15");
+    // v5.15: no more alpha
+    expect(sql).not.toContain("alpha");
   });
 });
 

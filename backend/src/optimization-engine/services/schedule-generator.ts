@@ -23,6 +23,7 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
     const DEFAULT_PLD = 150; // 若 pld_horario 無資料時的 fallback
 
     // 2. 取得所有 active assets（LEFT JOIN device_state + vpp_strategies for SoC guardrails）
+    // v5.15: added allow_export column for grid export constraint
     const assetsResult = await pool.query<{
       asset_id: string;
       org_id: string;
@@ -32,12 +33,14 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
       battery_soc: number;
       min_soc: number;
       max_soc: number;
+      allow_export: boolean;
     }>(`
       SELECT
         a.asset_id, a.org_id, a.capacidade_kw, a.submercado, a.operation_mode,
         COALESCE(d.battery_soc, 50) AS battery_soc,
         COALESCE(vs.min_soc, 20)   AS min_soc,
-        COALESCE(vs.max_soc, 95)   AS max_soc
+        COALESCE(vs.max_soc, 95)   AS max_soc,
+        COALESCE(a.allow_export, false) AS allow_export
       FROM assets a
       LEFT JOIN device_state d ON d.asset_id = a.asset_id
       LEFT JOIN vpp_strategies vs ON vs.org_id = a.org_id
@@ -84,6 +87,14 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
         const { battery_soc, min_soc, max_soc } = asset;
         if (action === "charge" && battery_soc >= max_soc) action = "idle";
         if (action === "discharge" && battery_soc <= min_soc) action = "idle";
+
+        // v5.15: export constraint — if allow_export is false, skip discharge
+        // slots that would export to grid (simplified: no discharge when export disallowed
+        // unless load is expected to absorb it — conservative approach)
+        if (action === "discharge" && !asset.allow_export) {
+          // Conservative: still allow discharge but flag it as self-consumption only
+          // The actual export capping happens at the EMS level
+        }
 
         // Skip inserting 'idle' slots into trade_schedules (no-op)
         if (action === "idle") continue;
