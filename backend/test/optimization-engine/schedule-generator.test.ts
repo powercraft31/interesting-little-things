@@ -35,9 +35,10 @@ describe("schedule-generator (M2)", () => {
     );
     const countAfter = parseInt(after.rows[0].count, 10);
 
-    // 47 個 active assets × 24 小時 = 1128 筆（generator 先 DELETE 再 INSERT，所以是絕對值）
-    expect(countAfter).toBe(1128);
-    // 因為 DELETE 舊排程再 INSERT，count 應該是固定的 1128，不是累加
+    // 47 active assets × 24 hours = 1128 base slots
+    // v5.16: + PS slots for assets with contracted_demand_kw (N assets × 4 peak hours)
+    expect(countAfter).toBeGreaterThanOrEqual(1128);
+    expect(countAfter).toBeLessThanOrEqual(1128 + 47 * 4); // upper bound
   });
 
   it("產生的排程 action 只能是 charge 或 discharge", async () => {
@@ -119,6 +120,56 @@ describe("schedule-generator (M2)", () => {
     // Reset for other tests
     await pool.query(
       `UPDATE device_state SET battery_soc = 72 WHERE asset_id = 'ASSET_RJ_002'`,
+    );
+  });
+
+  // ── v5.16 Peak Shaving Tests ────────────────────────────────────
+
+  it("v5.16: assets with contracted_demand_kw → peak_shaving slots generated", async () => {
+    // Ensure at least one home has contracted_demand_kw
+    await pool.query(
+      `UPDATE homes SET contracted_demand_kw = 50.0 WHERE home_id = (SELECT home_id FROM homes ORDER BY home_id LIMIT 1)`,
+    );
+
+    await runScheduleGenerator(pool);
+
+    // Check for PS discharge slots (planned_time in peak BRT hours 18-21 = UTC 21-00)
+    const result = await pool.query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM trade_schedules
+       WHERE status = 'scheduled'
+         AND action = 'discharge'
+         AND planned_time > NOW()
+         AND asset_id IN (
+           SELECT a.asset_id FROM assets a
+           JOIN homes h ON h.home_id = a.home_id
+           WHERE h.contracted_demand_kw IS NOT NULL
+         )`,
+    );
+    const count = parseInt(result.rows[0].count, 10);
+    // At least some PS slots should be created
+    expect(count).toBeGreaterThan(0);
+  });
+
+  it("v5.16: assets without contracted_demand_kw → no extra peak_shaving slots", async () => {
+    // Clear all contracted_demand_kw
+    await pool.query(`UPDATE homes SET contracted_demand_kw = NULL`);
+
+    await runScheduleGenerator(pool);
+
+    // Query for PS-specific slots (peak BRT hours with target_pld_price = 0)
+    // Since contracted_demand_kw is null for all, no PS slots should be generated
+    const result = await pool.query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM trade_schedules
+       WHERE status = 'scheduled'
+         AND target_pld_price = 0
+         AND planned_time > NOW()`,
+    );
+    const count = parseInt(result.rows[0].count, 10);
+    expect(count).toBe(0);
+
+    // Restore seed data
+    await pool.query(
+      `UPDATE homes SET contracted_demand_kw = 50.0 WHERE home_id = (SELECT home_id FROM homes ORDER BY home_id LIMIT 1)`,
     );
   });
 });

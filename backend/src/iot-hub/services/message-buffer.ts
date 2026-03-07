@@ -38,8 +38,9 @@ export class MessageBuffer {
         `INSERT INTO telemetry_history
            (asset_id, recorded_at, battery_soc, battery_power, pv_power,
             grid_power_kw, load_power, grid_import_kwh, grid_export_kwh,
-            battery_soh, battery_voltage, battery_current, battery_temperature)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13)`,
+            battery_soh, battery_voltage, battery_current, battery_temperature,
+            do0_active, do1_active)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
         [
           assetId,
           t.recordedAt,
@@ -55,6 +56,9 @@ export class MessageBuffer {
           t.batteryVoltage || null,
           t.batteryCurrent || null,
           t.batteryTemperature || null,
+          // v5.16: DO relay states
+          t.do0Active || null,
+          t.do1Active || null,
         ],
       );
     } catch (err) {

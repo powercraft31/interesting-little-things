@@ -737,12 +737,14 @@ describe("GET /api/performance/savings (v5.15: real SC/TOU)", () => {
           total: 1250.5,
           sc: 687.78,
           tou: 375.15,
+          ps: 187.57,
         },
         {
           home: "Casa Santos",
           total: 980.0,
           sc: 539.0,
           tou: 294.0,
+          ps: 147.0,
         },
       ],
     });
@@ -763,7 +765,7 @@ describe("GET /api/performance/savings (v5.15: real SC/TOU)", () => {
     expect(savings[0]).toHaveProperty("total");
     expect(savings[0]).toHaveProperty("sc", 687.78);
     expect(savings[0]).toHaveProperty("tou", 375.15);
-    expect(savings[0]).toHaveProperty("ps", null); // v5.15: placeholder until v5.16
+    expect(savings[0]).toHaveProperty("ps", 187.57); // v5.16: real PS savings
     // v5.15: no more alpha field
     expect(savings[0]).not.toHaveProperty("alpha");
   });
@@ -778,6 +780,8 @@ describe("GET /api/performance/savings (v5.15: real SC/TOU)", () => {
     // v5.15: reads real columns from revenue_daily
     expect(sql).toContain("sc_savings_reais");
     expect(sql).toContain("tou_savings_reais");
+    // v5.16: reads ps_savings_reais
+    expect(sql).toContain("ps_savings_reais");
     // v5.15: no more fake 0.55/0.30/0.15 multipliers
     expect(sql).not.toContain("0.55");
     expect(sql).not.toContain("0.30");

@@ -19,6 +19,11 @@ export class XuhengAdapter {
     const load = data.loadList?.[0];
     const flload = data.flloadList?.[0];
 
+    // v5.16: parse DO relay states
+    const doList = data.dido?.do ?? [];
+    const do0 = doList.find((d) => d.id === "DO0");
+    const do1 = doList.find((d) => d.id === "DO1");
+
     return {
       clientId: raw.clientId,
       deviceSn: bat.deviceSn,
@@ -43,9 +48,16 @@ export class XuhengAdapter {
       batteryTemperature: safeFloat(bat.properties.total_bat_temperature),
       maxChargeVoltage: safeFloat(bat.properties.total_bat_maxChargeVoltage),
       maxChargeCurrent: safeFloat(bat.properties.total_bat_maxChargeCurrent),
-      maxDischargeCurrent: safeFloat(bat.properties.total_bat_maxDischargeCurrent),
+      maxDischargeCurrent: safeFloat(
+        bat.properties.total_bat_maxDischargeCurrent,
+      ),
       totalChargeKwh: safeFloat(bat.properties.total_bat_totalChargedEnergy),
-      totalDischargeKwh: safeFloat(bat.properties.total_bat_totalDischargedEnergy),
+      totalDischargeKwh: safeFloat(
+        bat.properties.total_bat_totalDischargedEnergy,
+      ),
+      // v5.16: DO relay state
+      do0Active: do0?.value === "1",
+      do1Active: do1?.value === "1",
     };
   }
 }

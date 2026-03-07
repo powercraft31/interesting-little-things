@@ -77,6 +77,8 @@ describe("daily-billing-job (M4 — v5.15 SC/TOU Attribution)", () => {
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 });
     // Query 4: SC/TOU attribution SELECT
     mockQuery.mockResolvedValueOnce({ rows: [] });
+    // Query 5 (v5.16): PS attribution SELECT
+    mockQuery.mockResolvedValueOnce({ rows: [] });
 
     await runDailyBilling(pool);
 
@@ -101,16 +103,16 @@ describe("daily-billing-job (M4 — v5.15 SC/TOU Attribution)", () => {
     const upsertValues = mockQuery.mock.calls[2][1];
     expect(upsertValues[0]).toBe("ASSET_SP_001");
     expect(upsertValues[1]).toBe(yesterdayStr);
-    expect(upsertValues[2]).toBe(0);  // arbitrage (placeholder)
-    expect(upsertValues[3]).toBe(4.10);  // client_savings
+    expect(upsertValues[2]).toBe(0); // arbitrage (placeholder)
+    expect(upsertValues[3]).toBe(4.1); // client_savings
 
     const baselineCost = upsertValues[9];
     const actualCost = upsertValues[10];
     const bestTouCost = upsertValues[11];
     const selfSufficiency = upsertValues[12];
 
-    expect(baselineCost).toBe(6.60);
-    expect(actualCost).toBe(2.50);
+    expect(baselineCost).toBe(6.6);
+    expect(actualCost).toBe(2.5);
     expect(bestTouCost).toBeGreaterThanOrEqual(0);
     expect(bestTouCost).toBeLessThanOrEqual(baselineCost);
     expect(selfSufficiency).toBeCloseTo(33.3, 0);
@@ -140,15 +142,16 @@ describe("daily-billing-job (M4 — v5.15 SC/TOU Attribution)", () => {
     mockQuery.mockResolvedValueOnce({ rows: [] }); // no tariff
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 }); // UPSERT
     mockQuery.mockResolvedValueOnce({ rows: [] }); // SC/TOU attribution
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // v5.16: PS attribution
 
     await runDailyBilling(pool);
 
     const upsertValues = mockQuery.mock.calls[2][1];
-    expect(upsertValues[3]).toBe(2.46);  // client_savings
+    expect(upsertValues[3]).toBe(2.46); // client_savings
 
     const baselineCost = upsertValues[9];
     const actualCost = upsertValues[10];
-    expect(baselineCost).toBe(4.10);
+    expect(baselineCost).toBe(4.1);
     expect(actualCost).toBe(1.64);
   });
 
@@ -157,11 +160,13 @@ describe("daily-billing-job (M4 — v5.15 SC/TOU Attribution)", () => {
     mockQuery.mockResolvedValueOnce({ rows: [] }); // tariff
     // v5.15: attribution query still runs
     mockQuery.mockResolvedValueOnce({ rows: [] }); // attribution
+    // v5.16: PS savings query still runs
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // PS attribution
 
     await runDailyBilling(pool);
 
-    // SELECT hourly + SELECT tariff + SELECT attribution
-    expect(mockQuery).toHaveBeenCalledTimes(3);
+    // SELECT hourly + SELECT tariff + SELECT attribution + SELECT PS attribution
+    expect(mockQuery).toHaveBeenCalledTimes(4);
   });
 
   it("logs error and does not throw when query fails", async () => {
@@ -201,7 +206,14 @@ describe("daily-billing-job (M4 — v5.15 SC/TOU Attribution)", () => {
     });
     // Tariff
     mockQuery.mockResolvedValueOnce({
-      rows: [{ org_id: "ORG_001", peak_rate: "0.82", offpeak_rate: "0.25", intermediate_rate: "0.55" }],
+      rows: [
+        {
+          org_id: "ORG_001",
+          peak_rate: "0.82",
+          offpeak_rate: "0.25",
+          intermediate_rate: "0.55",
+        },
+      ],
     });
     // UPSERT revenue_daily
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 });
@@ -210,7 +222,7 @@ describe("daily-billing-job (M4 — v5.15 SC/TOU Attribution)", () => {
       rows: [
         {
           asset_id: "SP-BAT-001",
-          sc_energy_kwh: "3.5000",      // total SC energy for the day
+          sc_energy_kwh: "3.5000", // total SC energy for the day
           tou_discharge_kwh: "0.0000",
           tou_charge_kwh: "0.0000",
         },
@@ -218,6 +230,8 @@ describe("daily-billing-job (M4 — v5.15 SC/TOU Attribution)", () => {
     });
     // UPDATE revenue_daily with SC/TOU
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 });
+    // v5.16: PS attribution SELECT
+    mockQuery.mockResolvedValueOnce({ rows: [] });
 
     await runDailyBilling(pool);
 
@@ -236,8 +250,8 @@ describe("daily-billing-job (M4 — v5.15 SC/TOU Attribution)", () => {
 
     const updateParams = mockQuery.mock.calls[4][1];
     // sc_savings = 3.5 * 0.55 (intermediate rate) = 1.93
-    expect(updateParams[0]).toBe(1.93);  // sc_savings_reais
-    expect(updateParams[1]).toBe(0);     // tou_savings_reais (no TOU activity)
+    expect(updateParams[0]).toBe(1.93); // sc_savings_reais
+    expect(updateParams[1]).toBe(0); // tou_savings_reais (no TOU activity)
     expect(updateParams[2]).toBe("SP-BAT-001");
   });
 
@@ -263,7 +277,14 @@ describe("daily-billing-job (M4 — v5.15 SC/TOU Attribution)", () => {
       ],
     });
     mockQuery.mockResolvedValueOnce({
-      rows: [{ org_id: "ORG_001", peak_rate: "0.82", offpeak_rate: "0.25", intermediate_rate: "0.55" }],
+      rows: [
+        {
+          org_id: "ORG_001",
+          peak_rate: "0.82",
+          offpeak_rate: "0.25",
+          intermediate_rate: "0.55",
+        },
+      ],
     });
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 }); // UPSERT
     // Attribution: TOU mode
@@ -278,13 +299,14 @@ describe("daily-billing-job (M4 — v5.15 SC/TOU Attribution)", () => {
       ],
     });
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 }); // UPDATE
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // v5.16: PS attribution
 
     await runDailyBilling(pool);
 
     const updateParams = mockQuery.mock.calls[4][1];
     // tou_savings = (5.0 * 0.82) - (2.0 * 0.25) = 4.10 - 0.50 = 3.60
-    expect(updateParams[0]).toBe(0);      // sc_savings = 0
-    expect(updateParams[1]).toBe(3.6);    // tou_savings
+    expect(updateParams[0]).toBe(0); // sc_savings = 0
+    expect(updateParams[1]).toBe(3.6); // tou_savings
   });
 
   it("UNASSIGNED mode: sc/tou remain at 0 (no TypeError)", async () => {
@@ -309,7 +331,14 @@ describe("daily-billing-job (M4 — v5.15 SC/TOU Attribution)", () => {
       ],
     });
     mockQuery.mockResolvedValueOnce({
-      rows: [{ org_id: "ORG_001", peak_rate: "0.82", offpeak_rate: "0.25", intermediate_rate: "0.55" }],
+      rows: [
+        {
+          org_id: "ORG_001",
+          peak_rate: "0.82",
+          offpeak_rate: "0.25",
+          intermediate_rate: "0.55",
+        },
+      ],
     });
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 }); // UPSERT
     // Attribution: all UNASSIGNED → sums to 0
@@ -324,18 +353,21 @@ describe("daily-billing-job (M4 — v5.15 SC/TOU Attribution)", () => {
       ],
     });
     mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 }); // UPDATE
+    mockQuery.mockResolvedValueOnce({ rows: [] }); // v5.16: PS attribution
 
     await runDailyBilling(pool);
 
     const updateParams = mockQuery.mock.calls[4][1];
-    expect(updateParams[0]).toBe(0);  // sc_savings = 0
-    expect(updateParams[1]).toBe(0);  // tou_savings = 0
+    expect(updateParams[0]).toBe(0); // sc_savings = 0
+    expect(updateParams[1]).toBe(0); // tou_savings = 0
   });
 
   it("BRT billing window: attribution query uses 03:00 UTC boundaries", async () => {
     mockQuery.mockResolvedValueOnce({ rows: [] }); // hourly
     mockQuery.mockResolvedValueOnce({ rows: [] }); // tariff
     // Attribution query
+    mockQuery.mockResolvedValueOnce({ rows: [] });
+    // v5.16: PS attribution
     mockQuery.mockResolvedValueOnce({ rows: [] });
 
     await runDailyBilling(pool);

@@ -114,6 +114,8 @@ CREATE TABLE IF NOT EXISTS telemetry_history (
   bat_work_status VARCHAR(20),
   grid_import_kwh DECIMAL(10,3),
   grid_export_kwh DECIMAL(10,3),
+  do0_active      BOOLEAN,           -- v5.16: DO0 relay state
+  do1_active      BOOLEAN,           -- v5.16: DO1 relay state
   PRIMARY KEY (id, recorded_at)
 ) PARTITION BY RANGE (recorded_at);
 
@@ -197,6 +199,8 @@ CREATE TABLE IF NOT EXISTS tariff_schedules (
   intermediate_rate  DECIMAL(8,4),
   intermediate_start TIME,
   intermediate_end   TIME,
+  demand_charge_rate_per_kva NUMERIC(8,4),  -- v5.16: R$/kVA monthly demand charge
+  billing_power_factor       NUMERIC(3,2) DEFAULT 0.92,  -- v5.16: per ANEEL
   disco          VARCHAR(50),
   currency       VARCHAR(3)   NOT NULL DEFAULT 'BRL',
   effective_from DATE         NOT NULL,
@@ -238,6 +242,10 @@ CREATE TABLE IF NOT EXISTS revenue_daily (
   self_sufficiency_pct NUMERIC(5,2),
   sc_savings_reais     NUMERIC(10,2),   -- v5.15: SC attribution
   tou_savings_reais    NUMERIC(10,2),   -- v5.15: TOU attribution
+  ps_savings_reais         NUMERIC(10,2),   -- v5.16: PS daily savings
+  ps_avoided_peak_kva      NUMERIC(8,3),    -- v5.16: avoided peak kVA
+  do_shed_confidence       VARCHAR(10),      -- v5.16: high|low
+  true_up_adjustment_reais NUMERIC(10,2),   -- v5.16: monthly true-up
   calculated_at       TIMESTAMPTZ,
   created_at          TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   UNIQUE (asset_id, date)

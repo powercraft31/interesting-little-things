@@ -59,6 +59,15 @@ export interface XuhengRawMessage {
         readonly error_codes?: string;
       };
     }>;
+    // v5.16: Digital Output relay state from MSG#1
+    readonly dido?: {
+      readonly do: ReadonlyArray<{
+        readonly id: string; // "DO0" | "DO1"
+        readonly type: string; // "DO"
+        readonly value: string; // "0" = open, "1" = closed (load shed active)
+        readonly gpionum?: string;
+      }>;
+    };
     readonly [key: string]: unknown;
   };
 }
@@ -89,6 +98,9 @@ export interface ParsedTelemetry {
   readonly maxDischargeCurrent: number;
   readonly totalChargeKwh: number;
   readonly totalDischargeKwh: number;
+  // v5.16: DO relay state
+  readonly do0Active: boolean;
+  readonly do1Active: boolean;
 }
 
 /** Xuheng message type discriminator */

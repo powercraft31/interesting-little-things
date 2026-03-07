@@ -54,7 +54,8 @@ export async function handler(
        h.name AS home,
        COALESCE(SUM(rd.client_savings_reais), 0) AS total,
        COALESCE(SUM(rd.sc_savings_reais), 0)     AS sc,
-       COALESCE(SUM(rd.tou_savings_reais), 0)    AS tou
+       COALESCE(SUM(rd.tou_savings_reais), 0)    AS tou,
+       COALESCE(SUM(rd.ps_savings_reais), 0)     AS ps
      FROM revenue_daily rd
      JOIN assets a ON rd.asset_id = a.asset_id
      JOIN homes h ON a.home_id = h.home_id
@@ -71,7 +72,7 @@ export async function handler(
     total: Math.round(parseFloat(String(r.total)) * 100) / 100,
     sc: parseFloat(String(r.sc)),
     tou: parseFloat(String(r.tou)),
-    ps: null as number | null, // placeholder until v5.16
+    ps: parseFloat(String(r.ps)),
   }));
 
   const body = ok({ savings, _tenant: { orgId: ctx.orgId, role: ctx.role } });

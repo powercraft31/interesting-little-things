@@ -34,18 +34,21 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
       min_soc: number;
       max_soc: number;
       allow_export: boolean;
+      contracted_demand_kw: number | null;
     }>(`
       SELECT
         a.asset_id, a.org_id, a.capacidade_kw, a.submercado, a.operation_mode,
         COALESCE(d.battery_soc, 50) AS battery_soc,
         COALESCE(vs.min_soc, 20)   AS min_soc,
         COALESCE(vs.max_soc, 95)   AS max_soc,
-        COALESCE(a.allow_export, false) AS allow_export
+        COALESCE(a.allow_export, false) AS allow_export,
+        h.contracted_demand_kw
       FROM assets a
       LEFT JOIN device_state d ON d.asset_id = a.asset_id
       LEFT JOIN vpp_strategies vs ON vs.org_id = a.org_id
         AND vs.target_mode = a.operation_mode
         AND vs.is_active = true
+      LEFT JOIN homes h ON h.home_id = a.home_id
       WHERE a.is_active = true
     `);
 
@@ -125,6 +128,32 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
           VALUES ($1, $2, $3, $4, $5, $6, 'scheduled')
         `,
           [assetId, orgId, plannedTime, action, volume, pld],
+        );
+      }
+    }
+
+    // v5.16: Peak Shaving slot generation for assets with contracted demand
+    const assetsWithDemand = assetsResult.rows.filter(
+      (a) => a.contracted_demand_kw != null,
+    );
+
+    for (const asset of assetsWithDemand) {
+      const peakHours = [18, 19, 20, 21]; // BRT 18:00-22:00 peak risk window
+      for (const hour of peakHours) {
+        const plannedTime = new Date();
+        plannedTime.setUTCHours(hour + 3, 0, 0, 0); // BRT → UTC
+
+        await pool.query(
+          `INSERT INTO trade_schedules
+            (asset_id, org_id, planned_time, action, expected_volume_kwh, target_pld_price, status)
+          VALUES ($1, $2, $3, 'discharge', $4, 0, 'scheduled')
+          ON CONFLICT DO NOTHING`,
+          [
+            asset.asset_id,
+            asset.org_id,
+            plannedTime.toISOString(),
+            Number(asset.capacidade_kw ?? 5) * 0.8,
+          ],
         );
       }
     }

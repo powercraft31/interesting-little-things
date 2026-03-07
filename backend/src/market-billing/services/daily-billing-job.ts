@@ -337,8 +337,246 @@ export async function runDailyBilling(pool: Pool): Promise<void> {
       );
     }
 
+    // Step 6 (v5.16): PS daily savings attribution
+    await runDailyPsSavings(pool, brtWindowStart, brtWindowEnd);
+
     console.log(`[BillingJob] Settled ${assetMap.size} assets for ${dateStr}`);
   } catch (err) {
     console.error("[BillingJob] Error:", err);
+  }
+}
+
+/**
+ * v5.16: Daily Peak Shaving savings attribution.
+ * Computes counterfactual peak demand from 5-min metrics + DO shed detection,
+ * bins to 15-min via date_bin(), and writes provisional daily PS savings.
+ */
+export async function runDailyPsSavings(
+  pool: Pool,
+  brtWindowStart: Date,
+  brtWindowEnd: Date,
+): Promise<void> {
+  const result = await pool.query<{
+    asset_id: string;
+    avoided_kva: string;
+    daily_ps_savings: string;
+    confidence: string;
+  }>(
+    `WITH ps_active_windows AS (
+      SELECT
+        m.asset_id,
+        m.window_start,
+        (m.grid_import_kwh * 12) + (m.bat_discharge_kwh * 12) AS cf_grid_kw,
+        COALESCE((
+          SELECT GREATEST(0, th_b.load_power - th_a.load_power)
+          FROM telemetry_history th_b
+          JOIN telemetry_history th_a ON th_a.asset_id = th_b.asset_id
+          WHERE th_b.asset_id = m.asset_id
+            AND COALESCE(th_b.do0_active, false) = false
+            AND COALESCE(th_a.do0_active, false) = true
+            AND th_b.recorded_at BETWEEN m.window_start - INTERVAL '3 min' AND m.window_start
+            AND th_a.recorded_at BETWEEN m.window_start AND m.window_start + INTERVAL '3 min'
+          ORDER BY th_b.recorded_at DESC, th_a.recorded_at ASC
+          LIMIT 1
+        ), 0) AS do0_shed_kw,
+        COALESCE((
+          SELECT GREATEST(0, th_b.load_power - th_a.load_power)
+          FROM telemetry_history th_b
+          JOIN telemetry_history th_a ON th_a.asset_id = th_b.asset_id
+          WHERE th_b.asset_id = m.asset_id
+            AND COALESCE(th_b.do1_active, false) = false
+            AND COALESCE(th_a.do1_active, false) = true
+            AND th_b.recorded_at BETWEEN m.window_start - INTERVAL '3 min' AND m.window_start
+            AND th_a.recorded_at BETWEEN m.window_start AND m.window_start + INTERVAL '3 min'
+          ORDER BY th_b.recorded_at DESC, th_a.recorded_at ASC
+          LIMIT 1
+        ), 0) AS do1_shed_kw,
+        CASE WHEN EXISTS (
+          SELECT 1 FROM telemetry_history th
+          WHERE th.asset_id = m.asset_id
+            AND COALESCE(th.do0_active, false) = true
+            AND th.recorded_at BETWEEN m.window_start AND m.window_start + INTERVAL '5 min'
+          LIMIT 1
+        ) THEN 'high' ELSE
+          CASE WHEN EXISTS (
+            SELECT 1 FROM telemetry_history th
+            WHERE th.asset_id = m.asset_id
+              AND (COALESCE(th.do0_active, false) = true OR COALESCE(th.do1_active, false) = true)
+              AND th.recorded_at BETWEEN m.window_start - INTERVAL '5 min' AND m.window_start + INTERVAL '5 min'
+            LIMIT 1
+          ) THEN 'low' ELSE 'high' END
+        END AS window_confidence
+      FROM asset_5min_metrics m
+      WHERE m.window_start >= $1 AND m.window_start < $2
+        AND (
+          SELECT COALESCE(dr.target_mode, 'UNASSIGNED')
+          FROM dispatch_records dr
+          WHERE dr.asset_id = m.asset_id
+            AND dr.dispatched_at <= m.window_start
+          ORDER BY dr.dispatched_at DESC LIMIT 1
+        ) = 'peak_shaving'
+    ),
+    demand_15min AS (
+      SELECT
+        w.asset_id,
+        date_bin('15 minutes', w.window_start, TIMESTAMP '2026-01-01 03:00:00+00') AS window_15,
+        AVG(w.cf_grid_kw + w.do0_shed_kw + w.do1_shed_kw) AS cf_kw_avg,
+        MIN(w.window_confidence) AS confidence
+      FROM ps_active_windows w
+      GROUP BY w.asset_id, window_15
+    ),
+    peak_per_asset AS (
+      SELECT
+        d.asset_id,
+        MAX(d.cf_kw_avg / COALESCE(ts.billing_power_factor, 0.92)) AS daily_peak_kva,
+        MIN(d.confidence) AS confidence
+      FROM demand_15min d
+      JOIN assets a ON a.asset_id = d.asset_id
+      LEFT JOIN tariff_schedules ts ON ts.org_id = a.org_id
+        AND ts.effective_to IS NULL
+      GROUP BY d.asset_id
+    )
+    SELECT
+      p.asset_id,
+      GREATEST(0, p.daily_peak_kva - COALESCE(h.contracted_demand_kw, 0)) AS avoided_kva,
+      GREATEST(0, p.daily_peak_kva - COALESCE(h.contracted_demand_kw, 0))
+        * COALESCE(ts.demand_charge_rate_per_kva, 0)
+        / GREATEST(1, DATE_PART('days',
+            DATE_TRUNC('month', $1::date) + INTERVAL '1 month'
+            - DATE_TRUNC('month', $1::date)
+          )) AS daily_ps_savings,
+      p.confidence
+    FROM peak_per_asset p
+    JOIN assets a ON a.asset_id = p.asset_id
+    JOIN homes h ON h.home_id = a.home_id
+    LEFT JOIN tariff_schedules ts ON ts.org_id = a.org_id
+      AND ts.effective_to IS NULL`,
+    [brtWindowStart.toISOString(), brtWindowEnd.toISOString()],
+  );
+
+  for (const row of result.rows) {
+    const billingDate = new Date(brtWindowStart);
+    billingDate.setUTCDate(billingDate.getUTCDate() + 1);
+
+    await pool.query(
+      `UPDATE revenue_daily SET
+        ps_savings_reais    = $1,
+        ps_avoided_peak_kva = $2,
+        do_shed_confidence  = $3
+      WHERE asset_id = $4 AND date = $5::date`,
+      [
+        parseFloat(row.daily_ps_savings) || 0,
+        parseFloat(row.avoided_kva) || 0,
+        row.confidence,
+        row.asset_id,
+        billingDate.toISOString().split("T")[0],
+      ],
+    );
+  }
+}
+
+/**
+ * v5.16: Monthly true-up — runs on 1st of month at 04:00 UTC.
+ * Rescans full month, computes true peak kVA, compares to sum of daily provisionals.
+ * INSERTs new row with true_up_adjustment_reais — NEVER UPDATEs historical rows.
+ */
+export async function runMonthlyTrueUp(
+  pool: Pool,
+  billingMonth: Date,
+): Promise<void> {
+  const monthStart = new Date(
+    Date.UTC(
+      billingMonth.getUTCFullYear(),
+      billingMonth.getUTCMonth(),
+      1,
+      3,
+      0,
+      0,
+    ),
+  );
+  const monthEnd = new Date(
+    Date.UTC(
+      billingMonth.getUTCFullYear(),
+      billingMonth.getUTCMonth() + 1,
+      1,
+      3,
+      0,
+      0,
+    ),
+  );
+
+  const trueUpResult = await pool.query<{
+    asset_id: string;
+    true_ps_savings: string;
+    sum_daily_provisionals: string;
+  }>(
+    `WITH all_ps_windows AS (
+      SELECT
+        m.asset_id,
+        date_bin('15 minutes', m.window_start, TIMESTAMP '2026-01-01 03:00:00+00') AS window_15,
+        AVG((m.grid_import_kwh * 12) + (m.bat_discharge_kwh * 12)) AS cf_kw_avg
+      FROM asset_5min_metrics m
+      WHERE m.window_start >= $1 AND m.window_start < $2
+        AND (
+          SELECT COALESCE(dr.target_mode, 'UNASSIGNED')
+          FROM dispatch_records dr
+          WHERE dr.asset_id = m.asset_id AND dr.dispatched_at <= m.window_start
+          ORDER BY dr.dispatched_at DESC LIMIT 1
+        ) = 'peak_shaving'
+      GROUP BY m.asset_id, window_15
+    ),
+    monthly_peak AS (
+      SELECT
+        w.asset_id,
+        MAX(w.cf_kw_avg / COALESCE(ts.billing_power_factor, 0.92)) AS monthly_peak_kva
+      FROM all_ps_windows w
+      JOIN assets a ON a.asset_id = w.asset_id
+      LEFT JOIN tariff_schedules ts ON ts.org_id = a.org_id
+        AND ts.effective_to IS NULL
+      GROUP BY w.asset_id
+    ),
+    daily_sum AS (
+      SELECT asset_id, COALESCE(SUM(ps_savings_reais), 0) AS sum_provisionals
+      FROM revenue_daily
+      WHERE date >= $3 AND date < $4
+      GROUP BY asset_id
+    )
+    SELECT
+      mp.asset_id,
+      GREATEST(0, mp.monthly_peak_kva - COALESCE(h.contracted_demand_kw, 0))
+        * COALESCE(ts.demand_charge_rate_per_kva, 0) AS true_ps_savings,
+      COALESCE(ds.sum_provisionals, 0) AS sum_daily_provisionals
+    FROM monthly_peak mp
+    JOIN assets a ON a.asset_id = mp.asset_id
+    JOIN homes h ON h.home_id = a.home_id
+    LEFT JOIN tariff_schedules ts ON ts.org_id = a.org_id
+      AND ts.effective_to IS NULL
+    LEFT JOIN daily_sum ds ON ds.asset_id = mp.asset_id`,
+    [
+      monthStart.toISOString(),
+      monthEnd.toISOString(),
+      monthStart.toISOString().split("T")[0],
+      monthEnd.toISOString().split("T")[0],
+    ],
+  );
+
+  const trueUpDate = new Date(monthEnd);
+  const trueUpDateStr = trueUpDate.toISOString().split("T")[0];
+
+  for (const row of trueUpResult.rows) {
+    const truePS = parseFloat(row.true_ps_savings);
+    const sumDaily = parseFloat(row.sum_daily_provisionals);
+    const adjustment = truePS - sumDaily;
+
+    if (Math.abs(adjustment) < 0.01) continue;
+
+    // INSERT a new row for the true-up — NEVER UPDATE historical rows
+    await pool.query(
+      `INSERT INTO revenue_daily (asset_id, date, true_up_adjustment_reais)
+      VALUES ($1, $2, $3)
+      ON CONFLICT (asset_id, date) DO UPDATE
+        SET true_up_adjustment_reais = EXCLUDED.true_up_adjustment_reais`,
+      [row.asset_id, trueUpDateStr, adjustment],
+    );
   }
 }

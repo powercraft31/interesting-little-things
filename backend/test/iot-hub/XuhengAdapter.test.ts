@@ -155,6 +155,67 @@ describe("XuhengAdapter — MSG#4 parser", () => {
     expect(result!.totalDischargeKwh).toBe(0);
   });
 
+  // -- v5.16 DO parsing tests --
+
+  it("v5.16: dido present with DO0='1' → do0Active: true", () => {
+    const withDO: XuhengRawMessage = {
+      ...MSG4_FIXTURE,
+      data: {
+        ...MSG4_FIXTURE.data,
+        dido: {
+          do: [
+            { id: "DO0", type: "DO", value: "1", gpionum: "0" },
+            { id: "DO1", type: "DO", value: "0", gpionum: "1" },
+          ],
+        },
+      },
+    };
+    const result = adapter.parse(withDO);
+    expect(result).not.toBeNull();
+    expect(result!.do0Active).toBe(true);
+    expect(result!.do1Active).toBe(false);
+  });
+
+  it("v5.16: dido present with DO0='0' → do0Active: false", () => {
+    const withDO: XuhengRawMessage = {
+      ...MSG4_FIXTURE,
+      data: {
+        ...MSG4_FIXTURE.data,
+        dido: {
+          do: [
+            { id: "DO0", type: "DO", value: "0" },
+            { id: "DO1", type: "DO", value: "0" },
+          ],
+        },
+      },
+    };
+    const result = adapter.parse(withDO);
+    expect(result).not.toBeNull();
+    expect(result!.do0Active).toBe(false);
+    expect(result!.do1Active).toBe(false);
+  });
+
+  it("v5.16: dido absent → do0Active: false, do1Active: false", () => {
+    const result = adapter.parse(MSG4_FIXTURE);
+    expect(result).not.toBeNull();
+    expect(result!.do0Active).toBe(false);
+    expect(result!.do1Active).toBe(false);
+  });
+
+  it("v5.16: dido.do array empty → both false", () => {
+    const emptyDO: XuhengRawMessage = {
+      ...MSG4_FIXTURE,
+      data: {
+        ...MSG4_FIXTURE.data,
+        dido: { do: [] },
+      },
+    };
+    const result = adapter.parse(emptyDO);
+    expect(result).not.toBeNull();
+    expect(result!.do0Active).toBe(false);
+    expect(result!.do1Active).toBe(false);
+  });
+
   it("handles non-numeric string values safely", () => {
     const badData: XuhengRawMessage = {
       ...MSG4_FIXTURE,
