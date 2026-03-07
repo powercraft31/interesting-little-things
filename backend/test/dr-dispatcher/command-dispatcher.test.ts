@@ -66,6 +66,96 @@ describe("command-dispatcher (M3)", () => {
     expect(result.rows[0].m1_boundary).toBe(true); // v5.6 永遠為 true
   });
 
+  it("v5.16: peak_shaving schedule → dispatch_records.target_mode = 'peak_shaving' with peak_limit_kva", async () => {
+    // Insert a PS schedule with target_mode
+    const psResult = await pool.query<{ id: number }>(`
+      INSERT INTO trade_schedules
+        (asset_id, org_id, planned_time, action, expected_volume_kwh, target_pld_price, status, target_mode)
+      VALUES
+        ('ASSET_SP_001', 'ORG_ENERGIA_001', NOW() - INTERVAL '1 minute', 'discharge', 4.0, 0, 'scheduled', 'peak_shaving')
+      RETURNING id
+    `);
+    const psTradeId = psResult.rows[0].id;
+
+    // Ensure home has contracted_demand_kw
+    await pool.query(
+      `UPDATE homes SET contracted_demand_kw = 50.0
+       WHERE home_id = (SELECT home_id FROM assets WHERE asset_id = 'ASSET_SP_001')`,
+    );
+
+    await runCommandDispatcher(pool);
+
+    // Verify dispatch_records was written with target_mode = 'peak_shaving'
+    const dr = await pool.query<{
+      target_mode: string;
+      commanded_power_kw: number;
+    }>(
+      `SELECT target_mode, commanded_power_kw FROM dispatch_records
+       WHERE asset_id = 'ASSET_SP_001' AND target_mode = 'peak_shaving'
+       ORDER BY dispatched_at DESC LIMIT 1`,
+    );
+    expect(dr.rows).toHaveLength(1);
+    expect(dr.rows[0].target_mode).toBe("peak_shaving");
+    // peak_limit_kva = 50.0 / 0.92 ≈ 54.35
+    expect(Number(dr.rows[0].commanded_power_kw)).toBeCloseTo(54.35, 1);
+
+    // Cleanup
+    await pool.query(
+      `DELETE FROM dispatch_records WHERE asset_id = 'ASSET_SP_001' AND target_mode = 'peak_shaving'`,
+    );
+    await pool.query(`DELETE FROM dispatch_commands WHERE trade_id = $1`, [
+      psTradeId,
+    ]);
+    await pool.query(`DELETE FROM trade_schedules WHERE id = $1`, [psTradeId]);
+  });
+
+  it("v5.16: peak_limit_kva division by zero guard (pf=0 → peak_limit_kva = contractedKw)", async () => {
+    // Set billing_power_factor = 0 in tariff_schedules
+    await pool.query(
+      `UPDATE tariff_schedules SET billing_power_factor = 0
+       WHERE org_id = 'ORG_ENERGIA_001' AND effective_to IS NULL`,
+    );
+
+    // Ensure home has contracted_demand_kw
+    await pool.query(
+      `UPDATE homes SET contracted_demand_kw = 60.0
+       WHERE home_id = (SELECT home_id FROM assets WHERE asset_id = 'ASSET_SP_001')`,
+    );
+
+    const psResult = await pool.query<{ id: number }>(`
+      INSERT INTO trade_schedules
+        (asset_id, org_id, planned_time, action, expected_volume_kwh, target_pld_price, status, target_mode)
+      VALUES
+        ('ASSET_SP_001', 'ORG_ENERGIA_001', NOW() - INTERVAL '1 minute', 'discharge', 4.0, 0, 'scheduled', 'peak_shaving')
+      RETURNING id
+    `);
+    const psTradeId = psResult.rows[0].id;
+
+    await runCommandDispatcher(pool);
+
+    const dr = await pool.query<{ commanded_power_kw: number }>(
+      `SELECT commanded_power_kw FROM dispatch_records
+       WHERE asset_id = 'ASSET_SP_001' AND target_mode = 'peak_shaving'
+       ORDER BY dispatched_at DESC LIMIT 1`,
+    );
+    expect(dr.rows).toHaveLength(1);
+    // pf=0 → fallback: peak_limit_kva = contractedKw = 60.0
+    expect(Number(dr.rows[0].commanded_power_kw)).toBe(60);
+
+    // Cleanup & restore
+    await pool.query(
+      `UPDATE tariff_schedules SET billing_power_factor = 0.92
+       WHERE org_id = 'ORG_ENERGIA_001' AND effective_to IS NULL`,
+    );
+    await pool.query(
+      `DELETE FROM dispatch_records WHERE asset_id = 'ASSET_SP_001' AND target_mode = 'peak_shaving'`,
+    );
+    await pool.query(`DELETE FROM dispatch_commands WHERE trade_id = $1`, [
+      psTradeId,
+    ]);
+    await pool.query(`DELETE FROM trade_schedules WHERE id = $1`, [psTradeId]);
+  });
+
   it("v5.9: executing trades are NOT auto-advanced (timeout-checker handles this now)", async () => {
     // Insert a stale 'executing' trade — command-dispatcher should NOT change it
     const result = await pool.query<{ id: number }>(`

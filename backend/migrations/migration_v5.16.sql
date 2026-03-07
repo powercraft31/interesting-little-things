@@ -38,3 +38,7 @@ COMMENT ON COLUMN revenue_daily.do_shed_confidence IS
   'high = full telemetry available; low = DO trigger detected but post-shed telemetry missing (backfill pending).';
 COMMENT ON COLUMN revenue_daily.true_up_adjustment_reais IS
   'Monthly true-up adjustment. Written by MonthlyTrueUpJob on 1st of month. Never modifies past daily rows.';
+
+-- 4. trade_schedules: add target_mode for PS dispatch chain
+ALTER TABLE trade_schedules
+  ADD COLUMN IF NOT EXISTS target_mode VARCHAR(50);

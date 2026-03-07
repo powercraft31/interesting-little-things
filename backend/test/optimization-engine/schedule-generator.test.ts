@@ -150,6 +150,28 @@ describe("schedule-generator (M2)", () => {
     expect(count).toBeGreaterThan(0);
   });
 
+  it("v5.16: PS slots have target_mode = 'peak_shaving'", async () => {
+    await pool.query(
+      `UPDATE homes SET contracted_demand_kw = 50.0 WHERE home_id = (SELECT home_id FROM homes ORDER BY home_id LIMIT 1)`,
+    );
+
+    await runScheduleGenerator(pool);
+
+    const result = await pool.query<{ target_mode: string | null }>(
+      `SELECT DISTINCT target_mode FROM trade_schedules
+       WHERE status = 'scheduled'
+         AND target_pld_price = 0
+         AND planned_time > NOW()
+         AND asset_id IN (
+           SELECT a.asset_id FROM assets a
+           JOIN homes h ON h.home_id = a.home_id
+           WHERE h.contracted_demand_kw IS NOT NULL
+         )`,
+    );
+    expect(result.rows).toHaveLength(1);
+    expect(result.rows[0].target_mode).toBe("peak_shaving");
+  });
+
   it("v5.16: assets without contracted_demand_kw → no extra peak_shaving slots", async () => {
     // Clear all contracted_demand_kw
     await pool.query(`UPDATE homes SET contracted_demand_kw = NULL`);

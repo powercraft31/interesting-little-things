@@ -17,8 +17,9 @@ export async function runCommandDispatcher(pool: Pool): Promise<void> {
       org_id: string;
       action: string;
       expected_volume_kwh: number;
+      target_mode: string | null;
     }>(`
-      SELECT id, asset_id, org_id, action, expected_volume_kwh
+      SELECT id, asset_id, org_id, action, expected_volume_kwh, target_mode
       FROM trade_schedules
       WHERE status = 'scheduled'
         AND planned_time <= NOW()
@@ -38,7 +39,7 @@ export async function runCommandDispatcher(pool: Pool): Promise<void> {
         [ids],
       );
 
-      // Step 3: 寫入 dispatch_commands（到 M1 邊界停止）
+      // Step 3: 寫入 dispatch_commands（到 M1 邊界停止）+ dispatch_records for PS
       for (const trade of dueResult.rows) {
         await client.query(
           `
@@ -54,6 +55,41 @@ export async function runCommandDispatcher(pool: Pool): Promise<void> {
             trade.expected_volume_kwh,
           ],
         );
+
+        // Peak Shaving: write dispatch_records with target_mode and compute peak_limit_kva
+        if (trade.target_mode === "peak_shaving") {
+          const demandResult = await client.query<{
+            contracted_demand_kw: number;
+            billing_power_factor: number;
+          }>(
+            `
+            SELECT h.contracted_demand_kw,
+                   COALESCE(ts.billing_power_factor, 0.92) AS billing_power_factor
+            FROM assets a
+            JOIN homes h ON h.home_id = a.home_id
+            LEFT JOIN tariff_schedules ts ON ts.org_id = a.org_id
+              AND ts.effective_from <= CURRENT_DATE
+              AND (ts.effective_to IS NULL OR ts.effective_to >= CURRENT_DATE)
+            WHERE a.asset_id = $1
+            LIMIT 1
+          `,
+            [trade.asset_id],
+          );
+
+          const contractedKw = demandResult.rows[0]?.contracted_demand_kw ?? 0;
+          const pf = demandResult.rows[0]?.billing_power_factor ?? 0.92;
+          const peakLimitKva =
+            pf > 0 ? Math.round((contractedKw / pf) * 100) / 100 : contractedKw;
+
+          await client.query(
+            `
+            INSERT INTO dispatch_records
+              (asset_id, dispatched_at, dispatch_type, commanded_power_kw, target_mode)
+            VALUES ($1, NOW(), 'peak_shaving', $2, 'peak_shaving')
+          `,
+            [trade.asset_id, peakLimitKva],
+          );
+        }
       }
     }
 

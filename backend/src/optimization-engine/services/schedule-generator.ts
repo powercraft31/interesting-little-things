@@ -145,8 +145,8 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
 
         await pool.query(
           `INSERT INTO trade_schedules
-            (asset_id, org_id, planned_time, action, expected_volume_kwh, target_pld_price, status)
-          VALUES ($1, $2, $3, 'discharge', $4, 0, 'scheduled')
+            (asset_id, org_id, planned_time, action, expected_volume_kwh, target_pld_price, status, target_mode)
+          VALUES ($1, $2, $3, 'discharge', $4, 0, 'scheduled', 'peak_shaving')
           ON CONFLICT DO NOTHING`,
           [
             asset.asset_id,
