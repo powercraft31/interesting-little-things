@@ -4,18 +4,38 @@
    ============================================ */
 
 const FleetPage = {
-  init() {
+  async init() {
+    const self = this;
     const container = document.getElementById("fleet-content");
     if (!container) return;
 
-    // Read current role from app.js global (defaults to "admin" on first load)
-    const role = (typeof currentRole !== "undefined") ? currentRole : "admin";
-    const skeletonHTML = this._buildSkeleton();
-    const realHTML = this._buildContent(role);
+    const role = typeof currentRole !== "undefined" ? currentRole : "admin";
+    container.innerHTML = this._buildSkeleton();
 
-    Components.renderWithSkeleton(container, skeletonHTML, realHTML, () => {
-      this._initCharts(role);
-    });
+    try {
+      const [overview, integradores, offlineEvents, uptimeTrend] =
+        await Promise.all([
+          DataSource.fleet.overview(),
+          DataSource.fleet.integradores(),
+          DataSource.fleet.offlineEvents(),
+          DataSource.fleet.uptimeTrend(),
+        ]);
+      self._data = {
+        fleet: overview,
+        integradores: integradores,
+        offlineEvents: offlineEvents,
+        uptimeTrend: uptimeTrend,
+        deviceTypes:
+          overview.deviceTypes ||
+          (typeof DEVICE_TYPES !== "undefined" ? DEVICE_TYPES : []),
+      };
+    } catch (err) {
+      showErrorBoundary("fleet-content", err);
+      return;
+    }
+
+    container.innerHTML = self._buildContent(role);
+    self._initCharts(role);
   },
 
   onRoleChange(role) {
@@ -71,10 +91,14 @@ const FleetPage = {
    * Admin: full global view. Integrador: org-001 only. Customer: single home.
    */
   _getFleetStats(role) {
+    var integradores = this._data ? this._data.integradores : INTEGRADORES;
+    var fleet = this._data ? this._data.fleet : FLEET;
     if (role === "integrador") {
-      var org = INTEGRADORES.find(function (i) { return i.orgId === "org-001"; });
-      if (!org) return FLEET;
-      var online = Math.round(org.deviceCount * org.onlineRate / 100);
+      var org = integradores.find(function (i) {
+        return i.orgId === "org-001";
+      });
+      if (!org) return fleet;
+      var online = Math.round((org.deviceCount * org.onlineRate) / 100);
       var offline = org.deviceCount - online;
       return {
         totalDevices: org.deviceCount,
@@ -96,7 +120,7 @@ const FleetPage = {
         totalIntegradores: 0,
       };
     }
-    return FLEET;
+    return fleet;
   },
 
   _buildKPICards(role) {
@@ -104,7 +128,10 @@ const FleetPage = {
     const onlineColor = f.onlineRate >= 90 ? "positive" : "negative";
 
     const cards = [
-      Components.kpiCard({ value: f.totalDevices, label: t("fleet.totalDevices") }),
+      Components.kpiCard({
+        value: f.totalDevices,
+        label: t("fleet.totalDevices"),
+      }),
       Components.kpiCard({
         value: f.onlineCount,
         label: t("fleet.online"),
@@ -121,7 +148,10 @@ const FleetPage = {
         color: onlineColor,
       }),
       Components.kpiCard({ value: f.totalHomes, label: t("fleet.homes") }),
-      Components.kpiCard({ value: f.totalIntegradores, label: t("fleet.integradores") }),
+      Components.kpiCard({
+        value: f.totalIntegradores,
+        label: t("fleet.integradores"),
+      }),
     ];
 
     return `<div class="kpi-grid kpi-grid-6">${cards.join("")}</div>`;
@@ -153,7 +183,7 @@ const FleetPage = {
   },
 
   _buildIntegradorTable(role) {
-    let rows = INTEGRADORES;
+    let rows = this._data ? this._data.integradores : INTEGRADORES;
     if (role === "integrador") {
       rows = rows.filter((r) => r.orgId === "org-001");
     }
@@ -161,7 +191,12 @@ const FleetPage = {
     return Components.dataTable({
       columns: [
         { key: "name", label: t("fleet.col.org") },
-        { key: "deviceCount", label: t("fleet.col.devices"), align: "right", mono: true },
+        {
+          key: "deviceCount",
+          label: t("fleet.col.devices"),
+          align: "right",
+          mono: true,
+        },
         {
           key: "onlineRate",
           label: t("fleet.col.onlineRate"),
@@ -172,7 +207,12 @@ const FleetPage = {
             return `<span class="no-prefix ${color}">${formatPercent(val)}</span>`;
           },
         },
-        { key: "lastCommission", label: t("fleet.col.lastCommission"), align: "right" },
+        {
+          key: "lastCommission",
+          label: t("fleet.col.lastCommission"),
+          align: "right",
+          format: (val) => formatISODate(val),
+        },
       ],
       rows: rows,
     });
@@ -191,7 +231,11 @@ const FleetPage = {
             format: (val) =>
               `<a href="#devices" class="p1-device-link" data-device="${val}">${val}</a>`,
           },
-          { key: "start", label: t("fleet.col.offlineStart") },
+          {
+            key: "start",
+            label: t("fleet.col.offlineStart"),
+            format: (val) => formatISODateTime(val),
+          },
           {
             key: "durationHrs",
             label: t("fleet.col.duration"),
@@ -222,7 +266,7 @@ const FleetPage = {
                 : '<span class="backfill-pending" title="Backfill pending">\u26A0\uFE0F</span>',
           },
         ],
-        rows: OFFLINE_EVENTS,
+        rows: this._data ? this._data.offlineEvents : OFFLINE_EVENTS,
       }),
     );
   },
@@ -256,8 +300,10 @@ const FleetPage = {
   },
 
   _initUptimeChart() {
-    const uptimeData = DemoStore.get("uptimeTrend") || generateUptimeTrend();
-    const dates = uptimeData.map((d) => d.date);
+    const uptimeData = this._data
+      ? this._data.uptimeTrend
+      : DemoStore.get("uptimeTrend") || generateUptimeTrend();
+    const dates = uptimeData.map((d) => formatShortDate(d.date));
     const values = uptimeData.map((d) => d.uptime);
 
     const option = {
@@ -338,18 +384,33 @@ const FleetPage = {
   },
 
   _initDeviceDistChart(role) {
+    var integradores = this._data ? this._data.integradores : INTEGRADORES;
+    var fleet = this._data ? this._data.fleet : FLEET;
+    var deviceTypes = this._data ? this._data.deviceTypes : DEVICE_TYPES;
+    // Color fallback for BFF responses missing color field
+    var defaultColors = {
+      "Inverter + Battery": "#3b82f6",
+      "Smart Meter": "#8b5cf6",
+      AC: "#06b6d4",
+      "EV Charger": "#f59e0b",
+    };
     // Tenant-scoped: Integrador sees proportional subset (org-001 = 26/47)
     var scale = 1;
     if (role === "integrador") {
-      var org = INTEGRADORES.find(function (i) { return i.orgId === "org-001"; });
-      scale = org ? org.deviceCount / FLEET.totalDevices : 1;
+      var org = integradores.find(function (i) {
+        return i.orgId === "org-001";
+      });
+      scale = org ? org.deviceCount / fleet.totalDevices : 1;
     }
-    const data = DEVICE_TYPES.map((d) => ({
+    const data = deviceTypes.map((d) => ({
       name: t("dtype." + d.type),
       total: Math.round(d.count * scale),
       online: Math.round(d.online * scale),
-      offline: Math.max(0, Math.round(d.count * scale) - Math.round(d.online * scale)),
-      color: d.color,
+      offline: Math.max(
+        0,
+        Math.round(d.count * scale) - Math.round(d.online * scale),
+      ),
+      color: d.color || defaultColors[d.type] || "#6b7280",
     }));
 
     const option = {

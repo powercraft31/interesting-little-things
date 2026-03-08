@@ -35,21 +35,27 @@ var HEMSPage = {
   // INIT / LIFECYCLE
   // =========================================================
 
-  init: function () {
+  init: async function () {
+    var self = this;
     var container = document.getElementById("hems-content");
     if (!container) return;
 
-    var skeletonHTML = this._buildSkeleton();
-    var realHTML = this._buildContent();
+    container.innerHTML = this._buildSkeleton();
 
-    Components.renderWithSkeleton(
-      container,
-      skeletonHTML,
-      realHTML,
-      function () {
-        HEMSPage._setupEventListeners();
-      },
-    );
+    try {
+      var results = await Promise.all([
+        DataSource.hems.overview(),
+        DataSource.devices.list(),
+      ]);
+      self._overview = results[0];
+      self._devices = results[1];
+    } catch (err) {
+      showErrorBoundary("hems-content", err);
+      return;
+    }
+
+    container.innerHTML = self._buildContent();
+    self._setupEventListeners();
   },
 
   onRoleChange: function (role) {
@@ -101,7 +107,9 @@ var HEMSPage = {
 
   // ---- T4.1: Mode Selection Cards ----
   _buildModeCards: function (isAdmin) {
-    var dist = DemoStore.get("targetModeDistribution") || MODE_DISTRIBUTION;
+    var dist =
+      DemoStore.get("targetModeDistribution") ||
+      (this._overview ? this._overview.modeDistribution : MODE_DISTRIBUTION);
     var total =
       dist.self_consumption + dist.peak_valley_arbitrage + dist.peak_shaving;
     var modes = Object.keys(this._modeKeys);
@@ -139,7 +147,9 @@ var HEMSPage = {
       '<div class="section-card">',
       '<div class="section-card-header">',
       "<h3>" + t("hems.optMode") + "</h3>",
-      !isAdmin ? '<span class="p4-readonly-badge">' + t("hems.readonly") + "</span>" : "",
+      !isAdmin
+        ? '<span class="p4-readonly-badge">' + t("hems.readonly") + "</span>"
+        : "",
       "</div>",
       '<div class="section-card-body">',
       '<div class="p4-mode-cards">' + cards + "</div>",
@@ -154,21 +164,32 @@ var HEMSPage = {
     var tooltip = isAdmin ? "" : ' title="' + t("hems.requiresAdmin") + '"';
 
     // Build integrador options
-    var intOptions = INTEGRADORES.map(function (ig) {
-      return '<option value="' + ig.orgId + '">' + ig.name + "</option>";
-    }).join("");
+    var integradores = this._overview
+      ? this._overview.integradores
+      : INTEGRADORES;
+    var intOptions = (integradores || INTEGRADORES)
+      .map(function (ig) {
+        return '<option value="' + ig.orgId + '">' + ig.name + "</option>";
+      })
+      .join("");
 
     // Build home options
-    var homeOptions = HOMES.map(function (h) {
-      return '<option value="' + h.id + '">' + h.name + "</option>";
-    }).join("");
+    var homeOptions = (this._homes || HOMES)
+      .map(function (h) {
+        return '<option value="' + h.id + '">' + h.name + "</option>";
+      })
+      .join("");
 
     // Build mode options for Current Mode filter
     var self = this;
     var modeFilterOpts = Object.keys(this._modeKeys)
       .map(function (k) {
         return (
-          '<option value="' + k + '">' + t(self._modeKeys[k].titleKey) + "</option>"
+          '<option value="' +
+          k +
+          '">' +
+          t(self._modeKeys[k].titleKey) +
+          "</option>"
         );
       })
       .join("");
@@ -199,7 +220,9 @@ var HEMSPage = {
       '<div class="section-card-header">',
       "<h3>" + t("hems.batchDispatch") + "</h3>",
       !isAdmin
-        ? '<span class="p4-readonly-badge">' + t("hems.requiresAdmin") + "</span>"
+        ? '<span class="p4-readonly-badge">' +
+          t("hems.requiresAdmin") +
+          "</span>"
         : "",
       "</div>",
       '<div class="section-card-body">',
@@ -216,7 +239,9 @@ var HEMSPage = {
       "</select>",
       '<select id="p4-filter-type"' + disabledAttr + tooltip + ">",
       '<option value="">' + t("hems.filter.allTypes") + "</option>",
-      '<option value="Inverter + Battery">' + t("dtype.Inverter + Battery") + "</option>",
+      '<option value="Inverter + Battery">' +
+        t("dtype.Inverter + Battery") +
+        "</option>",
       '<option value="Smart Meter">' + t("dtype.Smart Meter") + "</option>",
       '<option value="AC">' + t("dtype.AC") + "</option>",
       '<option value="EV Charger">' + t("dtype.EV Charger") + "</option>",
@@ -238,10 +263,14 @@ var HEMSPage = {
       '<button id="p4-btn-preview" class="btn btn-primary"' +
         disabledAttr +
         tooltip +
-        ">" + t("hems.preview") + "</button>",
+        ">" +
+        t("hems.preview") +
+        "</button>",
       '<button id="p4-btn-apply" class="btn btn-primary p4-btn-apply" disabled' +
         tooltip +
-        ">" + t("hems.apply") + "</button>",
+        ">" +
+        t("hems.apply") +
+        "</button>",
       "</div>",
 
       // Preview result area
@@ -253,7 +282,9 @@ var HEMSPage = {
 
   // ---- T4.3: Tarifa Branca Rate Table ----
   _buildTarifaCard: function (isAdmin) {
-    var rates = DemoStore.get("tarifaRates") || TARIFA_RATES;
+    var rates =
+      DemoStore.get("tarifaRates") ||
+      (this._overview ? this._overview.tarifaRates : TARIFA_RATES);
 
     var body = [
       '<div class="p4-tarifa-table">',
@@ -262,19 +293,27 @@ var HEMSPage = {
       '<span class="p4-tarifa-value">' + rates.disco + "</span>",
       "</div>",
       '<div class="p4-tarifa-row p4-tarifa-peak">',
-      '<span class="p4-tarifa-label">' + t("hems.peak") + " (" + rates.peakHours + ")</span>",
+      '<span class="p4-tarifa-label">' +
+        t("hems.peak") +
+        " (" +
+        rates.peakHours +
+        ")</span>",
       '<span class="p4-tarifa-value font-data">R$ ' +
         rates.peak.toFixed(2).replace(".", ",") +
         "/kWh</span>",
       "</div>",
-      '<div class="p4-tarifa-row p4-tarifa-inter">',
-      '<span class="p4-tarifa-label">' + t("hems.intermediate") + " (" +
-        rates.intermediateHours +
-        ")</span>",
-      '<span class="p4-tarifa-value font-data">R$ ' +
-        rates.intermediate.toFixed(2).replace(".", ",") +
-        "/kWh</span>",
-      "</div>",
+      rates.intermediateHours
+        ? '<div class="p4-tarifa-row p4-tarifa-inter">' +
+          '<span class="p4-tarifa-label">' +
+          t("hems.intermediate") +
+          " (" +
+          rates.intermediateHours +
+          ")</span>" +
+          '<span class="p4-tarifa-value font-data">R$ ' +
+          rates.intermediate.toFixed(2).replace(".", ",") +
+          "/kWh</span>" +
+          "</div>"
+        : "",
       '<div class="p4-tarifa-row p4-tarifa-offpeak">',
       '<span class="p4-tarifa-label">' + t("hems.offpeak") + "</span>",
       '<span class="p4-tarifa-value font-data">R$ ' +
@@ -287,21 +326,19 @@ var HEMSPage = {
       "</div>",
       "</div>",
       isAdmin
-        ? '<button id="p4-btn-edit-tarifa" class="btn" style="margin-top:var(--space-md)">' + t("hems.editRates") + "</button>"
+        ? '<button id="p4-btn-edit-tarifa" class="btn" style="margin-top:var(--space-md)">' +
+          t("hems.editRates") +
+          "</button>"
         : "",
     ].join("");
 
     return Components.sectionCard(t("hems.tarifa"), body);
   },
 
-  // ---- T4.4: ACK Status Panel ----
+  // ---- T4.4: ACK Status Panel (D3: simplified — no ackList table) ----
   _buildAckStatusCard: function () {
-    var dispatch = LAST_DISPATCH;
-    var self = this;
+    var dispatch = this._overview ? this._overview.lastDispatch : LAST_DISPATCH;
 
-    var fromLabel = this._modeKeys[dispatch.fromMode]
-      ? t(this._modeKeys[dispatch.fromMode].titleKey)
-      : dispatch.fromMode;
     var toLabel = this._modeKeys[dispatch.toMode]
       ? t(this._modeKeys[dispatch.toMode].titleKey)
       : dispatch.toMode;
@@ -309,69 +346,38 @@ var HEMSPage = {
     var summary = [
       '<div class="p4-dispatch-summary">',
       '<div class="p4-dispatch-info">',
-      '<span class="p4-dispatch-time">' + t("hems.lastChange") + " " +
-        dispatch.timestamp +
+      '<span class="p4-dispatch-time">' +
+        t("hems.lastChange") +
+        " " +
+        formatISODateTime(dispatch.timestamp) +
         "</span>",
       '<span class="p4-dispatch-detail">' +
-        fromLabel +
-        " \u2192 " +
+        t("hems.targetMode") +
+        ": " +
         toLabel +
         "</span>",
-      '<span class="p4-dispatch-detail">' + t("hems.affected") + " " +
+      '<span class="p4-dispatch-detail">' +
+        t("hems.affected") +
+        " " +
         dispatch.affectedDevices +
-        " " + t("shared.devices") + "</span>",
-      '<span class="p4-dispatch-detail">' + t("hems.successRate") + " " +
+        " " +
+        t("shared.devices") +
+        "</span>",
+      '<span class="p4-dispatch-detail">' +
+        t("hems.successRate") +
+        " " +
         dispatch.successRate +
-        "% (" +
-        dispatch.ackList.filter(function (a) {
-          return a.status === "ack";
-        }).length +
-        "/" +
-        dispatch.affectedDevices +
-        ")</span>",
+        "%</span>",
       "</div>",
       "</div>",
     ].join("");
 
-    var table = Components.dataTable({
-      columns: [
-        { key: "deviceId", label: t("hems.col.deviceId"), mono: true },
-        {
-          key: "mode",
-          label: t("hems.col.mode"),
-          format: function (val) {
-            var meta = self._modeKeys[val];
-            return meta ? t(meta.titleKey) : val;
-          },
-        },
-        {
-          key: "status",
-          label: t("hems.col.ack"),
-          format: function (val) {
-            if (val === "ack")
-              return '<span class="p4-ack-ok">' + t("hems.ack.ack") + "</span>";
-            if (val === "pending")
-              return '<span class="p4-ack-pending">' + t("hems.ack.pending") + "</span>";
-            return '<span class="p4-ack-timeout">' + t("hems.ack.timeout") + "</span>";
-          },
-        },
-        {
-          key: "responseTime",
-          label: t("hems.col.responseTime"),
-          align: "right",
-          mono: true,
-        },
-      ],
-      rows: dispatch.ackList,
-    });
-
     var link =
-      '<div class="p4-view-link"><a href="#energy" id="p4-link-energy">' + t("hems.viewBehavior") + "</a></div>";
+      '<div class="p4-view-link"><a href="#energy" id="p4-link-energy">' +
+      t("hems.viewBehavior") +
+      "</a></div>";
 
-    return Components.sectionCard(
-      t("hems.ackStatus"),
-      summary + table + link,
-    );
+    return Components.sectionCard(t("hems.ackStatus"), summary + link);
   },
 
   // =========================================================
@@ -475,7 +481,7 @@ var HEMSPage = {
     var typeVal = filtType ? filtType.value : "";
     var modeVal = filtMode ? filtMode.value : "";
 
-    var devices = DEVICES.slice();
+    var devices = (this._devices || DEVICES).slice();
 
     if (orgVal) {
       devices = devices.filter(function (d) {
@@ -506,7 +512,9 @@ var HEMSPage = {
 
   _getDeviceModeAssignment: function () {
     // Assign modes to devices based on distribution
-    var dist = DemoStore.get("targetModeDistribution") || MODE_DISTRIBUTION;
+    var dist =
+      DemoStore.get("targetModeDistribution") ||
+      (this._overview ? this._overview.modeDistribution : MODE_DISTRIBUTION);
     var assignment = {};
     var modes = [];
 
@@ -523,7 +531,7 @@ var HEMSPage = {
     });
 
     // Assign to devices in order
-    DEVICES.forEach(function (d, idx) {
+    (this._devices || DEVICES).forEach(function (d, idx) {
       assignment[d.deviceId] = modes[idx % modes.length] || "self_consumption";
     });
 
@@ -559,9 +567,12 @@ var HEMSPage = {
     var html = [
       '<div class="p4-preview-box">',
       '<div class="p4-preview-summary">',
-      t("hems.previewWillChange") + " <strong>" +
+      t("hems.previewWillChange") +
+        " <strong>" +
         devices.length +
-        "</strong> " + t("hems.previewDevicesTo") + " <strong>" +
+        "</strong> " +
+        t("hems.previewDevicesTo") +
+        " <strong>" +
         targetTitle +
         "</strong>.",
       "</div>",
@@ -574,7 +585,9 @@ var HEMSPage = {
           home +
           ": <strong>" +
           homeGroups[home] +
-          " " + t("shared.devices") + "</strong></div>",
+          " " +
+          t("shared.devices") +
+          "</strong></div>",
       );
     });
 
@@ -584,7 +597,9 @@ var HEMSPage = {
       html.push(
         '<div class="p4-preview-warning">\u26A0\uFE0F ' +
           offlineCount +
-          " " + t("hems.previewOfflineWarn") + "</div>",
+          " " +
+          t("hems.previewOfflineWarn") +
+          "</div>",
       );
     }
 
@@ -605,7 +620,9 @@ var HEMSPage = {
 
     var self = this;
     var count = this._previewResult.devices.length;
-    var targetTitle = t(this._modeKeys[this._previewResult.targetMode].titleKey);
+    var targetTitle = t(
+      this._modeKeys[this._previewResult.targetMode].titleKey,
+    );
 
     // Show confirm dialog
     this._showConfirmDialog(
@@ -625,7 +642,10 @@ var HEMSPage = {
           // Update DemoStore distribution
           var newDist = Object.assign(
             {},
-            DemoStore.get("targetModeDistribution") || MODE_DISTRIBUTION,
+            DemoStore.get("targetModeDistribution") ||
+              (self._overview
+                ? self._overview.modeDistribution
+                : MODE_DISTRIBUTION),
           );
           // Move all filtered devices to target mode
           var perMode = {};
@@ -645,7 +665,9 @@ var HEMSPage = {
           DemoStore.set("targetModeDistribution", newDist);
 
           self._showToast(
-            t("hems.toast.success").replace("{mode}", targetTitle).replace("{n}", count),
+            t("hems.toast.success")
+              .replace("{mode}", targetTitle)
+              .replace("{n}", count),
             "success",
           );
 
@@ -681,7 +703,9 @@ var HEMSPage = {
   // =========================================================
 
   _showTarifaModal: function () {
-    var rates = DemoStore.get("tarifaRates") || TARIFA_RATES;
+    var rates =
+      DemoStore.get("tarifaRates") ||
+      (this._overview ? this._overview.tarifaRates : TARIFA_RATES);
     var self = this;
 
     var modalHTML = [
@@ -726,8 +750,12 @@ var HEMSPage = {
       "</div>",
 
       '<div class="modal-actions">',
-      '<button class="btn" id="p4-modal-cancel">' + t("shared.cancel") + "</button>",
-      '<button class="btn btn-primary" id="p4-modal-save">' + t("shared.save") + "</button>",
+      '<button class="btn" id="p4-modal-cancel">' +
+        t("shared.cancel") +
+        "</button>",
+      '<button class="btn btn-primary" id="p4-modal-save">' +
+        t("shared.save") +
+        "</button>",
       "</div>",
       "</div>",
       "</div>",
@@ -809,8 +837,12 @@ var HEMSPage = {
       "<h3>" + title + "</h3>",
       "<p>" + message + "</p>",
       '<div class="modal-actions">',
-      '<button class="btn" id="p4-confirm-cancel">' + t("shared.cancel") + "</button>",
-      '<button class="btn btn-primary" id="p4-confirm-ok">' + t("shared.confirm") + "</button>",
+      '<button class="btn" id="p4-confirm-cancel">' +
+        t("shared.cancel") +
+        "</button>",
+      '<button class="btn btn-primary" id="p4-confirm-ok">' +
+        t("shared.confirm") +
+        "</button>",
       "</div>",
       "</div>",
       "</div>",

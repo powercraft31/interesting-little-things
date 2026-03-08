@@ -8,21 +8,27 @@ var PerformancePage = {
   // INIT / LIFECYCLE
   // =========================================================
 
-  init: function () {
+  init: async function () {
+    var self = this;
     var container = document.getElementById("performance-content");
     if (!container) return;
 
-    var skeletonHTML = this._buildSkeleton();
-    var realHTML = this._buildContent();
+    container.innerHTML = this._buildSkeleton();
 
-    Components.renderWithSkeleton(
-      container,
-      skeletonHTML,
-      realHTML,
-      function () {
-        PerformancePage._initCharts();
-      },
-    );
+    try {
+      var results = await Promise.all([
+        DataSource.performance.scorecard(),
+        DataSource.performance.savings(),
+      ]);
+      self._scorecard = results[0];
+      self._savings = results[1];
+    } catch (err) {
+      showErrorBoundary("performance-content", err);
+      return;
+    }
+
+    container.innerHTML = self._buildContent();
+    self._initCharts();
   },
 
   onRoleChange: function () {
@@ -60,23 +66,22 @@ var PerformancePage = {
   // =========================================================
 
   _buildContent: function () {
-    return [
-      this._buildScorecard(),
-      this._buildSavingsChart(),
-    ].join("");
+    return [this._buildScorecard(), this._buildSavingsChart()].join("");
   },
 
   // ---- T6.1: Pilot Acceptance Scorecard ----
   _buildScorecard: function () {
+    var self = this;
     var sections = [
       { titleKey: "perf.obj1", key: "hardware", icon: "\uD83D\uDD27" },
       { titleKey: "perf.obj2", key: "optimization", icon: "\uD83D\uDCCA" },
       { titleKey: "perf.obj3", key: "operations", icon: "\u2699\uFE0F" },
     ];
+    var scorecard = self._scorecard || SCORECARD;
 
     var columns = sections
       .map(function (sec) {
-        var metrics = SCORECARD[sec.key];
+        var metrics = scorecard[sec.key];
         var rows = metrics
           .map(function (m) {
             var statusIcon, statusClass;
@@ -96,15 +101,23 @@ var PerformancePage = {
             return [
               '<div class="p6-metric-row' + nearClass + '">',
               '<div class="p6-metric-info">',
-              '<div class="p6-metric-name">' + t("perf.metric." + m.name) + "</div>",
-              '<div class="p6-metric-target">' + t("perf.target") + " " + m.target + "</div>",
+              '<div class="p6-metric-name">' +
+                t("perf.metric." + m.name) +
+                "</div>",
+              '<div class="p6-metric-target">' +
+                t("perf.target") +
+                " " +
+                m.target +
+                "</div>",
               "</div>",
               '<div class="p6-metric-result">',
               '<div class="p6-metric-value">' +
                 formatNumber(m.value, m.unit === "%" ? 1 : 0) +
                 (m.unit ? " " + m.unit : "") +
                 "</div>",
-              '<div class="p6-metric-status ' + statusClass + '">' +
+              '<div class="p6-metric-status ' +
+                statusClass +
+                '">' +
                 statusIcon +
                 "</div>",
               "</div>",
@@ -133,8 +146,7 @@ var PerformancePage = {
 
   // ---- T6.2: Savings Chart ----
   _buildSavingsChart: function () {
-    var body =
-      '<div id="p6-savings-chart" class="p6-savings-chart"></div>';
+    var body = '<div id="p6-savings-chart" class="p6-savings-chart"></div>';
     return Components.sectionCard(t("perf.savingsChart"), body);
   },
 
@@ -152,10 +164,14 @@ var PerformancePage = {
 
   _renderSavingsChart: function () {
     // Customer sees only their own home (Casa Silva); Admin/Integrador see all
-    var role = (typeof currentRole !== "undefined") ? currentRole : "admin";
-    var savingsData = (role === "customer")
-      ? SAVINGS_BY_HOME.filter(function (h) { return h.home === "Casa Silva"; })
-      : SAVINGS_BY_HOME;
+    var role = typeof currentRole !== "undefined" ? currentRole : "admin";
+    var allSavings = this._savings || SAVINGS_BY_HOME;
+    var savingsData =
+      role === "customer"
+        ? allSavings.filter(function (h) {
+            return h.home === "Casa Silva";
+          })
+        : allSavings;
 
     var homes = savingsData.map(function (h) {
       return h.home;
@@ -192,7 +208,6 @@ var PerformancePage = {
           var lines = [
             "<strong>" + home.home + "</strong>",
             "Total: <strong>" + totalFormatted + "</strong>",
-            "Alpha: <strong>" + home.alpha + "%</strong>",
             "",
           ];
           params.forEach(function (p) {
@@ -210,7 +225,11 @@ var PerformancePage = {
         },
       },
       legend: {
-        data: [t("perf.legend.selfCons"), t("perf.legend.tou"), t("perf.legend.peakShaving")],
+        data: [
+          t("perf.legend.selfCons"),
+          t("perf.legend.tou"),
+          t("perf.legend.peakShaving"),
+        ],
         textStyle: { color: "#9ca3af", fontSize: 12 },
         top: 0,
       },
@@ -284,7 +303,7 @@ var PerformancePage = {
             fontWeight: 600,
             formatter: function (params) {
               var home = savingsData[params.dataIndex];
-              return formatBRL(home.total) + "\n\u03B1 " + home.alpha + "%";
+              return formatBRL(home.total);
             },
           },
         },

@@ -151,4 +151,23 @@ const Components = {
       if (afterRender) afterRender();
     }, 500);
   },
+
+  /**
+   * Error banner for API failures
+   * @param {string} message - Error message to display
+   */
+  errorBanner(message) {
+    var retryLabel = typeof t === "function" ? t("shared.retry") : "Retry";
+    return (
+      '<div class="error-banner">' +
+      '<span class="error-banner-icon">\u26A0\uFE0F</span>' +
+      '<span class="error-banner-msg">' +
+      message +
+      "</span>" +
+      '<button class="error-banner-retry" onclick="location.reload()">' +
+      retryLabel +
+      "</button>" +
+      "</div>"
+    );
+  },
 };

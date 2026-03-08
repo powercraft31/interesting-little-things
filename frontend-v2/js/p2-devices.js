@@ -11,16 +11,27 @@ const DevicesPage = {
   // INIT / LIFECYCLE
   // =========================================================
 
-  init() {
+  async init() {
+    const self = this;
     const container = document.getElementById("devices-content");
     if (!container) return;
 
-    const skeletonHTML = this._buildSkeleton();
-    const realHTML = this._buildContent(currentRole);
+    container.innerHTML = this._buildSkeleton();
 
-    Components.renderWithSkeleton(container, skeletonHTML, realHTML, () => {
-      this._setupEventListeners();
-    });
+    try {
+      const [devices, homes] = await Promise.all([
+        DataSource.devices.list(),
+        DataSource.devices.homes(),
+      ]);
+      self._devices = devices;
+      self._homes = homes;
+    } catch (err) {
+      showErrorBoundary("devices-content", err);
+      return;
+    }
+
+    container.innerHTML = self._buildContent(currentRole);
+    self._setupEventListeners();
   },
 
   onRoleChange(role) {
@@ -106,7 +117,7 @@ const DevicesPage = {
   // =========================================================
 
   _getFilteredDevices(role) {
-    let list = DEVICES;
+    let list = this._devices || DEVICES;
 
     if (role === "integrador") {
       list = list.filter((d) => d.orgId === "org-001");
@@ -136,19 +147,35 @@ const DevicesPage = {
     const devices = this._getFilteredDevices(role);
 
     if (devices.length === 0) {
-      return '<div class="table-empty" style="padding:24px;text-align:center;color:var(--muted)">' + t("devices.noMatch") + '</div>';
+      return (
+        '<div class="table-empty" style="padding:24px;text-align:center;color:var(--muted)">' +
+        t("devices.noMatch") +
+        "</div>"
+      );
     }
 
     let html =
       '<div class="data-table-wrapper"><table class="data-table p2-device-table">';
     html += "<thead><tr>";
     html +=
-      "<th>" + t("devices.col.deviceId") + "</th>" +
-      "<th>" + t("devices.col.type") + "</th>" +
-      "<th>" + t("devices.col.brand") + "</th>" +
-      "<th>" + t("devices.col.home") + "</th>" +
-      "<th>" + t("devices.col.status") + "</th>" +
-      "<th>" + t("devices.col.lastSeen") + "</th>";
+      "<th>" +
+      t("devices.col.deviceId") +
+      "</th>" +
+      "<th>" +
+      t("devices.col.type") +
+      "</th>" +
+      "<th>" +
+      t("devices.col.brand") +
+      "</th>" +
+      "<th>" +
+      t("devices.col.home") +
+      "</th>" +
+      "<th>" +
+      t("devices.col.status") +
+      "</th>" +
+      "<th>" +
+      t("devices.col.lastSeen") +
+      "</th>";
     html += "</tr></thead><tbody>";
 
     devices.forEach((d) => {
@@ -175,11 +202,14 @@ const DevicesPage = {
     const el = document.getElementById("p2-device-count");
     if (!el) return;
     const devices = this._getFilteredDevices(role);
+    const allDevices = this._devices || DEVICES;
     const total =
       role === "integrador"
-        ? DEVICES.filter((d) => d.orgId === "org-001").length
-        : DEVICES.length;
-    el.textContent = t("devices.showing").replace("{0}", devices.length).replace("{1}", total);
+        ? allDevices.filter((d) => d.orgId === "org-001").length
+        : allDevices.length;
+    el.textContent = t("devices.showing")
+      .replace("{0}", devices.length)
+      .replace("{1}", total);
   },
 
   // =========================================================
@@ -234,7 +264,8 @@ const DevicesPage = {
       .forEach((row) => {
         row.addEventListener("click", () => {
           const id = row.dataset.deviceId;
-          const device = DEVICES.find((d) => d.deviceId === id);
+          const allDevices = this._devices || DEVICES;
+          const device = allDevices.find((d) => d.deviceId === id);
           if (device) this._openDrillDown(device);
         });
       });
@@ -424,7 +455,9 @@ const DevicesPage = {
       case "EV Charger":
         items = [
           {
-            value: telem.charging ? t("devices.telem.charging") : t("devices.telem.idle"),
+            value: telem.charging
+              ? t("devices.telem.charging")
+              : t("devices.telem.idle"),
             label: t("devices.telem.status"),
             color: telem.charging ? "var(--positive)" : "var(--muted)",
           },
@@ -438,7 +471,11 @@ const DevicesPage = {
             label: t("devices.telem.sessionEnergy"),
             color: "var(--neutral)",
           },
-          { value: telem.evSoc + "%", label: t("devices.telem.evSoc"), color: "var(--positive)" },
+          {
+            value: telem.evSoc + "%",
+            label: t("devices.telem.evSoc"),
+            color: "var(--positive)",
+          },
         ];
         break;
     }
@@ -582,14 +619,25 @@ const DevicesPage = {
     let html = "";
 
     if (step > 1 && step < 5) {
-      html += '<button class="wizard-btn-back" id="wizard-back">' + t("shared.back") + '</button>';
+      html +=
+        '<button class="wizard-btn-back" id="wizard-back">' +
+        t("shared.back") +
+        "</button>";
     }
 
     if (step < 5) {
       const disabled = step === 3 || step === 4 ? " disabled" : "";
-      html += '<button class="wizard-btn-next" id="wizard-next"' + disabled + '>' + t("shared.next") + '</button>';
+      html +=
+        '<button class="wizard-btn-next" id="wizard-next"' +
+        disabled +
+        ">" +
+        t("shared.next") +
+        "</button>";
     } else {
-      html += '<button class="wizard-btn-done" id="wizard-done">' + t("shared.done") + '</button>';
+      html +=
+        '<button class="wizard-btn-done" id="wizard-done">' +
+        t("shared.done") +
+        "</button>";
     }
 
     footer.innerHTML = html;
@@ -834,7 +882,11 @@ const DevicesPage = {
   _buildCommissioningHistoryCard() {
     const table = Components.dataTable({
       columns: [
-        { key: "homeId", label: t("devices.commHistory.col.homeId"), mono: true },
+        {
+          key: "homeId",
+          label: t("devices.commHistory.col.homeId"),
+          mono: true,
+        },
         { key: "integrador", label: t("devices.commHistory.col.integrador") },
         { key: "start", label: t("devices.commHistory.col.start") },
         { key: "complete", label: t("devices.commHistory.col.complete") },
@@ -849,8 +901,16 @@ const DevicesPage = {
             return `<span class="${cls}">${val} min ${icon}</span>`;
           },
         },
-        { key: "devices", label: t("devices.commHistory.col.devices"), align: "right", mono: true },
-        { key: "firstTelemetry", label: t("devices.commHistory.col.firstTelemetry") },
+        {
+          key: "devices",
+          label: t("devices.commHistory.col.devices"),
+          align: "right",
+          mono: true,
+        },
+        {
+          key: "firstTelemetry",
+          label: t("devices.commHistory.col.firstTelemetry"),
+        },
       ],
       rows: COMMISSIONING_HISTORY,
     });

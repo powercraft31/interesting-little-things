@@ -329,3 +329,46 @@
   border-radius: var(--radius-sm);
   animation: skeleton-pulse 1.5s ease-in-out infinite;
 }
+
+/* ---- Error Banner ---- */
+.error-banner {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-lg);
+  background: var(--negative-bg);
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  border-radius: var(--radius-md);
+  margin: var(--space-xl) auto;
+  max-width: 600px;
+}
+
+.error-banner-icon {
+  font-size: 1.6rem;
+  flex-shrink: 0;
+}
+
+.error-banner-msg {
+  flex: 1;
+  font-size: 0.92rem;
+  color: var(--text);
+  line-height: 1.5;
+}
+
+.error-banner-retry {
+  flex-shrink: 0;
+  background: var(--negative);
+  color: #fff;
+  border: none;
+  border-radius: var(--radius-sm);
+  padding: 8px 20px;
+  font-size: 0.85rem;
+  font-weight: 600;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: background var(--transition-fast);
+}
+
+.error-banner-retry:hover {
+  background: #dc2626;
+}

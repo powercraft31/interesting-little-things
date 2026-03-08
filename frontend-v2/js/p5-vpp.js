@@ -9,22 +9,32 @@ var VPPPage = {
   // INIT / LIFECYCLE
   // =========================================================
 
-  init: function () {
+  init: async function () {
+    var self = this;
     var container = document.getElementById("vpp-content");
     if (!container) return;
 
-    var skeletonHTML = this._buildSkeleton();
-    var realHTML = this._buildContent();
+    container.innerHTML = this._buildSkeleton();
 
-    Components.renderWithSkeleton(
-      container,
-      skeletonHTML,
-      realHTML,
-      function () {
-        VPPPage._setupEventListeners();
-        VPPPage._initCharts();
-      },
-    );
+    try {
+      var results = await Promise.all([
+        DataSource.vpp.capacity(),
+        DataSource.vpp.drEvents(),
+        DataSource.vpp.latency(),
+      ]);
+      self._data = {
+        capacity: results[0],
+        drEvents: results[1],
+        latency: results[2],
+      };
+    } catch (err) {
+      showErrorBoundary("vpp-content", err);
+      return;
+    }
+
+    container.innerHTML = self._buildContent();
+    self._setupEventListeners();
+    self._initCharts();
   },
 
   onRoleChange: function (role) {
@@ -61,8 +71,7 @@ var VPPPage = {
   // =========================================================
 
   _buildContent: function () {
-    var isAdmin =
-      typeof currentRole !== "undefined" && currentRole === "admin";
+    var isAdmin = typeof currentRole !== "undefined" && currentRole === "admin";
     return [
       this._buildCapacityCards(),
       this._buildDRTriggerPanel(isAdmin),
@@ -75,7 +84,7 @@ var VPPPage = {
 
   // ---- T5.1: VPP Aggregate Capacity Cards ----
   _buildCapacityCards: function () {
-    var cap = VPP_CAPACITY;
+    var cap = this._data.capacity;
     var cards = [
       Components.kpiCard({
         value: formatNumber(cap.totalCapacityKwh, 1),
@@ -121,7 +130,12 @@ var VPPPage = {
       "</div>",
     ].join("");
 
-    return '<div class="kpi-grid p5-kpi-grid-7">' + cards + placeholderCard + "</div>";
+    return (
+      '<div class="kpi-grid p5-kpi-grid-7">' +
+      cards +
+      placeholderCard +
+      "</div>"
+    );
   },
 
   // ---- T5.2: DR Event Trigger Panel ----
@@ -174,7 +188,9 @@ var VPPPage = {
       '<button id="p5-btn-trigger" class="btn btn-primary p5-btn-trigger"' +
         disabledAttr +
         tooltip +
-        ">" + t("vpp.triggerBtn") + "</button>",
+        ">" +
+        t("vpp.triggerBtn") +
+        "</button>",
       !isAdmin
         ? '<span class="p4-readonly-badge">' + t("vpp.intReadonly") + "</span>"
         : "",
@@ -190,8 +206,7 @@ var VPPPage = {
 
   // ---- T5.3: Dispatch Latency Chart ----
   _buildLatencyChart: function () {
-    var body =
-      '<div id="p5-latency-chart" class="p5-latency-chart"></div>';
+    var body = '<div id="p5-latency-chart" class="p5-latency-chart"></div>';
     return Components.sectionCard(t("vpp.latencyChart"), body);
   },
 
@@ -218,7 +233,13 @@ var VPPPage = {
             );
           },
         },
-        { key: "triggeredAt", label: t("vpp.col.triggeredAt") },
+        {
+          key: "triggeredAt",
+          label: t("vpp.col.triggeredAt"),
+          format: function (v) {
+            return formatISODateTime(v);
+          },
+        },
         {
           key: "targetKw",
           label: t("vpp.col.targetKw"),
@@ -243,7 +264,12 @@ var VPPPage = {
           align: "right",
           mono: true,
           format: function (v) {
-            var color = v >= 98 ? "text-positive" : v >= 90 ? "text-amber" : "text-negative";
+            var color =
+              v >= 98
+                ? "text-positive"
+                : v >= 90
+                  ? "text-amber"
+                  : "text-negative";
             return '<span class="' + color + '">' + v.toFixed(1) + "%</span>";
           },
         },
@@ -267,7 +293,7 @@ var VPPPage = {
           },
         },
       ],
-      rows: DR_EVENTS,
+      rows: this._data.drEvents,
     });
 
     return Components.sectionCard(t("vpp.drHistory"), table);
@@ -286,7 +312,7 @@ var VPPPage = {
   },
 
   _renderLatencyChart: function () {
-    var tiers = LATENCY_TIERS;
+    var tiers = this._data.latency;
     var categories = tiers.map(function (tier) {
       return tier.tier;
     });
@@ -319,7 +345,9 @@ var VPPPage = {
           return (
             "<strong>" +
             p.name +
-            "</strong><br/>" + t("vpp.chart.successRate") + ": <strong>" +
+            "</strong><br/>" +
+            t("vpp.chart.successRate") +
+            ": <strong>" +
             p.value +
             "%</strong>"
           );
@@ -407,8 +435,7 @@ var VPPPage = {
 
   _setupEventListeners: function () {
     var self = this;
-    var isAdmin =
-      typeof currentRole !== "undefined" && currentRole === "admin";
+    var isAdmin = typeof currentRole !== "undefined" && currentRole === "admin";
 
     var triggerBtn = document.getElementById("p5-btn-trigger");
     if (triggerBtn && isAdmin) {
@@ -451,7 +478,7 @@ var VPPPage = {
       triggerBtn.textContent = t("vpp.executing");
     }
 
-    var totalDevices = VPP_CAPACITY.dispatchableDevices;
+    var totalDevices = this._data.capacity.dispatchableDevices;
     var steps = [
       { pct: 0, responded: 0 },
       { pct: 25, responded: 12 },
@@ -497,14 +524,20 @@ var VPPPage = {
   _buildProgressHTML: function (pct, responded, total, done) {
     var statusText = done
       ? '<div class="p5-progress-done">' +
-        t("vpp.progress.complete").replace("{n}", total).replace("{total}", total) +
+        t("vpp.progress.complete")
+          .replace("{n}", total)
+          .replace("{total}", total) +
         "</div>"
       : '<div class="p5-progress-counter">' +
-        t("vpp.progress.responded").replace("{n}", responded).replace("{total}", total) +
+        t("vpp.progress.responded")
+          .replace("{n}", responded)
+          .replace("{total}", total) +
         "</div>";
 
     return [
-      '<div class="p5-progress-box' + (done ? " p5-progress-complete" : "") + '">',
+      '<div class="p5-progress-box' +
+        (done ? " p5-progress-complete" : "") +
+        '">',
       '<div class="p5-progress-bar-track">',
       '<div class="p5-progress-bar-fill" style="width:' + pct + '%"></div>',
       "</div>",
@@ -524,8 +557,12 @@ var VPPPage = {
       "<h3>" + title + "</h3>",
       "<p>" + message + "</p>",
       '<div class="modal-actions">',
-      '<button class="btn" id="p5-confirm-cancel">' + t("shared.cancel") + "</button>",
-      '<button class="btn btn-primary" id="p5-confirm-ok">' + t("shared.confirm") + "</button>",
+      '<button class="btn" id="p5-confirm-cancel">' +
+        t("shared.cancel") +
+        "</button>",
+      '<button class="btn btn-primary" id="p5-confirm-ok">' +
+        t("shared.confirm") +
+        "</button>",
       "</div>",
       "</div>",
       "</div>",

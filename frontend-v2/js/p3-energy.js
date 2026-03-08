@@ -59,22 +59,33 @@ var EnergyPage = {
   // INIT / LIFECYCLE
   // =========================================================
 
-  init: function () {
+  init: async function () {
+    var self = this;
     var container = document.getElementById("energy-content");
     if (!container) return;
 
-    var skeletonHTML = this._buildSkeleton();
-    var realHTML = this._buildContent();
+    container.innerHTML = this._buildSkeleton();
 
-    Components.renderWithSkeleton(
-      container,
-      skeletonHTML,
-      realHTML,
-      function () {
-        EnergyPage._setupEventListeners();
-        EnergyPage._initCharts();
-      },
-    );
+    try {
+      var results = await Promise.all([
+        DataSource.devices.homes(),
+        DataSource.energy.summary(),
+      ]);
+      self._homes = results[0];
+      self._crossHomeSummary =
+        results[1] && results[1].length ? results[1] : self._crossHomeSummary;
+      self._currentHome = self._homes[0].id;
+
+      var energyData = await DataSource.energy.homeEnergy(self._currentHome);
+      self._currentEnergyData = energyData;
+    } catch (err) {
+      showErrorBoundary("energy-content", err);
+      return;
+    }
+
+    container.innerHTML = self._buildContent();
+    self._setupEventListeners();
+    self._initCharts();
   },
 
   onRoleChange: function () {},
@@ -115,25 +126,30 @@ var EnergyPage = {
   },
 
   _buildHomeSelector: function () {
-    var options = HOMES.map(function (h, i) {
-      var key = EnergyPage._homeKeys[i];
-      var selected = key === EnergyPage._currentHome ? " selected" : "";
-      return (
-        '<option value="' +
-        key +
-        '"' +
-        selected +
-        ">" +
-        h.name +
-        " (" +
-        h.id +
-        ")</option>"
-      );
-    }).join("");
+    var homes = this._homes || HOMES;
+    var currentHome = this._currentHome;
+    var options = homes
+      .map(function (h) {
+        var selected = h.id === currentHome ? " selected" : "";
+        return (
+          '<option value="' +
+          h.id +
+          '"' +
+          selected +
+          ">" +
+          h.name +
+          " (" +
+          h.id +
+          ")</option>"
+        );
+      })
+      .join("");
 
     return (
       '<div class="p3-home-selector-wrap">' +
-      '<label class="p3-selector-label">' + t("energy.homeLabel") + '</label>' +
+      '<label class="p3-selector-label">' +
+      t("energy.homeLabel") +
+      "</label>" +
       '<select id="p3-home-select" class="p3-home-select">' +
       options +
       "</select>" +
@@ -147,7 +163,9 @@ var EnergyPage = {
       '<div id="chart-energy-main" class="chart-container p3-main-chart"></div>',
       {
         headerRight:
-          '<span class="p3-chart-legend-hint">' + t("energy.legendHint") + '</span>',
+          '<span class="p3-chart-legend-hint">' +
+          t("energy.legendHint") +
+          "</span>",
       },
     );
   },
@@ -187,13 +205,23 @@ var EnergyPage = {
   },
 
   _buildBeforeAfterCard: function () {
-    var ba = this._beforeAfterData[this._currentHome];
+    // D1: Map homeId to homeKey for hardcoded BA data
+    var homes = this._homes || HOMES;
+    var homeIdx = homes.findIndex(function (h) {
+      return h.id === EnergyPage._currentHome;
+    });
+    var homeKey = ["home-a", "home-b", "home-c"][homeIdx] || "home-a";
+    var ba = this._beforeAfterData[homeKey];
 
     var html =
       '<div class="p3-ba-header">' +
-      '<div class="p3-ba-date"><label>' + t("energy.ba.beforeOpt") + '</label><input type="date" value="2026-03-02" disabled></div>' +
+      '<div class="p3-ba-date"><label>' +
+      t("energy.ba.beforeOpt") +
+      '</label><input type="date" value="2026-03-02" disabled></div>' +
       '<div class="p3-ba-arrow">\u2192</div>' +
-      '<div class="p3-ba-date"><label>' + t("energy.ba.afterOpt") + '</label><input type="date" value="2026-03-04" disabled></div>' +
+      '<div class="p3-ba-date"><label>' +
+      t("energy.ba.afterOpt") +
+      '</label><input type="date" value="2026-03-04" disabled></div>' +
       "</div>" +
       '<div class="p3-ba-cards" id="p3-ba-cards">' +
       this._buildBACards(ba) +
@@ -236,10 +264,14 @@ var EnergyPage = {
           c.label +
           "</div>" +
           '<div class="p3-ba-values">' +
-          '<div class="p3-ba-before"><span class="p3-ba-dim">' + t("energy.ba.before") + '</span><span class="p3-ba-val">' +
+          '<div class="p3-ba-before"><span class="p3-ba-dim">' +
+          t("energy.ba.before") +
+          '</span><span class="p3-ba-val">' +
           c.before +
           "</span></div>" +
-          '<div class="p3-ba-after"><span class="p3-ba-dim">' + t("energy.ba.after") + '</span><span class="p3-ba-val ' +
+          '<div class="p3-ba-after"><span class="p3-ba-dim">' +
+          t("energy.ba.after") +
+          '</span><span class="p3-ba-val ' +
           deltaClass +
           '">' +
           c.after +
@@ -338,14 +370,26 @@ var EnergyPage = {
     });
   },
 
-  _switchHome: function (homeKey) {
-    this._currentHome = homeKey;
-    this._initMainChart();
-    this._initActiveDeviceChart();
-    var ba = this._beforeAfterData[homeKey];
+  _switchHome: async function (homeId) {
+    var self = this;
+    self._currentHome = homeId;
+    try {
+      self._currentEnergyData = await DataSource.energy.homeEnergy(homeId);
+      self._initMainChart();
+      self._initActiveDeviceChart();
+    } catch (err) {
+      console.error("[Energy] Home switch failed:", err);
+    }
+    // D1: Before/After stays hardcoded — map homeId index to homeKey
+    var homes = self._homes || HOMES;
+    var homeIdx = homes.findIndex(function (h) {
+      return h.id === homeId;
+    });
+    var homeKey = ["home-a", "home-b", "home-c"][homeIdx];
+    var ba = self._beforeAfterData[homeKey];
     var cardsEl = document.getElementById("p3-ba-cards");
     if (cardsEl && ba) {
-      cardsEl.innerHTML = this._buildBACards(ba);
+      cardsEl.innerHTML = self._buildBACards(ba);
     }
   },
 
@@ -381,6 +425,7 @@ var EnergyPage = {
   // =========================================================
 
   _getHomeData: function () {
+    if (this._currentEnergyData) return this._currentEnergyData;
     var allData = DemoStore.get("homeData");
     if (!allData) return null;
     return allData[this._currentHome] || null;
@@ -468,9 +513,15 @@ var EnergyPage = {
             if (val === null || val === undefined) return;
             var suffix = "";
             if (p.seriesName === t("energy.chart.battery")) {
-              suffix = val >= 0 ? " " + t("energy.tooltip.charging") : " " + t("energy.tooltip.discharging");
+              suffix =
+                val >= 0
+                  ? " " + t("energy.tooltip.charging")
+                  : " " + t("energy.tooltip.discharging");
             } else if (p.seriesName === t("energy.chart.grid")) {
-              suffix = val >= 0 ? " " + t("energy.tooltip.importing") : " " + t("energy.tooltip.exporting");
+              suffix =
+                val >= 0
+                  ? " " + t("energy.tooltip.importing")
+                  : " " + t("energy.tooltip.exporting");
             }
             html +=
               '<span style="color:' +
@@ -487,14 +538,20 @@ var EnergyPage = {
         },
       },
       legend: {
-        data: [t("energy.chart.pv"), t("energy.chart.load"), t("energy.chart.battery"), t("energy.chart.grid"), t("energy.chart.baseline")],
+        data: [
+          t("energy.chart.pv"),
+          t("energy.chart.load"),
+          t("energy.chart.battery"),
+          t("energy.chart.grid"),
+          t("energy.chart.baseline"),
+        ],
         top: 0,
         textStyle: { color: "#9ca3af", fontSize: 11 },
       },
       grid: { left: 12, right: 20, top: 50, bottom: 12, containLabel: true },
       xAxis: {
         type: "category",
-        data: TIME_LABELS_15MIN,
+        data: (data && data.timeLabels) || TIME_LABELS_15MIN,
         boundaryGap: false,
         axisLabel: { interval: 7, fontSize: 10, color: "#9ca3af" },
         axisLine: { lineStyle: { color: "#2a2d3a" } },
@@ -528,7 +585,10 @@ var EnergyPage = {
           areaStyle: {
             color: {
               type: "linear",
-              x: 0, y: 0, x2: 0, y2: 1,
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
               colorStops: [
                 { offset: 0, color: "rgba(34, 197, 94, 0.25)" },
                 { offset: 1, color: "rgba(34, 197, 94, 0.02)" },
@@ -556,8 +616,10 @@ var EnergyPage = {
                   xAxis: "00:00",
                   itemStyle: { color: "rgba(59, 130, 246, 0.05)" },
                   label: {
-                    show: true, position: "insideTop",
-                    color: "rgba(59, 130, 246, 0.6)", fontSize: 10,
+                    show: true,
+                    position: "insideTop",
+                    color: "rgba(59, 130, 246, 0.6)",
+                    fontSize: 10,
                     formatter: t("energy.tariff.offpeak") + " R$0,41",
                   },
                 },
@@ -568,8 +630,10 @@ var EnergyPage = {
                   xAxis: "16:00",
                   itemStyle: { color: "rgba(245, 158, 11, 0.08)" },
                   label: {
-                    show: true, position: "insideTop",
-                    color: "rgba(245, 158, 11, 0.7)", fontSize: 9,
+                    show: true,
+                    position: "insideTop",
+                    color: "rgba(245, 158, 11, 0.7)",
+                    fontSize: 9,
                     formatter: t("energy.tariff.intermediate") + " R$0,62",
                   },
                 },
@@ -580,8 +644,10 @@ var EnergyPage = {
                   xAxis: "17:00",
                   itemStyle: { color: "rgba(239, 68, 68, 0.08)" },
                   label: {
-                    show: true, position: "insideTop",
-                    color: "rgba(239, 68, 68, 0.7)", fontSize: 10,
+                    show: true,
+                    position: "insideTop",
+                    color: "rgba(239, 68, 68, 0.7)",
+                    fontSize: 10,
                     formatter: t("energy.tariff.peak") + " R$0,89",
                   },
                 },
@@ -615,7 +681,10 @@ var EnergyPage = {
           areaStyle: {
             color: {
               type: "linear",
-              x: 0, y: 0, x2: 0, y2: 1,
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
               colorStops: [
                 { offset: 0, color: "rgba(34, 197, 94, 0.25)" },
                 { offset: 1, color: "rgba(34, 197, 94, 0.02)" },
@@ -689,7 +758,10 @@ var EnergyPage = {
             var unit = p.seriesName === t("energy.chart.soc") ? "%" : " kW";
             var suffix = "";
             if (p.seriesName === t("energy.chart.chargeDischarge")) {
-              suffix = val >= 0 ? " " + t("energy.tooltip.charging") : " " + t("energy.tooltip.discharging");
+              suffix =
+                val >= 0
+                  ? " " + t("energy.tooltip.charging")
+                  : " " + t("energy.tooltip.discharging");
             }
             html +=
               '<span style="color:' +
@@ -714,7 +786,7 @@ var EnergyPage = {
       grid: { left: 12, right: 12, top: 50, bottom: 12, containLabel: true },
       xAxis: {
         type: "category",
-        data: TIME_LABELS_15MIN,
+        data: (data && data.timeLabels) || TIME_LABELS_15MIN,
         boundaryGap: false,
         axisLabel: { interval: 7, fontSize: 10, color: "#9ca3af" },
         axisLine: { lineStyle: { color: "#2a2d3a" } },
@@ -750,7 +822,10 @@ var EnergyPage = {
           areaStyle: {
             color: {
               type: "linear",
-              x: 0, y: 0, x2: 0, y2: 1,
+              x: 0,
+              y: 0,
+              x2: 0,
+              y2: 1,
               colorStops: [
                 { offset: 0, color: "rgba(168, 85, 247, 0.2)" },
                 { offset: 1, color: "rgba(168, 85, 247, 0.02)" },
@@ -820,7 +895,9 @@ var EnergyPage = {
             "</strong><br/>" +
             '<span style="color:' +
             color +
-            '">\u25CF</span> ' + t("dtype.AC") + ": " +
+            '">\u25CF</span> ' +
+            t("dtype.AC") +
+            ": " +
             status
           );
         },
@@ -828,7 +905,7 @@ var EnergyPage = {
       grid: { left: 12, right: 20, top: 30, bottom: 12, containLabel: true },
       xAxis: {
         type: "category",
-        data: TIME_LABELS_15MIN,
+        data: (data && data.timeLabels) || TIME_LABELS_15MIN,
         axisLabel: { interval: 7, fontSize: 10, color: "#9ca3af" },
         axisLine: { lineStyle: { color: "#2a2d3a" } },
       },
@@ -909,7 +986,9 @@ var EnergyPage = {
               "</strong><br/>" +
               '<span style="color:' +
               tierColor +
-              '">\u25CF</span> ' + t("energy.ev.charging") + ': <strong>' +
+              '">\u25CF</span> ' +
+              t("energy.ev.charging") +
+              ": <strong>" +
               p.value.toFixed(1) +
               " kW</strong>" +
               " (" +
@@ -919,13 +998,15 @@ var EnergyPage = {
               ")"
             );
           }
-          return "<strong>" + p.axisValue + "</strong><br/>" + t("energy.ev.idle");
+          return (
+            "<strong>" + p.axisValue + "</strong><br/>" + t("energy.ev.idle")
+          );
         },
       },
       grid: { left: 12, right: 20, top: 30, bottom: 12, containLabel: true },
       xAxis: {
         type: "category",
-        data: TIME_LABELS_15MIN,
+        data: (data && data.timeLabels) || TIME_LABELS_15MIN,
         axisLabel: { interval: 7, fontSize: 10, color: "#9ca3af" },
         axisLine: { lineStyle: { color: "#2a2d3a" } },
       },

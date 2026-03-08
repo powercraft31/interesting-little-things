@@ -151,26 +151,77 @@ function navigateTo(pageId) {
 }
 
 function initPage(pageId) {
+  var promise;
   switch (pageId) {
     case "fleet":
-      if (typeof FleetPage !== "undefined") FleetPage.init();
+      if (typeof FleetPage !== "undefined") promise = FleetPage.init();
       break;
     case "devices":
-      if (typeof DevicesPage !== "undefined") DevicesPage.init();
+      if (typeof DevicesPage !== "undefined") promise = DevicesPage.init();
       break;
     case "energy":
-      if (typeof EnergyPage !== "undefined") EnergyPage.init();
+      if (typeof EnergyPage !== "undefined") promise = EnergyPage.init();
       break;
     case "hems":
-      if (typeof HEMSPage !== "undefined") HEMSPage.init();
+      if (typeof HEMSPage !== "undefined") promise = HEMSPage.init();
       break;
     case "vpp":
-      if (typeof VPPPage !== "undefined") VPPPage.init();
+      if (typeof VPPPage !== "undefined") promise = VPPPage.init();
       break;
     case "performance":
-      if (typeof PerformancePage !== "undefined") PerformancePage.init();
+      if (typeof PerformancePage !== "undefined")
+        promise = PerformancePage.init();
       break;
   }
+  // Handle rejected promises (error already displayed by page's error boundary)
+  if (promise && typeof promise.catch === "function") {
+    promise.catch(function (err) {
+      console.error("[initPage] " + pageId + " init failed:", err);
+    });
+  }
+}
+
+// =========================================================
+// ERROR BOUNDARY
+// =========================================================
+function showErrorBoundary(containerId, err) {
+  var container = document.getElementById(containerId);
+  if (!container) return;
+  console.error("[ErrorBoundary] " + containerId + ":", err);
+  container.innerHTML = Components.errorBanner(t("shared.apiError"));
+}
+
+// =========================================================
+// DATE FORMAT UTILITIES (ISO → Brazilian DD/MM format)
+// =========================================================
+function formatISODate(iso) {
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  var dd = String(d.getDate()).padStart(2, "0");
+  var mm = String(d.getMonth() + 1).padStart(2, "0");
+  var yyyy = d.getFullYear();
+  return dd + "/" + mm + "/" + yyyy;
+}
+
+function formatISODateTime(iso) {
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  var dd = String(d.getDate()).padStart(2, "0");
+  var mm = String(d.getMonth() + 1).padStart(2, "0");
+  var yyyy = d.getFullYear();
+  var hh = String(d.getHours()).padStart(2, "0");
+  var min = String(d.getMinutes()).padStart(2, "0");
+  return dd + "/" + mm + "/" + yyyy + " " + hh + ":" + min;
+}
+
+function formatShortDate(iso) {
+  var d = new Date(iso);
+  if (isNaN(d.getTime())) return iso;
+  return (
+    String(d.getDate()).padStart(2, "0") +
+    "/" +
+    String(d.getMonth() + 1).padStart(2, "0")
+  );
 }
 
 // Listen for hash changes (back/forward navigation)
@@ -255,7 +306,8 @@ function switchRole(role) {
     energy: typeof EnergyPage !== "undefined" ? EnergyPage : null,
     hems: typeof HEMSPage !== "undefined" ? HEMSPage : null,
     vpp: typeof VPPPage !== "undefined" ? VPPPage : null,
-    performance: typeof PerformancePage !== "undefined" ? PerformancePage : null,
+    performance:
+      typeof PerformancePage !== "undefined" ? PerformancePage : null,
   };
 
   var mod = pageModules[currentPage];
