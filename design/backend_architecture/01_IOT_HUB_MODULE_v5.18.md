@@ -1,9 +1,9 @@
 # M1: IoT Hub Module — MQTT 協議接入層
 
-> **Module Version**: v5.18
+> **Module Version**: v5.18 (hotfix)
 > **Parent**: [00_MASTER_ARCHITECTURE_v5.15.md](./00_MASTER_ARCHITECTURE_v5.15.md)
 > **Last Updated**: 2026-03-09
-> **Description**: Full Solfacil Protocol v1.1 integration — 5 subscribe + 2 publish topics, anti-corruption layer, gateway registry
+> **Description**: Full Solfacil Protocol v1.2 integration — 5 subscribe + 3 publish topics, anti-corruption layer, gateway registry
 > **Core Theme**: Replace single-topic Xuheng bridge with complete protocol-aware IoT Hub
 
 ---
@@ -12,9 +12,9 @@
 
 | Component | Before (v5.16) | After (v5.18) |
 |-----------|---------------|---------------|
-| MQTT Topics | 1 wildcard `xuheng/+/+/data` | 5 subscribe + 2 publish per gateway (Solfacil Protocol v1.1) |
+| MQTT Topics | 1 wildcard `xuheng/+/+/data` | 5 subscribe + 3 publish per gateway (Solfacil Protocol v1.2) |
 | Connection | Single broker, single subscription | Per-gateway subscriptions read from `gateways` table |
-| XuhengAdapter | Parses batList partial fields | Full ACL: 6 Lists × all fields |
+| XuhengAdapter | Parses batList partial fields | Full ACL: 6 Lists × all fields + emsList + dido |
 | Device Discovery | None (manual assets insert) | `DeviceListHandler`: deviceList → assets UPSERT |
 | Config Management | None | `ScheduleTranslator`: battery_schedule ↔ domain model bidirectional |
 | Heartbeat | None | `HeartbeatHandler`: status → gateways.last_seen_at |
@@ -40,17 +40,17 @@
 │  │ Connection    │  │                                          │ │
 │  │ Manager       │  │  S1 → DeviceListHandler  → assets       │ │
 │  │               │  │  S2 → TelemetryHandler   → telemetry_*  │ │
-│  │  reads        │  │  S3 → CommandTracker     → cmd_logs     │ │
-│  │  gateways     │  │  S4 → CommandTracker     → cmd_logs     │ │
-│  │  table        │  │  S5 → HeartbeatHandler   → gateways     │ │
-│  └──────┬───────┘  │                                          │ │
-│         │          │  P1 ← ScheduleTranslator  ← BFF         │ │
-│         │          │  P2 ← ScheduleTranslator  ← BFF/M2      │ │
-│         ▼          └──────────────────────────────────────────┘ │
-│    ┌─────────┐                                                  │
-│    │gateways │                                                  │
-│    │  table  │                                                  │
-│    └─────────┘                                                  │
+│  │  reads        │  │       ├─ FragmentAssembler (merge 5 msgs)│ │
+│  │  gateways     │  │       ├─ EmsListProcessor → gateways    │ │
+│  │  table        │  │       └─ DidoProcessor    → DO0/DO1     │ │
+│  └──────┬───────┘  │  S3 → CommandTracker     → cmd_logs     │ │
+│         │          │  S4 → CommandTracker     → cmd_logs     │ │
+│         │          │  S5 → HeartbeatHandler   → gateways     │ │
+│         ▼          │                                          │ │
+│    ┌─────────┐     │  P1 ← ScheduleTranslator  ← BFF         │ │
+│    │gateways │     │  P2 ← ScheduleTranslator  ← BFF/M2      │ │
+│    │  table  │     │  P3 ← SubDevicesPoller     ← Timer/Startup│ │
+│    └─────────┘     └──────────────────────────────────────────┘ │
 └─────────────────────────────────────────────────────────────────┘
          │                    │                    │
          ▼                    ▼                    ▼
@@ -84,10 +84,15 @@ M1 startMqttSubscriber(pool)
   ├─ For each gateway:
   │    ├─ mqtt.connect(broker_host:broker_port, {username, password})
   │    ├─ Subscribe to 5 topics (S1–S5)
-  │    └─ Store client handle in gatewayClients Map
+  │    ├─ Store client handle in gatewayClients Map
+  │    └─ [v1.2] Publish subDevices/get (initial device list pull)
   │
-  └─ Start heartbeat watchdog (60s interval)
-       └─ For each gateway: if NOW() - last_seen_at > 90s → status='offline'
+  ├─ Start heartbeat watchdog (60s interval)
+  │    └─ For each gateway: if NOW() - last_seen_at > 90s → status='offline'
+  │
+  └─ [v1.2] Start periodic publish timers:
+       ├─ subDevices/get — every 1 hour
+       └─ config/get     — every 1 hour
 ```
 
 ### 2.2 Per-Gateway Topic Subscriptions
@@ -102,7 +107,15 @@ For each gateway with `client_id = {cid}`:
 | S4 | `device/ems/{cid}/config/set_reply` | `CommandTracker.handleSetReply()` |
 | S5 | `device/ems/{cid}/status` | `HeartbeatHandler.handle()` |
 
-### 2.3 Connection Configuration
+### 2.3 Per-Gateway Publish Topics (v1.2)
+
+| # | Topic Pattern | Trigger | Purpose |
+|---|---------------|---------|---------|
+| P1 | `platform/ems/{cid}/config/get` | BFF / 每 1 小時 | Request current config |
+| P2 | `platform/ems/{cid}/config/set` | BFF / M2 | Push new schedule |
+| P3 | `platform/ems/{cid}/subDevices/get` | 首次連線 + 每 1 小時 | Request device list |
+
+### 2.4 Connection Configuration
 
 ```
 interface GatewayConnection {
@@ -121,7 +134,7 @@ interface GatewayConnection {
 - **Clean session**: true (no persistent sessions needed for MVP)
 - **No wildcard**: Each gateway subscribes individually (shared broker with other services)
 
-### 2.4 Dynamic Gateway Addition
+### 2.5 Dynamic Gateway Addition
 
 MVP approach: M1 polls `gateways` table every 60s for new records. If a new gateway is found (not in `gatewayClients` Map), subscribe to its 5 topics.
 
@@ -129,9 +142,142 @@ No event bus or message queue — direct DB polling is sufficient for 3 gateways
 
 ---
 
-## 3. Topic Handlers (Anti-Corruption Layer)
+## 3. Fragmented Payload 處理機制
 
-### 3.1 DeviceListHandler
+### 3.1 問題：真實 MQTT 行為
+
+每個網關每 30 秒（生產為 5 分鐘）發送 **5 條獨立 MQTT 消息**，全部走 `device/ems/{clientId}/data` topic，在 ~800ms 內連續到達：
+
+| 序號 | 消息內容 | 大小 | 間隔 | 特徵 |
+|------|---------|------|------|------|
+| MSG#1 | `emsList`（EMS 系統狀態） | 718B | 起點 | 無 batList、無 deviceSn（用 clientId） |
+| MSG#2 | `dido`（數字 IO） | 630B | +140ms | 無 batList、有 DI/DO 值 |
+| MSG#3 | `meterList`（單相電表） | 851B | +132ms | 無 batList、有獨立 deviceSn |
+| MSG#4 | `meterList`（三相電表） | 1556B | +150ms | 無 batList、有獨立 deviceSn |
+| MSG#5 | `batList+gridList+loadList+flloadList+pvList` | 3278B | +357ms | 有 batList（大包） |
+
+**原始 Bug**：`TelemetryHandler` 有 `if (!bat) return;` early return，MSG#1-4 因為沒有 `batList` 被直接丟棄。
+
+### 3.2 設計方案：Per-Gateway Fragment Assembler
+
+**核心思路**：不再對單條消息獨立處理，改為 **按網關累積所有 fragment，在時間窗口結束後合併寫入**。
+
+```
+                    device/ems/{cid}/data
+                           │
+                    TelemetryHandler.handle()
+                           │
+                  ┌────────┴────────┐
+                  │ Classify by     │
+                  │ payload content │
+                  └─┬───┬───┬───┬──┘
+                    │   │   │   │
+              emsList dido meter batList(大包)
+                    │   │   │   │
+                    ▼   ▼   ▼   ▼
+              ┌─────────────────────────┐
+              │  FragmentAssembler      │
+              │  per-gateway cache      │
+              │                         │
+              │  key = clientId         │
+              │  fragments: {           │
+              │    ems?: EmsFragment    │
+              │    dido?: DidoFragment  │
+              │    meters?: MeterFrag[] │
+              │    core?: CoreFragment  │  ← MSG#5 (batList 大包)
+              │  }                      │
+              │  firstArrival: Date     │
+              │  flushTimer: Timeout    │
+              └────────────┬────────────┘
+                           │ flush after 3s debounce
+                           ▼
+              ┌─────────────────────────┐
+              │  Merge & Persist        │
+              │                         │
+              │  1. gateways.ems_health │ ← emsList
+              │  2. telemetry_history   │ ← batList 大包 + dido DO0/DO1
+              │     (inverter asset)    │
+              │  3. telemetry_extra     │ ← meters + per-phase detail
+              └─────────────────────────┘
+```
+
+**關鍵設計決策**：
+
+| 決策 | 選擇 | 理由 |
+|------|------|------|
+| Fragment 累積方式 | Per-gateway Map with 3s debounce | 5 條消息在 ~800ms 內到齊，3s 足夠 |
+| emsList 存到哪 | `gateways.ems_health` JSONB | 網關自身健康，非設備遙測，不進 telemetry_history |
+| dido DO0/DO1 | 合併到 inverter 的 telemetry_history row | DO 是 Peak Shaving 切載信號，屬於調度上下文 |
+| dido DI0/DI1 | 合併到 telemetry_extra.dido JSONB | 數字輸入，僅診斷用 |
+| meterList（兩個電表） | 合併到 telemetry_extra JSONB，分 key 存 | `meter_single` + `meter_three`，避免額外 table |
+| 如果 MSG#5 未到 | 3s 後仍然 flush 已有 fragment（ems_health 照寫，telemetry_history 不寫） | 保證 ems_health 不丟，但不寫不完整的遙測行 |
+
+### 3.3 Fragment 分類邏輯
+
+```
+function classifyMessage(data: Record<string, unknown>):
+  | { type: 'ems', payload: EmsListItem }
+  | { type: 'dido', payload: DidoItem }
+  | { type: 'meter', payload: MeterListItem[] }
+  | { type: 'core', payload: CorePayload }  // batList 大包
+
+  if (data.emsList)           → type = 'ems'
+  if (data.dido)              → type = 'dido'
+  if (data.meterList)         → type = 'meter'
+  if (data.batList)           → type = 'core'
+  // 理論上 batList 大包同時含 gridList/loadList/flloadList/pvList
+```
+
+**分類依據**：每條消息的 `data` 物件頂層 key 互斥，可以直接判斷。
+
+### 3.4 Debounce 與 Flush 策略
+
+```
+FragmentAssembler.receive(clientId, messageType, fragment):
+  1. 取得或建立 clientId 的 accumulator
+  2. 將 fragment 合併到 accumulator 對應欄位
+  3. 重設 3s debounce timer
+  4. 若收到 'core' type（MSG#5 大包）：
+     - 可立即 flush（因為 MSG#5 是最後到達的，前 4 條已在 cache）
+     - 或仍等 timer 到期（更安全，防止亂序）
+  5. Timer 到期 → mergeAndPersist(clientId)
+```
+
+**選擇「收到 core 立即 flush」**：因為 MSG#5 永遠最後到達（+357ms），前 4 條已在 cache。這樣延遲最低。但仍保留 3s safety timer 以防 MSG#5 丟失。
+
+### 3.5 mergeAndPersist 流程
+
+```
+async function mergeAndPersist(clientId, accumulator):
+  const { ems, dido, meters, core } = accumulator
+
+  // Step 1: emsList → gateways.ems_health（無論 core 是否存在都寫）
+  if (ems) {
+    await updateGatewayEmsHealth(pool, clientId, ems)
+  }
+
+  // Step 2: core（MSG#5 大包）→ telemetry_history + device_state
+  if (core) {
+    const parsed = buildParsedTelemetry(core, dido, meters)
+    // dido.DO0/DO1 合併到 parsed.do0Active / do1Active
+    // meters 合併到 parsed.telemetryExtra
+    const assetId = await cache.resolve(parsed.deviceSn)
+    buffer.enqueue(assetId, parsed)
+    await updateDeviceState(pool, assetId, parsed)
+  }
+
+  // Step 3: 如果只有 meters 沒有 core，僅記 log 不寫 telemetry_history
+  // （防止不完整數據進入時序表）
+
+  // Step 4: 清除 accumulator
+  clearAccumulator(clientId)
+```
+
+---
+
+## 4. Topic Handlers (Anti-Corruption Layer)
+
+### 4.1 DeviceListHandler
 
 **Subscribe**: `device/ems/{clientId}/deviceList`
 **Persistence**: `assets` table UPSERT
@@ -182,17 +328,18 @@ Output: assets table rows (INSERT or UPDATE)
 | `subDevId` | (ignored) | Auto-generated by gateway |
 | `fatherSn` | (used for hierarchy, not stored directly) | Parent device SN |
 
-### 3.2 TelemetryHandler
+### 4.2 TelemetryHandler (v5.18 Hotfix — Fragment-Aware)
 
 **Subscribe**: `device/ems/{clientId}/data`
-**Persistence**: `telemetry_history` (via MessageBuffer), `device_state` (via updateDeviceState)
+**Persistence**: `telemetry_history` (via MessageBuffer), `device_state`, `gateways.ems_health`
 
 ```
 Function Signature:
-  handleTelemetry(pool: Pool, gatewayId: string, payload: SolfacilMessage): Promise<void>
+  handleTelemetry(pool: Pool, gatewayId: string, clientId: string, payload: SolfacilMessage): Promise<void>
 
-Input:  payload.data.{meterList, gridList, pvList, batList, loadList, flloadList}
-Output: telemetry_history rows, device_state updates
+Input:  payload.data — may contain ANY of:
+        emsList, dido, meterList, batList+gridList+loadList+flloadList+pvList
+Output: Accumulated fragments → merged telemetry_history row + gateways.ems_health
 ```
 
 **鐵律 — TimeStamp Rule:**
@@ -202,19 +349,230 @@ All `recorded_at` values MUST be parsed from `payload.timeStamp` (epoch ms strin
 const recordedAt = new Date(parseInt(payload.timeStamp, 10));
 ```
 
-**Processing Logic:**
+**Processing Logic (Hotfix):**
 
 1. Parse `payload.timeStamp` → `recordedAt`
-2. For each List present in `payload.data`:
-   - Extract device-level fields from `properties`
-   - Convert all string values to numbers via `safeFloat()`
-   - Build `ParsedTelemetry` record
-3. Route through existing `MessageBuffer` (2s debounce) → `telemetry_history` INSERT
-4. Update `device_state` for real-time dashboard
+2. **Classify** message by top-level `data` keys (see §3.3)
+3. **Feed** classified fragment into `FragmentAssembler` for this `clientId`
+4. FragmentAssembler handles merge + debounce + flush (see §3.4–3.5)
 
-#### 3.2.1 Complete Field Mappings per List
+**不再有 `if (!bat) return;`** — 所有消息類型都被接收和累積。
 
-**batList (Battery) — 13 fields:**
+#### 4.2.1 emsList 處理 — EMS 系統健康（MSG#1）
+
+**協議欄位 → 儲存位置**：`gateways.ems_health` JSONB
+
+emsList 消息的 `data` 結構（實測）：
+```json
+{
+  "emsList": [{
+    "properties": {
+      "CPU_temp": "45",
+      "CPU_usage": "23",
+      "disk_usage": "31",
+      "memory_usage": "52",
+      "ems_temp": "38",
+      "humidity": "65",
+      "SIM_status": "1",
+      "phone_status": "1",
+      "phone_signal_strength": "75",
+      "wifi_status": "0",
+      "wifi_signal_strength": "0",
+      "hardware_time": "1772681002",
+      "system_time": "1772681002",
+      "system_runtime": "86400"
+    },
+    "deviceSn": "WKRD24070202100141I",
+    ...
+  }]
+}
+```
+
+**emsList 數據字典映射表**：
+
+| 協議欄位 (`properties.*`) | JSONB key (`gateways.ems_health.*`) | 類型 | 單位 | 說明 |
+|---|---|---|---|---|
+| `CPU_temp` | `cpu_temp` | number | ℃ | CPU 溫度 |
+| `CPU_usage` | `cpu_usage` | number | % | CPU 使用率 |
+| `disk_usage` | `disk_usage` | number | % | 磁碟使用率 |
+| `memory_usage` | `memory_usage` | number | % | 記憶體使用率 |
+| `ems_temp` | `ems_temp` | number | ℃ | EMS 設備溫度 |
+| `humidity` | `humidity` | number | % | 環境濕度 |
+| `SIM_status` | `sim_status` | number | - | SIM 卡狀態（1=正常, 0=異常） |
+| `phone_status` | `phone_status` | number | - | 4G 模組狀態 |
+| `phone_signal_strength` | `phone_signal_strength` | number | % | 4G 訊號強度 |
+| `wifi_status` | `wifi_status` | number | - | WiFi 狀態（1=已連接, 0=未連接） |
+| `wifi_signal_strength` | `wifi_signal_strength` | number | % | WiFi 訊號強度 |
+| `hardware_time` | `hardware_time` | number | epoch s | 硬體 RTC 時間 |
+| `system_time` | `system_time` | number | epoch s | 系統時間 |
+| `system_runtime` | `system_runtime` | number | s | 系統運行時長 |
+
+**SQL 持久化**：
+```sql
+UPDATE gateways
+SET ems_health = $1::jsonb,
+    ems_health_at = to_timestamp($2::bigint / 1000.0),
+    updated_at = NOW()
+WHERE client_id = $3
+```
+
+**設計理由**：emsList 是網關自身的系統監控指標（CPU、記憶體、網路），不是逆變器/電表的能源遙測。放在 `gateways` 表而非 `telemetry_history` 因為：
+- 語義正確：這是網關健康，不是設備遙測
+- 只需最新值：不需要時序歷史（如果未來需要，可加 `gateway_health_history` 表）
+- 查詢路徑獨立：運維看網關健康 vs 業務看能源遙測
+
+#### 4.2.2 dido 處理 — 數字 IO（MSG#2）
+
+**協議欄位 → 儲存位置**：DO0/DO1 → `telemetry_history.do0_active / do1_active`，DI0/DI1 → `telemetry_extra.dido`
+
+dido 消息的 `data` 結構（實測）：
+```json
+{
+  "dido": {
+    "DI0": "0",
+    "DI1": "0",
+    "DO0": "1",
+    "DO1": "0"
+  }
+}
+```
+
+**dido 數據字典映射表**：
+
+| 協議欄位 (`data.dido.*`) | 儲存位置 | DB 欄位 / JSONB key | 類型 | 說明 |
+|---|---|---|---|---|
+| `DO0` | `telemetry_history` 實體欄位 | `do0_active` | boolean | Peak Shaving 切載信號 #0（"1"→true, "0"→false） |
+| `DO1` | `telemetry_history` 實體欄位 | `do1_active` | boolean | Peak Shaving 切載信號 #1（"1"→true, "0"→false） |
+| `DI0` | `telemetry_extra` JSONB | `telemetry_extra.dido.di0` | number | 數字輸入 #0（診斷用） |
+| `DI1` | `telemetry_extra` JSONB | `telemetry_extra.dido.di1` | number | 數字輸入 #1（診斷用） |
+
+**合併策略**：dido 消息沒有 `batList`，無法獨立寫入 `telemetry_history`。Fragment Assembler 將 DO0/DO1 值暫存，等 MSG#5 到達後合併到 `ParsedTelemetry.do0Active / do1Active`，取代目前的 `false` 硬編碼。
+
+**轉換規則**：`"1"` → `true`, `"0"` → `false`（字串轉布林）
+
+#### 4.2.3 meterList 處理 — 獨立電表（MSG#3 + MSG#4）
+
+**兩個獨立設備**：
+- MSG#3：`Meter-Chint-DTSU666Single`（單相，7 props）— deviceSn = `Meter-Chint-DTSU666Single1772421080_WKRD24070202100141I`
+- MSG#4：`Meter-Chint-DTSU666Three`（三相，32 props）— deviceSn = `Meter-Chint-DTSU666Three1772421079_WKRD24070202100141I`
+
+**關鍵設計決策 — Meter 數據不寫獨立 telemetry_history 行**：
+
+| 方案 | 優點 | 缺點 | 選擇 |
+|------|------|------|------|
+| A. 每個 Meter 獨立 telemetry_history 行 | 語義清晰 | 大量 NULL（battery_soc 等欄位全空）、每期 3 行 | ❌ |
+| B. 新建 `meter_telemetry` 表 | Schema 乾淨 | 額外表、額外 migration、MVP 過度設計 | ❌ |
+| **C. 合併到 inverter 的 telemetry_extra JSONB** | 零 schema 變更、單行包含完整週期快照 | JSONB 查詢較慢 | ✅ MVP |
+
+**理由**：
+- Meter 數據在 MVP 階段僅供診斷/drill-down，不被 M2/M3/M4 主動查詢
+- 每個週期（30s/5min）只有 1 個逆變器 + 2 個電表，數據量極小
+- telemetry_extra JSONB 已存在，只需擴展 key 命名
+
+**telemetry_extra 中的 Meter 存儲結構**（hotfix 修正）：
+
+原設計只有一個 `meter` key，hotfix 改為按電表類型分 key：
+
+```json
+{
+  "meter_single": {
+    "device_sn": "Meter-Chint-DTSU666Single1772421080_WKRD24070202100141I",
+    "connect_status": "online",
+    "volt_a": 230,
+    "current_a": 10,
+    "active_power_a": 2300,
+    "reactive_power_a": 20,
+    "factor_a": 0.99,
+    "frequency": 60
+  },
+  "meter_three": {
+    "device_sn": "Meter-Chint-DTSU666Three1772421079_WKRD24070202100141I",
+    "connect_status": "online",
+    "volt_a": 230, "volt_b": 230, "volt_c": 230,
+    "line_ab_volt": 398, "line_bc_volt": 398, "line_ca_volt": 398,
+    "current_a": 10, "current_b": 10, "current_c": 10,
+    "total_active_power": 6900,
+    "active_power_a": 2300, "active_power_b": 2300, "active_power_c": 2300,
+    "total_reactive_power": 60,
+    "reactive_power_a": 20, "reactive_power_b": 20, "reactive_power_c": 20,
+    "factor": 0.99, "factor_a": 0.99, "factor_b": 0.99, "factor_c": 0.99,
+    "frequency": 60,
+    "positive_energy": 1234,
+    "positive_energy_a": 411, "positive_energy_b": 412, "positive_energy_c": 411,
+    "net_forward_energy": 1200,
+    "negative_energy_a": 10, "negative_energy_b": 10, "negative_energy_c": 10,
+    "net_reverse_energy": 30
+  },
+  "dido": {
+    "di0": 0, "di1": 0
+  },
+  "grid": { ... },
+  "load": { ... },
+  "flload": { ... },
+  "pv": { ... }
+}
+```
+
+**Meter 分類邏輯**：
+```
+if (meterItem.deviceBrand.includes('Single')) → key = 'meter_single'
+if (meterItem.deviceBrand.includes('Three'))  → key = 'meter_three'
+```
+
+**單相電表完整映射（`meter_single`）**：
+
+| 協議欄位 (`properties.*`) | JSONB key (`telemetry_extra.meter_single.*`) | 類型 | 單位 |
+|---|---|---|---|
+| `connectStatus` | `connect_status` | string | - |
+| `grid_voltA` | `volt_a` | number | V |
+| `grid_currentA` | `current_a` | number | A |
+| `grid_activePowerA` | `active_power_a` | number | W |
+| `grid_reactivePowerA` | `reactive_power_a` | number | Var |
+| `grid_factorA` | `factor_a` | number | - |
+| `grid_frequency` | `frequency` | number | Hz |
+
+**三相電表完整映射（`meter_three`）**：
+
+| 協議欄位 (`properties.*`) | JSONB key (`telemetry_extra.meter_three.*`) | 類型 | 單位 |
+|---|---|---|---|
+| `connectStatus` | `connect_status` | string | - |
+| `grid_voltA` | `volt_a` | number | V |
+| `grid_voltB` | `volt_b` | number | V |
+| `grid_voltC` | `volt_c` | number | V |
+| `grid_lineABVolt` | `line_ab_volt` | number | V |
+| `grid_lineBCVolt` | `line_bc_volt` | number | V |
+| `grid_lineCAVolt` | `line_ca_volt` | number | V |
+| `grid_currentA` | `current_a` | number | A |
+| `grid_currentB` | `current_b` | number | A |
+| `grid_currentC` | `current_c` | number | A |
+| `grid_totalActivePower` | `total_active_power` | number | W |
+| `grid_activePowerA` | `active_power_a` | number | W |
+| `grid_activePowerB` | `active_power_b` | number | W |
+| `grid_activePowerC` | `active_power_c` | number | W |
+| `grid_totalReactivePower` | `total_reactive_power` | number | Var |
+| `grid_reactivePowerA` | `reactive_power_a` | number | Var |
+| `grid_reactivePowerB` | `reactive_power_b` | number | Var |
+| `grid_reactivePowerC` | `reactive_power_c` | number | Var |
+| `grid_factor` | `factor` | number | - |
+| `grid_factorA` | `factor_a` | number | - |
+| `grid_factorB` | `factor_b` | number | - |
+| `grid_factorC` | `factor_c` | number | - |
+| `grid_frequency` | `frequency` | number | Hz |
+| `grid_positiveEnergy` | `positive_energy` | number | kWh |
+| `grid_positiveEnergyA` | `positive_energy_a` | number | kWh |
+| `grid_positiveEnergyB` | `positive_energy_b` | number | kWh |
+| `grid_positiveEnergyC` | `positive_energy_c` | number | kWh |
+| `grid_netForwardActiveEnergy` | `net_forward_energy` | number | kWh |
+| `grid_negativeEnergyA` | `negative_energy_a` | number | kWh |
+| `grid_negativeEnergyB` | `negative_energy_b` | number | kWh |
+| `grid_negativeEnergyC` | `negative_energy_c` | number | kWh |
+| `grid_netReverseActiveEnergy` | `net_reverse_energy` | number | kWh |
+
+#### 4.2.4 Complete Field Mappings — MSG#5 大包（batList+gridList+loadList+flloadList+pvList）
+
+這部分邏輯已正確運行，無需修改。以下為完整對照表。
+
+**batList (Battery) — 13 fields → telemetry_history 實體欄位：**
 
 | Protocol Field (`properties.*`) | ParsedTelemetry Field | DB Column (`telemetry_history`) | Unit | Notes |
 |------|------|------|------|------|
@@ -232,117 +590,55 @@ const recordedAt = new Date(parseInt(payload.timeStamp, 10));
 | `total_bat_totalChargedEnergy` | `totalChargeKwh` | `total_charge_kwh` | kWh | Lifetime |
 | `total_bat_totalDischargedEnergy` | `totalDischargeKwh` | `total_discharge_kwh` | kWh | Lifetime |
 
-**gridList (Inverter Grid-Side) — 27 fields:**
+**gridList (Inverter Grid-Side) — 27 fields：**
 
-| Protocol Field | ParsedTelemetry Field | DB Column | Unit |
+| Protocol Field | DB Location | Type | Notes |
 |------|------|------|------|
-| `grid_voltA` | `gridVoltA` | `grid_volt_a` | V |
-| `grid_voltB` | `gridVoltB` | `grid_volt_b` | V |
-| `grid_voltC` | `gridVoltC` | `grid_volt_c` | V |
-| `grid_currentA` | `gridCurrentA` | `grid_current_a` | A |
-| `grid_currentB` | `gridCurrentB` | `grid_current_b` | A |
-| `grid_currentC` | `gridCurrentC` | `grid_current_c` | A |
-| `grid_activePowerA` | `gridActivePowerA` | `grid_active_power_a` | W |
-| `grid_activePowerB` | `gridActivePowerB` | `grid_active_power_b` | W |
-| `grid_activePowerC` | `gridActivePowerC` | `grid_active_power_c` | W |
-| `grid_totalActivePower` | `gridPowerKw` | `grid_power_kw` | W |
-| `grid_reactivePowerA` | `gridReactivePowerA` | `grid_reactive_power_a` | Var |
-| `grid_reactivePowerB` | `gridReactivePowerB` | `grid_reactive_power_b` | Var |
-| `grid_reactivePowerC` | `gridReactivePowerC` | `grid_reactive_power_c` | Var |
-| `grid_totalReactivePower` | `gridTotalReactivePower` | `grid_total_reactive_power` | Var |
-| `grid_apparentPowerA` | `gridApparentPowerA` | `grid_apparent_power_a` | VA |
-| `grid_apparentPowerB` | `gridApparentPowerB` | `grid_apparent_power_b` | VA |
-| `grid_apparentPowerC` | `gridApparentPowerC` | `grid_apparent_power_c` | VA |
-| `grid_totalApparentPower` | `gridTotalApparentPower` | `grid_total_apparent_power` | VA |
-| `grid_factorA` | `gridFactorA` | `grid_factor_a` | - |
-| `grid_factorB` | `gridFactorB` | `grid_factor_b` | - |
-| `grid_factorC` | `gridFactorC` | `grid_factor_c` | - |
-| `grid_frequency` | `gridFrequency` | `grid_frequency` | Hz |
-| `grid_dailyBuyEnergy` | `gridDailyBuyKwh` | `grid_import_kwh` | kWh |
-| `grid_dailySellEnergy` | `gridDailySellKwh` | `grid_export_kwh` | kWh |
-| `grid_totalBuyEnergy` | `gridTotalBuyKwh` | `grid_total_buy_kwh` | kWh |
-| `grid_totalSellEnergy` | `gridTotalSellKwh` | `grid_total_sell_kwh` | kWh |
-| `grid_temp` | `inverterTemp` | `inverter_temp` | ℃ |
+| `grid_totalActivePower` | `telemetry_history.grid_power_kw` | 實體欄位 | Hot-path: M2/M3 查詢 |
+| `grid_dailyBuyEnergy` | `telemetry_history.grid_import_kwh` | 實體欄位 | Hot-path: M4 計費 |
+| `grid_dailySellEnergy` | `telemetry_history.grid_export_kwh` | 實體欄位 | Hot-path: M4 計費 |
+| `grid_temp` | `telemetry_history.inverter_temp` | 實體欄位 | Health monitoring |
+| `grid_voltA/B/C` | `telemetry_extra.grid.volt_a/b/c` | JSONB | 診斷用 |
+| `grid_currentA/B/C` | `telemetry_extra.grid.current_a/b/c` | JSONB | 診斷用 |
+| `grid_activePowerA/B/C` | `telemetry_extra.grid.active_power_a/b/c` | JSONB | 診斷用 |
+| `grid_reactivePowerA/B/C` | `telemetry_extra.grid.reactive_power_a/b/c` | JSONB | 診斷用 |
+| `grid_totalReactivePower` | `telemetry_extra.grid.total_reactive_power` | JSONB | 診斷用 |
+| `grid_apparentPowerA/B/C` | `telemetry_extra.grid.apparent_power_a/b/c` | JSONB | 診斷用 |
+| `grid_totalApparentPower` | `telemetry_extra.grid.total_apparent_power` | JSONB | 診斷用 |
+| `grid_factorA/B/C` | `telemetry_extra.grid.factor_a/b/c` | JSONB | 診斷用 |
+| `grid_frequency` | `telemetry_extra.grid.frequency` | JSONB | 診斷用 |
+| `grid_totalBuyEnergy` | `telemetry_extra.grid.total_buy_kwh` | JSONB | 累計值 |
+| `grid_totalSellEnergy` | `telemetry_extra.grid.total_sell_kwh` | JSONB | 累計值 |
 
-**meterList (Smart Meter) — Single-phase 6 fields / Three-phase 29 fields:**
+**pvList (Solar PV) — 9 fields：**
 
-| Protocol Field | ParsedTelemetry Field | DB Column | Unit | Phase |
-|------|------|------|------|------|
-| `grid_voltA` | `meterVoltA` | `meter_volt_a` | V | Single/Three |
-| `grid_voltB` | `meterVoltB` | `meter_volt_b` | V | Three only |
-| `grid_voltC` | `meterVoltC` | `meter_volt_c` | V | Three only |
-| `grid_lineABVolt` | `meterLineABVolt` | `meter_line_ab_volt` | V | Three only |
-| `grid_lineBCVolt` | `meterLineBCVolt` | `meter_line_bc_volt` | V | Three only |
-| `grid_lineCAVolt` | `meterLineCAVolt` | `meter_line_ca_volt` | V | Three only |
-| `grid_currentA` | `meterCurrentA` | `meter_current_a` | A | Single/Three |
-| `grid_currentB` | `meterCurrentB` | `meter_current_b` | A | Three only |
-| `grid_currentC` | `meterCurrentC` | `meter_current_c` | A | Three only |
-| `grid_activePowerA` | `meterActivePowerA` | `meter_active_power_a` | W | Single/Three |
-| `grid_activePowerB` | `meterActivePowerB` | `meter_active_power_b` | W | Three only |
-| `grid_activePowerC` | `meterActivePowerC` | `meter_active_power_c` | W | Three only |
-| `grid_totalActivePower` | `meterTotalActivePower` | `meter_total_active_power` | W | Three only |
-| `grid_reactivePowerA` | `meterReactivePowerA` | `meter_reactive_power_a` | Var | Single/Three |
-| `grid_reactivePowerB` | `meterReactivePowerB` | `meter_reactive_power_b` | Var | Three only |
-| `grid_reactivePowerC` | `meterReactivePowerC` | `meter_reactive_power_c` | Var | Three only |
-| `grid_totalReactivePower` | `meterTotalReactivePower` | `meter_total_reactive_power` | Var | Three only |
-| `grid_factor` | `meterFactor` | `meter_factor` | - | Three only |
-| `grid_factorA` | `meterFactorA` | `meter_factor_a` | - | Single/Three |
-| `grid_factorB` | `meterFactorB` | `meter_factor_b` | - | Three only |
-| `grid_factorC` | `meterFactorC` | `meter_factor_c` | - | Three only |
-| `grid_frequency` | `meterFrequency` | `meter_frequency` | Hz | Single/Three |
-| `grid_positiveEnergy` | `meterPositiveEnergy` | `meter_positive_energy` | kWh | Three only |
-| `grid_positiveEnergyA` | `meterPositiveEnergyA` | `meter_positive_energy_a` | kWh | Three only |
-| `grid_positiveEnergyB` | `meterPositiveEnergyB` | `meter_positive_energy_b` | kWh | Three only |
-| `grid_positiveEnergyC` | `meterPositiveEnergyC` | `meter_positive_energy_c` | kWh | Three only |
-| `grid_netForwardActiveEnergy` | `meterNetForwardEnergy` | `meter_net_forward_energy` | kWh | Three only |
-| `grid_negativeEnergyA` | `meterNegativeEnergyA` | `meter_negative_energy_a` | kWh | Three only |
-| `grid_negativeEnergyB` | `meterNegativeEnergyB` | `meter_negative_energy_b` | kWh | Three only |
-| `grid_negativeEnergyC` | `meterNegativeEnergyC` | `meter_negative_energy_c` | kWh | Three only |
-| `grid_netReverseActiveEnergy` | `meterNetReverseEnergy` | `meter_net_reverse_energy` | kWh | Three only |
+| Protocol Field | DB Location | Type |
+|------|------|------|
+| `pv_totalPower` | `telemetry_history.pv_power` | 實體欄位 |
+| `pv_dailyEnergy` | `telemetry_history.pv_daily_energy_kwh` | 實體欄位 |
+| `pv_totalEnergy` | `telemetry_extra.pv.total_energy_kwh` | JSONB |
+| `pv1_voltage/current/power` | `telemetry_extra.pv.pv1_*` | JSONB |
+| `pv2_voltage/current/power` | `telemetry_extra.pv.pv2_*` | JSONB |
 
-**pvList (Solar PV) — 9 fields:**
+**loadList (Backup Load) — 13 fields：**
 
-| Protocol Field | ParsedTelemetry Field | DB Column | Unit |
-|------|------|------|------|
-| `pv_totalPower` | `pvPowerKw` | `pv_power` | W |
-| `pv_totalEnergy` | `pvTotalEnergyKwh` | `pv_total_energy_kwh` | kWh |
-| `pv_dailyEnergy` | `pvDailyEnergyKwh` | `pv_daily_energy_kwh` | kWh |
-| `pv1_voltage` | `pv1Voltage` | `pv1_voltage` | V |
-| `pv1_current` | `pv1Current` | `pv1_current` | A |
-| `pv1_power` | `pv1Power` | `pv1_power` | W |
-| `pv2_voltage` | `pv2Voltage` | `pv2_voltage` | V |
-| `pv2_current` | `pv2Current` | `pv2_current` | A |
-| `pv2_power` | `pv2Power` | `pv2_power` | W |
+| Protocol Field | DB Location | Type |
+|------|------|------|
+| `load1_totalPower` | `telemetry_history.load_power` | 實體欄位 |
+| `load1_voltA/B/C` | `telemetry_extra.load.volt_a/b/c` | JSONB |
+| `load1_currentA/B/C` | `telemetry_extra.load.current_a/b/c` | JSONB |
+| `load1_activePowerA/B/C` | `telemetry_extra.load.active_power_a/b/c` | JSONB |
+| `load1_frequencyA/B/C` | `telemetry_extra.load.frequency_a/b/c` | JSONB |
 
-**loadList (Backup Load) — 13 fields:**
+**flloadList (Home Total Load) — 5 fields：**
 
-| Protocol Field | ParsedTelemetry Field | DB Column | Unit |
-|------|------|------|------|
-| `load1_voltA` | `loadVoltA` | `load_volt_a` | V |
-| `load1_voltB` | `loadVoltB` | `load_volt_b` | V |
-| `load1_voltC` | `loadVoltC` | `load_volt_c` | V |
-| `load1_currentA` | `loadCurrentA` | `load_current_a` | A |
-| `load1_currentB` | `loadCurrentB` | `load_current_b` | A |
-| `load1_currentC` | `loadCurrentC` | `load_current_c` | A |
-| `load1_activePowerA` | `loadActivePowerA` | `load_active_power_a` | W |
-| `load1_activePowerB` | `loadActivePowerB` | `load_active_power_b` | W |
-| `load1_activePowerC` | `loadActivePowerC` | `load_active_power_c` | W |
-| `load1_frequencyA` | `loadFrequencyA` | `load_frequency_a` | Hz |
-| `load1_frequencyB` | `loadFrequencyB` | `load_frequency_b` | Hz |
-| `load1_frequencyC` | `loadFrequencyC` | `load_frequency_c` | Hz |
-| `load1_totalPower` | `loadPowerKw` | `load_power` | W |
+| Protocol Field | DB Location | Type |
+|------|------|------|
+| `flload_totalPower` | `telemetry_history.flload_power` | 實體欄位 |
+| `flload_dailyEnergy` | `telemetry_extra.flload.daily_energy_kwh` | JSONB |
+| `flload_activePowerA/B/C` | `telemetry_extra.flload.active_power_a/b/c` | JSONB |
 
-**flloadList (Home Total Load) — 5 fields:**
-
-| Protocol Field | ParsedTelemetry Field | DB Column | Unit |
-|------|------|------|------|
-| `flload_totalPower` | `flloadPowerKw` | `flload_power` | W |
-| `flload_dailyEnergy` | `flloadDailyEnergyKwh` | `flload_daily_energy_kwh` | kWh |
-| `flload_activePowerA` | `flloadActivePowerA` | `flload_active_power_a` | W |
-| `flload_activePowerB` | `flloadActivePowerB` | `flload_active_power_b` | W |
-| `flload_activePowerC` | `flloadActivePowerC` | `flload_active_power_c` | W |
-
-### 3.3 ScheduleTranslator (Bidirectional)
+### 4.3 ScheduleTranslator (Bidirectional)
 
 ```
 Function Signatures:
@@ -357,7 +653,7 @@ Function Signatures:
   validateSchedule(schedule: DomainSchedule): ValidationResult
 ```
 
-#### 3.3.1 Read Direction (get_reply → Domain Model)
+#### 4.3.1 Read Direction (get_reply → Domain Model)
 
 | Protocol (`battery_schedule`) | Domain Model | Translation Rule |
 |------|------|------|
@@ -381,7 +677,7 @@ Function Signatures:
 | `start` (string) | `startMinute` (number) | `parseInt()`, minutes from 00:00 |
 | `end` (string) | `endMinute` (number) | `parseInt()`, minutes from 00:00 |
 
-#### 3.3.2 Write Direction (Domain Model → config/set)
+#### 4.3.2 Write Direction (Domain Model → config/set)
 
 Reverse of read direction. All numeric values converted to strings. The output message structure:
 
@@ -408,7 +704,7 @@ Reverse of read direction. All numeric values converted to strings. The output m
 }
 ```
 
-#### 3.3.3 Validation Rules (Hard Crash — No Publish on Failure)
+#### 4.3.3 Validation Rules (Hard Crash — No Publish on Failure)
 
 | Rule | Constraint | Action on Failure |
 |------|------|------|
@@ -424,7 +720,7 @@ Reverse of read direction. All numeric values converted to strings. The output m
 
 **BMS limit lookup**: Read latest `max_charge_current` and `max_discharge_current` from `telemetry_history` for the gateway's inverter asset, ordered by `recorded_at DESC LIMIT 1`.
 
-### 3.4 HeartbeatHandler
+### 4.4 HeartbeatHandler
 
 **Subscribe**: `device/ems/{clientId}/status`
 **Persistence**: `gateways.last_seen_at`, `gateways.status`
@@ -446,7 +742,7 @@ Logic:
 - Heartbeat interval: 30s (per protocol)
 - Offline threshold: 90s (3 missed heartbeats) — enforced by the watchdog timer in Connection Manager
 
-### 3.5 CommandTracker
+### 4.5 CommandTracker
 
 **Subscribe**: `device/ems/{clientId}/config/get_reply` + `device/ems/{clientId}/config/set_reply`
 **Persistence**: `device_command_logs` table
@@ -479,12 +775,12 @@ Function Signatures:
 
 ---
 
-## 4. Publish Functions
+## 5. Publish Functions
 
-### 4.1 publishConfigGet
+### 5.1 publishConfigGet
 
 **Topic**: `platform/ems/{clientId}/config/get`
-**Caller**: BFF (user opens schedule editor)
+**Caller**: BFF (user opens schedule editor) + 每 1 小時自動輪詢
 
 ```
 Function Signature:
@@ -499,7 +795,7 @@ Logic:
   5. Return messageId
 ```
 
-### 4.2 publishConfigSet
+### 5.2 publishConfigSet
 
 **Topic**: `platform/ems/{clientId}/config/set`
 **Caller**: BFF (user clicks Apply) or M2 (algorithm auto-schedule)
@@ -519,11 +815,59 @@ Logic:
   6. Return messageId
 ```
 
+### 5.3 publishSubDevicesGet（v1.2 新增）
+
+**Topic**: `platform/ems/{clientId}/subDevices/get`
+**Caller**: GatewayConnectionManager（首次連線 + 每 1 小時）
+
+```
+Function Signature:
+  publishSubDevicesGet(clientId: string, publish: MqttPublishFn): void
+
+Logic:
+  1. Build message: {
+       DS: 0,
+       ackFlag: 0,
+       clientId,
+       deviceName: "EMS_N2",
+       productKey: "ems",
+       messageId: String(Date.now()),
+       timeStamp: String(Date.now()),
+       data: { reason: "periodic_query" }
+     }
+  2. Publish to `platform/ems/${clientId}/subDevices/get`
+  3. Log info (不寫 device_command_logs，因為回應走現有 deviceList handler)
+```
+
+**回應處理**：網關收到 `subDevices/get` 後，透過原有 `device/ems/{clientId}/deviceList` topic 回覆。已被 DeviceListHandler（S1）處理，無需額外 handler。
+
+**輪詢策略**（Alan 決定）：
+
+| Publish | 首次觸發 | 定期間隔 | 備註 |
+|---------|---------|---------|------|
+| `subDevices/get` | Gateway 連線成功後立即 | 每 1 小時 | 保持設備清單同步 |
+| `config/get` | 不自動觸發（前端打開時觸發） | 每 1 小時 | 保持排程配置同步 |
+| `config/set` | 不自動觸發 | 不輪詢 | 純前端 / M2 觸發 |
+
+**ConnectionManager 新增 Timer**：
+```
+// 在 connectGateway 成功後：
+publishSubDevicesGet(cid, client.publish.bind(client))
+
+// 每 1 小時輪詢（所有已連線網關）：
+setInterval(() => {
+  for (const [, gc] of this.gatewayClients) {
+    publishSubDevicesGet(gc.clientId, ...)
+    publishConfigGet(pool, gc.gatewayId, gc.clientId, ...)
+  }
+}, 3_600_000)
+```
+
 ---
 
-## 5. DB DDL Design
+## 6. DB DDL Design
 
-### 5.1 New Table: `gateways`
+### 6.1 Table: `gateways`（hotfix 新增 `ems_health` 欄位）
 
 ```sql
 CREATE TABLE IF NOT EXISTS gateways (
@@ -540,12 +884,15 @@ CREATE TABLE IF NOT EXISTS gateways (
   status            VARCHAR(20)  NOT NULL DEFAULT 'online'
                       CHECK (status IN ('online', 'offline', 'decommissioned')),
   last_seen_at      TIMESTAMPTZ,
+  ems_health        JSONB,                          -- [hotfix] emsList 系統健康快照
+  ems_health_at     TIMESTAMPTZ,                    -- [hotfix] emsList 最後更新時間
   commissioned_at   TIMESTAMPTZ  DEFAULT NOW(),
   created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 
 CREATE INDEX IF NOT EXISTS idx_gateways_org ON gateways(org_id);
+CREATE INDEX IF NOT EXISTS idx_gateways_home ON gateways(home_id);
 CREATE INDEX IF NOT EXISTS idx_gateways_status ON gateways(status);
 
 -- RLS: tenant isolation
@@ -554,7 +901,9 @@ CREATE POLICY rls_gateways_tenant ON gateways
   USING (org_id = current_setting('app.current_org_id', true));
 ```
 
-### 5.2 New Table: `device_command_logs`
+### 6.2 Table: `device_command_logs`
+
+（無變更，與原設計相同）
 
 ```sql
 CREATE TABLE IF NOT EXISTS device_command_logs (
@@ -574,10 +923,11 @@ CREATE TABLE IF NOT EXISTS device_command_logs (
 );
 
 CREATE INDEX IF NOT EXISTS idx_cmd_logs_gateway ON device_command_logs(gateway_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cmd_logs_message ON device_command_logs(gateway_id, message_id);
 CREATE INDEX IF NOT EXISTS idx_cmd_logs_pending ON device_command_logs(result) WHERE result = 'pending';
 ```
 
-### 5.3 `assets` Table Extension
+### 6.3 `assets` Table Extension
 
 ```sql
 -- Add gateway_id FK to assets
@@ -587,99 +937,78 @@ ALTER TABLE assets
 CREATE INDEX IF NOT EXISTS idx_assets_gateway ON assets(gateway_id);
 ```
 
-### 5.4 `telemetry_history` Table Extension
-
-The current `telemetry_history` has 15 columns (v5.16). To accommodate the full protocol, add columns for the complete set of telemetry fields. The approach: store expanded data in a JSONB `telemetry_extra` column rather than adding 80+ individual columns.
+### 6.4 `telemetry_history` Table Extension
 
 ```sql
--- Core numeric columns kept for fast queries (used by M2/M3/M4):
---   battery_soc, battery_power, pv_power, grid_power_kw, load_power
---   battery_soh, battery_voltage, battery_current, battery_temperature
---   grid_import_kwh, grid_export_kwh, do0_active, do1_active
-
--- New: JSONB column for full protocol data (meter/grid/pv/load/flload detail)
+-- JSONB column for full protocol data (meter/grid/pv/load/flload per-phase detail)
 ALTER TABLE telemetry_history
   ADD COLUMN IF NOT EXISTS telemetry_extra JSONB;
 
--- New: flload total power (used by dashboard, worth a dedicated column)
+-- Dedicated columns for hot-path queries (used by dashboard / M2 / M3 / M4):
+ALTER TABLE telemetry_history
+  ADD COLUMN IF NOT EXISTS battery_soh DECIMAL(5,2);
+
+ALTER TABLE telemetry_history
+  ADD COLUMN IF NOT EXISTS battery_voltage DECIMAL(6,2);
+
+ALTER TABLE telemetry_history
+  ADD COLUMN IF NOT EXISTS battery_current DECIMAL(8,3);
+
+ALTER TABLE telemetry_history
+  ADD COLUMN IF NOT EXISTS battery_temperature DECIMAL(5,2);
+
 ALTER TABLE telemetry_history
   ADD COLUMN IF NOT EXISTS flload_power DECIMAL(8,3);
 
--- New: inverter temperature (used by health monitoring)
 ALTER TABLE telemetry_history
   ADD COLUMN IF NOT EXISTS inverter_temp DECIMAL(5,2);
 
--- New: PV daily energy (used by M4 revenue)
 ALTER TABLE telemetry_history
   ADD COLUMN IF NOT EXISTS pv_daily_energy_kwh DECIMAL(10,3);
 
--- New: BMS limits (used by ScheduleTranslator validation)
+-- BMS limits (used by ScheduleTranslator validation)
 ALTER TABLE telemetry_history
   ADD COLUMN IF NOT EXISTS max_charge_current DECIMAL(8,3);
+
 ALTER TABLE telemetry_history
   ADD COLUMN IF NOT EXISTS max_discharge_current DECIMAL(8,3);
+
+-- Daily energy accumulators
+ALTER TABLE telemetry_history
+  ADD COLUMN IF NOT EXISTS daily_charge_kwh DECIMAL(10,3);
+
+ALTER TABLE telemetry_history
+  ADD COLUMN IF NOT EXISTS daily_discharge_kwh DECIMAL(10,3);
 ```
 
 **Design Decision — Hybrid Column + JSONB Strategy:**
 - **Dedicated columns** for fields actively queried by M2/M3/M4 (battery, grid totals, PV totals, DO state)
-- **JSONB `telemetry_extra`** for three-phase detail fields (meterList per-phase, gridList per-phase, loadList per-phase) that are only needed for diagnostics/drill-down
+- **JSONB `telemetry_extra`** for: per-phase detail (grid/load/flload), meter data (single + three), dido DI, PV MPPT detail
 - This avoids adding 60+ columns to a time-series partitioned table while keeping hot-path queries efficient
 
-**telemetry_extra JSONB Structure:**
+### 6.5 Hotfix DDL Delta
 
-```json
-{
-  "meter": {
-    "volt_a": 230, "volt_b": 230, "volt_c": 230,
-    "line_ab_volt": 398, "line_bc_volt": 398, "line_ca_volt": 398,
-    "current_a": 10, "current_b": 10, "current_c": 10,
-    "active_power_a": 2300, "active_power_b": 2300, "active_power_c": 2300,
-    "total_active_power": 6900,
-    "reactive_power_a": 20, "reactive_power_b": 20, "reactive_power_c": 20,
-    "total_reactive_power": 60,
-    "factor": 0.99, "factor_a": 0.99, "factor_b": 0.99, "factor_c": 0.99,
-    "frequency": 60,
-    "positive_energy": 1234, "positive_energy_a": 411,
-    "positive_energy_b": 412, "positive_energy_c": 411,
-    "net_forward_energy": 1200,
-    "negative_energy_a": 10, "negative_energy_b": 10, "negative_energy_c": 10,
-    "net_reverse_energy": 30
-  },
-  "grid": {
-    "volt_a": 230, "volt_b": 230, "volt_c": 230,
-    "current_a": 5, "current_b": 5, "current_c": 5,
-    "active_power_a": 1150, "active_power_b": 1150, "active_power_c": 1150,
-    "reactive_power_a": 50, "reactive_power_b": 50, "reactive_power_c": 50,
-    "total_reactive_power": 150,
-    "apparent_power_a": 1155, "apparent_power_b": 1155, "apparent_power_c": 1155,
-    "total_apparent_power": 3465,
-    "factor_a": 0.99, "factor_b": 0.99, "factor_c": 0.99,
-    "frequency": 60,
-    "total_buy_kwh": 5000, "total_sell_kwh": 200
-  },
-  "pv": {
-    "pv1_voltage": 380, "pv1_current": 8.5, "pv1_power": 3230,
-    "pv2_voltage": 375, "pv2_current": 8.3, "pv2_power": 3112,
-    "total_energy_kwh": 12345
-  },
-  "load": {
-    "volt_a": 230, "volt_b": 230, "volt_c": 230,
-    "current_a": 3, "current_b": 3, "current_c": 3,
-    "active_power_a": 690, "active_power_b": 690, "active_power_c": 690,
-    "frequency_a": 60, "frequency_b": 60, "frequency_c": 60
-  },
-  "flload": {
-    "active_power_a": 800, "active_power_b": 800, "active_power_c": 800,
-    "daily_energy_kwh": 18.5
-  }
-}
+實際 hotfix migration 只需新增 gateways 表的兩個欄位（其餘 DDL 已在 migration_v5.18.sql 中）：
+
+```sql
+-- hotfix: add ems_health columns to gateways
+ALTER TABLE gateways
+  ADD COLUMN IF NOT EXISTS ems_health JSONB;
+
+ALTER TABLE gateways
+  ADD COLUMN IF NOT EXISTS ems_health_at TIMESTAMPTZ;
+
+COMMENT ON COLUMN gateways.ems_health IS
+  'Latest emsList snapshot: CPU/memory/disk/temp/network status. Updated each telemetry cycle.';
+COMMENT ON COLUMN gateways.ems_health_at IS
+  'Timestamp of last emsList update, from device clock (payload.timeStamp).';
 ```
 
 ---
 
-## 6. Domain Model Types
+## 7. Domain Model Types
 
-### 6.1 SolfacilMessage (Protocol Envelope)
+### 7.1 SolfacilMessage (Protocol Envelope)
 
 ```
 interface SolfacilMessage {
@@ -694,7 +1023,7 @@ interface SolfacilMessage {
 }
 ```
 
-### 6.2 DomainSchedule
+### 7.2 DomainSchedule
 
 ```
 interface DomainSchedule {
@@ -715,22 +1044,70 @@ interface DomainSlot {
 }
 ```
 
+### 7.3 FragmentAssembler Types（v5.18 hotfix 新增）
+
+```
+interface GatewayFragments {
+  readonly clientId: string;
+  readonly recordedAt: Date;           // from first fragment's timeStamp
+  ems?: EmsHealthSnapshot;             // from emsList
+  dido?: DidoSnapshot;                 // from dido
+  meters: MeterSnapshot[];             // from meterList (0-2 entries)
+  core?: CoreTelemetrySnapshot;        // from batList 大包
+}
+
+interface EmsHealthSnapshot {
+  readonly cpuTemp: number;
+  readonly cpuUsage: number;
+  readonly diskUsage: number;
+  readonly memoryUsage: number;
+  readonly emsTemp: number;
+  readonly humidity: number;
+  readonly simStatus: number;
+  readonly phoneStatus: number;
+  readonly phoneSignalStrength: number;
+  readonly wifiStatus: number;
+  readonly wifiSignalStrength: number;
+  readonly hardwareTime: number;
+  readonly systemTime: number;
+  readonly systemRuntime: number;
+}
+
+interface DidoSnapshot {
+  readonly di0: number;
+  readonly di1: number;
+  readonly do0: boolean;               // "1" → true
+  readonly do1: boolean;               // "1" → true
+}
+
+interface MeterSnapshot {
+  readonly deviceSn: string;
+  readonly deviceBrand: string;        // for Single/Three classification
+  readonly connectStatus: string;
+  readonly properties: Record<string, string>;
+}
+```
+
 ---
 
-## 7. What Stays Unchanged from v5.16
+## 8. What Stays Unchanged from v5.16
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `message-buffer.ts` | Retained, extended | Add new columns to INSERT |
+| `message-buffer.ts` | Retained, no change | INSERT columns already correct from v5.18 PR |
 | `device-asset-cache.ts` | Retained | Still resolves serial_number → asset_id |
 | `telemetry-5min-aggregator.ts` | Unchanged | Uses existing hot-path columns only |
 | `telemetry-aggregator.ts` (hourly) | Unchanged | Uses existing hot-path columns only |
 | `state-updater.ts` | Unchanged | |
 | All M2/M3/M4 modules | Unchanged | They consume existing columns; new fields are additive |
+| `schedule-translator.ts` | Unchanged | Bidirectional translation already correct |
+| `command-tracker.ts` | Unchanged | get_reply/set_reply handling already correct |
+| `heartbeat-handler.ts` | Unchanged | |
+| `device-list-handler.ts` | Unchanged | Already handles deviceList from S1 |
 
 ---
 
-## 8. Error Handling
+## 9. Error Handling
 
 | Scenario | Behavior |
 |----------|----------|
@@ -741,6 +1118,10 @@ interface DomainSlot {
 | Schedule validation failure | Throw `ScheduleValidationError`, DO NOT publish |
 | MQTT broker disconnect | Auto-reconnect (reconnectPeriod: 5000ms) |
 | DB connection failure | Crash + systemd restart (existing behavior) |
+| Fragment timeout (no MSG#5 within 3s) | Flush ems_health only, discard incomplete fragments, log warning |
+| emsList parse error | Log warning, skip ems_health update |
+| dido parse error | Log warning, DO0/DO1 fall back to false |
+| subDevices/get publish failure | Log error, continue (next hourly poll will retry) |
 
 ---
 
@@ -753,4 +1134,5 @@ interface DomainSlot {
 | v5.14 | 2026-03-06 | XuhengAdapter +9 bat.properties |
 | v5.15 | 2026-03-07 | 5-min aggregator |
 | v5.16 | 2026-03-07 | DO telemetry |
-| **v5.18** | **2026-03-09** | **Full Solfacil Protocol v1.1: 5 subscribe + 2 publish, DeviceListHandler, TelemetryHandler (6 Lists full fields), ScheduleTranslator (bidirectional), HeartbeatHandler, CommandTracker, gateways table, device_command_logs table, hybrid column+JSONB telemetry storage** |
+| v5.18 | 2026-03-09 | Full Solfacil Protocol v1.1: 5 subscribe + 2 publish, DeviceListHandler, TelemetryHandler (6 Lists full fields), ScheduleTranslator (bidirectional), HeartbeatHandler, CommandTracker, gateways table, device_command_logs table, hybrid column+JSONB telemetry storage |
+| **v5.18-hotfix** | **2026-03-09** | **Fragmented Payload handling: FragmentAssembler for MSG#1-5 merge, emsList→gateways.ems_health, dido DO0/DO1→telemetry_history (replace false hardcode), dual meterList→telemetry_extra (meter_single + meter_three), Protocol v1.2: +subDevices/get publish + hourly polling** |

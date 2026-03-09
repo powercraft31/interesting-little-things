@@ -71,6 +71,32 @@ export interface GatewayRecord {
   readonly last_seen_at: Date | null;
 }
 
+/** Fragment types for the 5 messages in a telemetry cycle. */
+export type FragmentType = "ems" | "dido" | "meter" | "core";
+
+/** Accumulated fragments for one gateway's telemetry cycle. */
+export interface GatewayFragments {
+  readonly clientId: string;
+  readonly recordedAt: Date;
+  readonly ems?: SolfacilListItem;
+  readonly dido?: {
+    readonly do: ReadonlyArray<{
+      readonly id: string;
+      readonly type: string;
+      readonly value: string;
+      readonly gpionum?: string;
+    }>;
+    readonly di?: ReadonlyArray<{
+      readonly id: string;
+      readonly type: string;
+      readonly value: string;
+      readonly gpionum?: string;
+    }>;
+  };
+  readonly meters?: ReadonlyArray<SolfacilListItem>;
+  readonly core?: Record<string, unknown>;
+}
+
 /** Domain asset type enum matching assets.asset_type column. */
 export type AssetType = "SMART_METER" | "INVERTER_BATTERY" | "EMS";
 

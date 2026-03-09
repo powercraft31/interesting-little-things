@@ -43,6 +43,10 @@ VALUES
 
   ('GW-SF-003', 'WKRD24070202100212P', 'ORG_ENERGIA_001', 'HOME-SF-003',
    '18.141.63.142', 1883, 'xuheng', 'xuheng8888!',
+   'EMS_N2', 'ems', 'online'),
+
+  ('GW-TEST-001', 'WKRD24070202100141I', 'ORG_ENERGIA_001', NULL,
+   '18.141.63.142', 1883, 'xuheng', 'xuheng8888!',
    'EMS_N2', 'ems', 'online')
 ON CONFLICT (gateway_id) DO NOTHING;
 
