@@ -56,6 +56,29 @@ CREATE INDEX IF NOT EXISTS idx_homes_org ON homes(org_id);
 -- M1 IoT Hub
 -- ============================================================
 
+-- v5.18: Gateway registry (must precede assets for FK)
+CREATE TABLE IF NOT EXISTS gateways (
+  gateway_id        VARCHAR(50)  PRIMARY KEY,
+  client_id         VARCHAR(100) NOT NULL UNIQUE,
+  org_id            VARCHAR(50)  NOT NULL REFERENCES organizations(org_id),
+  home_id           VARCHAR(50)  REFERENCES homes(home_id),
+  mqtt_broker_host  VARCHAR(255) NOT NULL DEFAULT '18.141.63.142',
+  mqtt_broker_port  INTEGER      NOT NULL DEFAULT 1883,
+  mqtt_username     VARCHAR(100) NOT NULL DEFAULT 'xuheng',
+  mqtt_password     VARCHAR(255) NOT NULL DEFAULT 'xuheng8888!',
+  device_name       VARCHAR(100) DEFAULT 'EMS_N2',
+  product_key       VARCHAR(50)  DEFAULT 'ems',
+  status            VARCHAR(20)  NOT NULL DEFAULT 'online'
+                      CHECK (status IN ('online', 'offline', 'decommissioned')),
+  last_seen_at      TIMESTAMPTZ,
+  commissioned_at   TIMESTAMPTZ  DEFAULT NOW(),
+  created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
+  updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_gateways_org ON gateways(org_id);
+CREATE INDEX IF NOT EXISTS idx_gateways_home ON gateways(home_id);
+CREATE INDEX IF NOT EXISTS idx_gateways_status ON gateways(status);
+
 CREATE TABLE IF NOT EXISTS assets (
   asset_id       VARCHAR(50)  PRIMARY KEY,
   org_id         VARCHAR(50)  NOT NULL REFERENCES organizations(org_id),
@@ -77,12 +100,14 @@ CREATE TABLE IF NOT EXISTS assets (
   commissioned_at TIMESTAMPTZ,
   is_active      BOOLEAN      NOT NULL DEFAULT true,
   allow_export   BOOLEAN      NOT NULL DEFAULT false,  -- v5.15: grid export permission
+  gateway_id     VARCHAR(50)  REFERENCES gateways(gateway_id),  -- v5.18: FK to gateway
   created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_assets_org ON assets (org_id);
 CREATE INDEX IF NOT EXISTS idx_assets_home ON assets (home_id);
 CREATE INDEX IF NOT EXISTS idx_assets_type ON assets (asset_type);
+CREATE INDEX IF NOT EXISTS idx_assets_gateway ON assets (gateway_id);
 
 CREATE TABLE IF NOT EXISTS device_state (
   asset_id        VARCHAR(50)  PRIMARY KEY REFERENCES assets(asset_id) ON DELETE CASCADE,
@@ -116,6 +141,19 @@ CREATE TABLE IF NOT EXISTS telemetry_history (
   grid_export_kwh DECIMAL(10,3),
   do0_active      BOOLEAN,           -- v5.16: DO0 relay state
   do1_active      BOOLEAN,           -- v5.16: DO1 relay state
+  -- v5.18: full protocol columns
+  battery_soh         DECIMAL(5,2),
+  battery_voltage     DECIMAL(6,2),
+  battery_current     DECIMAL(8,3),
+  battery_temperature DECIMAL(5,2),
+  flload_power        DECIMAL(8,3),
+  inverter_temp       DECIMAL(5,2),
+  pv_daily_energy_kwh DECIMAL(10,3),
+  max_charge_current    DECIMAL(8,3),
+  max_discharge_current DECIMAL(8,3),
+  daily_charge_kwh    DECIMAL(10,3),
+  daily_discharge_kwh DECIMAL(10,3),
+  telemetry_extra     JSONB,
   PRIMARY KEY (id, recorded_at)
 ) PARTITION BY RANGE (recorded_at);
 
@@ -127,11 +165,35 @@ CREATE TABLE IF NOT EXISTS telemetry_history_2026_03
   PARTITION OF telemetry_history
   FOR VALUES FROM ('2026-03-01') TO ('2026-04-01');
 
+CREATE TABLE IF NOT EXISTS telemetry_history_2026_04
+  PARTITION OF telemetry_history
+  FOR VALUES FROM ('2026-04-01') TO ('2026-05-01');
+
 CREATE TABLE IF NOT EXISTS telemetry_history_default
   PARTITION OF telemetry_history DEFAULT;
 
 CREATE INDEX IF NOT EXISTS idx_telemetry_asset_time
   ON telemetry_history (asset_id, recorded_at DESC);
+
+-- v5.18: device command logs (config get/set tracking)
+CREATE TABLE IF NOT EXISTS device_command_logs (
+  id                BIGSERIAL    PRIMARY KEY,
+  gateway_id        VARCHAR(50)  NOT NULL REFERENCES gateways(gateway_id),
+  client_id         VARCHAR(100) NOT NULL,
+  command_type      VARCHAR(20)  NOT NULL
+                      CHECK (command_type IN ('get', 'get_reply', 'set', 'set_reply')),
+  config_name       VARCHAR(100) NOT NULL DEFAULT 'battery_schedule',
+  message_id        VARCHAR(50),
+  payload_json      JSONB,
+  result            VARCHAR(20),
+  error_message     TEXT,
+  device_timestamp  TIMESTAMPTZ,
+  resolved_at       TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+CREATE INDEX IF NOT EXISTS idx_cmd_logs_gateway ON device_command_logs(gateway_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_cmd_logs_message ON device_command_logs(gateway_id, message_id);
+CREATE INDEX IF NOT EXISTS idx_cmd_logs_pending ON device_command_logs(result) WHERE result = 'pending';
 
 -- ============================================================
 -- v5.12: Offline Events
@@ -396,6 +458,10 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_feature_flags_name_org
 -- ============================================================
 -- RLS — Pure Tenant Isolation (v5.10)
 -- ============================================================
+
+ALTER TABLE gateways ENABLE ROW LEVEL SECURITY;
+CREATE POLICY rls_gateways_tenant ON gateways
+  USING (org_id = current_setting('app.current_org_id', true));
 
 ALTER TABLE assets ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_assets_tenant ON assets
