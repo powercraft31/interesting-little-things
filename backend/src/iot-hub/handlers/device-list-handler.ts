@@ -1,0 +1,123 @@
+import { Pool } from "pg";
+import type {
+  SolfacilMessage,
+  SolfacilDevice,
+} from "../../shared/types/solfacil-protocol";
+import { mapProductType } from "../../shared/types/solfacil-protocol";
+
+/**
+ * PR4: DeviceListHandler
+ *
+ * Processes `device/ems/{clientId}/deviceList` messages.
+ * UPSERTs sub-devices into `assets` table.
+ * Soft-delete reconciliation: devices in DB but not in incoming list → is_active=false.
+ * ABSOLUTELY NO DELETE — financial audit trail must survive.
+ */
+
+/**
+ * Handle a deviceList message from a gateway.
+ * Uses getServicePool (BYPASSRLS) since this is a cross-tenant operation.
+ */
+export async function handleDeviceList(
+  pool: Pool,
+  gatewayId: string,
+  _clientId: string,
+  payload: SolfacilMessage,
+): Promise<void> {
+  const data = payload.data as { deviceList?: SolfacilDevice[] };
+  const deviceList = data.deviceList;
+
+  if (!deviceList || !Array.isArray(deviceList)) {
+    console.warn(
+      `[DeviceListHandler] No deviceList in payload from gateway ${gatewayId}`,
+    );
+    return;
+  }
+
+  // Look up gateway's org_id and home_id for asset FK population
+  const gwResult = await pool.query<{
+    org_id: string;
+    home_id: string | null;
+  }>(
+    `SELECT org_id, home_id FROM gateways WHERE gateway_id = $1`,
+    [gatewayId],
+  );
+
+  if (gwResult.rows.length === 0) {
+    console.error(
+      `[DeviceListHandler] Gateway not found: ${gatewayId}`,
+    );
+    return;
+  }
+
+  const { org_id: orgId, home_id: homeId } = gwResult.rows[0];
+
+  // Filter: only process "major" (一級) sub-devices
+  const majorDevices = deviceList.filter((d) => d.nodeType === "major");
+
+  // Track incoming serial numbers for soft-delete reconciliation
+  const incomingSerials = new Set<string>();
+
+  // UPSERT each device
+  for (const device of majorDevices) {
+    incomingSerials.add(device.deviceSn);
+
+    const assetType = mapProductType(device.productType);
+
+    await pool.query(
+      `INSERT INTO assets
+         (asset_id, serial_number, name, brand, model, asset_type,
+          gateway_id, home_id, org_id, is_active, commissioned_at)
+       VALUES (
+         $1, $1, $2, $3, $4, $5, $6, $7, $8, true, NOW()
+       )
+       ON CONFLICT (asset_id) DO UPDATE SET
+         name       = EXCLUDED.name,
+         brand      = EXCLUDED.brand,
+         model      = EXCLUDED.model,
+         asset_type = EXCLUDED.asset_type,
+         gateway_id = EXCLUDED.gateway_id,
+         home_id    = EXCLUDED.home_id,
+         org_id     = EXCLUDED.org_id,
+         is_active  = true,
+         updated_at = NOW()`,
+      [
+        device.deviceSn,        // asset_id = serial_number (deterministic)
+        device.name,            // name
+        device.vendor,          // brand
+        device.deviceBrand,     // model
+        assetType,              // asset_type
+        gatewayId,              // gateway_id
+        homeId,                 // home_id
+        orgId,                  // org_id
+      ],
+    );
+  }
+
+  // Soft-delete reconciliation:
+  // Any active device in DB for this gateway NOT in the incoming list → is_active = false
+  if (majorDevices.length > 0) {
+    const existingResult = await pool.query<{ serial_number: string }>(
+      `SELECT serial_number FROM assets
+       WHERE gateway_id = $1 AND is_active = true`,
+      [gatewayId],
+    );
+
+    for (const row of existingResult.rows) {
+      if (!incomingSerials.has(row.serial_number)) {
+        await pool.query(
+          `UPDATE assets SET is_active = false, updated_at = NOW()
+           WHERE serial_number = $1 AND gateway_id = $2`,
+          [row.serial_number, gatewayId],
+        );
+        console.log(
+          `[DeviceListHandler] Soft-deleted asset: ${row.serial_number}`,
+        );
+      }
+    }
+  }
+
+  console.log(
+    `[DeviceListHandler] Processed ${majorDevices.length} devices for gateway ${gatewayId}`,
+  );
+}

@@ -101,6 +101,17 @@ export interface ParsedTelemetry {
   // v5.16: DO relay state
   readonly do0Active: boolean;
   readonly do1Active: boolean;
+  // v5.18: new hot-path fields
+  readonly inverterTemp?: number;
+  readonly pvTotalEnergyKwh?: number;
+  readonly pv1Voltage?: number;
+  readonly pv1Current?: number;
+  readonly pv1Power?: number;
+  readonly pv2Voltage?: number;
+  readonly pv2Current?: number;
+  readonly pv2Power?: number;
+  // v5.18: JSONB extra for per-phase diagnostic fields
+  readonly telemetryExtra?: Record<string, Record<string, number>> | null;
 }
 
 /** Xuheng message type discriminator */

@@ -1,0 +1,249 @@
+// ─── Mock mqtt module (virtual — not installed as dependency) ────────────────
+const mockSubscribe = jest.fn(
+  (_topics: string[], _opts: unknown, cb: (err: Error | null) => void) =>
+    cb(null),
+);
+const mockEnd = jest.fn();
+const mockOn = jest.fn();
+const mockConnect = jest.fn(() => {
+  const client = {
+    on: (event: string, handler: Function) => {
+      mockOn(event, handler);
+      // Auto-fire "connect" event
+      if (event === "connect") {
+        setTimeout(() => handler(), 0);
+      }
+    },
+    subscribe: mockSubscribe,
+    end: mockEnd,
+  };
+  return client;
+});
+
+jest.mock(
+  "mqtt",
+  () => ({
+    connect: mockConnect,
+  }),
+  { virtual: true },
+);
+
+import {
+  GatewayConnectionManager,
+  type TopicHandlers,
+} from "../../src/iot-hub/services/gateway-connection-manager";
+
+// ─── Mock Pool ──────────────────────────────────────────────────────────────
+function createMockPool(gateways: unknown[] = []) {
+  const queryFn = jest.fn();
+
+  // Default: first query returns gateways, subsequent queries return empty
+  queryFn.mockImplementation((sql: string) => {
+    if (sql.includes("FROM gateways")) {
+      return { rows: gateways };
+    }
+    if (sql.includes("UPDATE gateways")) {
+      return { rowCount: 0 };
+    }
+    return { rows: [] };
+  });
+
+  return { query: queryFn } as unknown as import("pg").Pool;
+}
+
+// ─── Helpers ────────────────────────────────────────────────────────────────
+function createNoopHandlers(): TopicHandlers {
+  return {
+    onDeviceList: jest.fn().mockResolvedValue(undefined),
+    onTelemetry: jest.fn().mockResolvedValue(undefined),
+    onGetReply: jest.fn().mockResolvedValue(undefined),
+    onSetReply: jest.fn().mockResolvedValue(undefined),
+    onHeartbeat: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
+const GATEWAY_FIXTURE = {
+  gateway_id: "gw-001",
+  client_id: "WKRD24070202100144F",
+  org_id: "org-solfacil",
+  home_id: "home-1",
+  mqtt_broker_host: "18.141.63.142",
+  mqtt_broker_port: 1883,
+  mqtt_username: "xuheng",
+  mqtt_password: "xuheng8888!",
+  device_name: "EMS_N2",
+  product_key: "ems",
+  status: "online",
+  last_seen_at: null,
+};
+
+// ─── Tests ──────────────────────────────────────────────────────────────────
+describe("GatewayConnectionManager", () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    jest.useFakeTimers();
+  });
+
+  afterEach(() => {
+    jest.useRealTimers();
+  });
+
+  it("reads gateways from DB and creates connections", async () => {
+    const pool = createMockPool([GATEWAY_FIXTURE]);
+    const handlers = createNoopHandlers();
+    const mgr = new GatewayConnectionManager(pool, handlers);
+
+    await mgr.start();
+
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining("FROM gateways"),
+    );
+    expect(mockConnect).toHaveBeenCalledTimes(1);
+    expect(mockConnect).toHaveBeenCalledWith(
+      "mqtt://18.141.63.142:1883",
+      expect.objectContaining({
+        username: "xuheng",
+        password: "xuheng8888!",
+        clean: true,
+        reconnectPeriod: 5000,
+      }),
+    );
+    expect(mgr.getConnectedCount()).toBe(1);
+
+    mgr.stop();
+  });
+
+  it("subscribes to 5 topics per gateway", async () => {
+    const pool = createMockPool([GATEWAY_FIXTURE]);
+    const handlers = createNoopHandlers();
+    const mgr = new GatewayConnectionManager(pool, handlers);
+
+    await mgr.start();
+    // Trigger the "connect" callback
+    await jest.advanceTimersByTimeAsync(10);
+
+    expect(mockSubscribe).toHaveBeenCalledWith(
+      expect.arrayContaining([
+        "device/ems/WKRD24070202100144F/deviceList",
+        "device/ems/WKRD24070202100144F/data",
+        "device/ems/WKRD24070202100144F/config/get_reply",
+        "device/ems/WKRD24070202100144F/config/set_reply",
+        "device/ems/WKRD24070202100144F/status",
+      ]),
+      { qos: 1 },
+      expect.any(Function),
+    );
+
+    // Verify exactly 5 topics
+    const subscribedTopics = mockSubscribe.mock.calls[0][0];
+    expect(subscribedTopics).toHaveLength(5);
+
+    mgr.stop();
+  });
+
+  it("handles empty gateways table gracefully", async () => {
+    const pool = createMockPool([]);
+    const handlers = createNoopHandlers();
+    const mgr = new GatewayConnectionManager(pool, handlers);
+
+    await mgr.start();
+
+    expect(mockConnect).not.toHaveBeenCalled();
+    expect(mgr.getConnectedCount()).toBe(0);
+
+    mgr.stop();
+  });
+
+  it("detects new gateway on poll cycle", async () => {
+    const pool = createMockPool([]);
+    const handlers = createNoopHandlers();
+    const mgr = new GatewayConnectionManager(pool, handlers);
+
+    await mgr.start();
+    expect(mgr.getConnectedCount()).toBe(0);
+
+    // Simulate new gateway appearing in DB after poll
+    (pool.query as jest.Mock).mockImplementation((sql: string) => {
+      if (sql.includes("FROM gateways")) {
+        return { rows: [GATEWAY_FIXTURE] };
+      }
+      return { rows: [] };
+    });
+
+    // Advance past poll interval (60s)
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    expect(mgr.getConnectedCount()).toBe(1);
+
+    mgr.stop();
+  });
+
+  it("marks gateway offline after heartbeat timeout", async () => {
+    const pool = createMockPool([GATEWAY_FIXTURE]);
+    const handlers = createNoopHandlers();
+    const mgr = new GatewayConnectionManager(pool, handlers);
+
+    await mgr.start();
+
+    // Advance past watchdog interval (60s)
+    await jest.advanceTimersByTimeAsync(60_000);
+
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining("SET status = 'offline'"),
+    );
+
+    mgr.stop();
+  });
+
+  it("graceful shutdown disconnects all clients", async () => {
+    const pool = createMockPool([GATEWAY_FIXTURE]);
+    const handlers = createNoopHandlers();
+    const mgr = new GatewayConnectionManager(pool, handlers);
+
+    await mgr.start();
+    expect(mgr.getConnectedCount()).toBe(1);
+
+    mgr.stop();
+    expect(mockEnd).toHaveBeenCalled();
+    expect(mgr.getConnectedCount()).toBe(0);
+  });
+
+  it("skips decommissioned gateways (excluded by SQL WHERE)", async () => {
+    const pool = createMockPool([]); // Empty because SQL filters out decommissioned
+    const handlers = createNoopHandlers();
+    const mgr = new GatewayConnectionManager(pool, handlers);
+
+    await mgr.start();
+
+    // Verify the query includes the decommissioned filter
+    expect(pool.query).toHaveBeenCalledWith(
+      expect.stringContaining("status != 'decommissioned'"),
+    );
+    expect(mgr.getConnectedCount()).toBe(0);
+
+    mgr.stop();
+  });
+
+  it("handles multiple gateways", async () => {
+    const gw2 = {
+      ...GATEWAY_FIXTURE,
+      gateway_id: "gw-002",
+      client_id: "WKRD24070202100228G",
+    };
+    const gw3 = {
+      ...GATEWAY_FIXTURE,
+      gateway_id: "gw-003",
+      client_id: "WKRD24070202100212P",
+    };
+    const pool = createMockPool([GATEWAY_FIXTURE, gw2, gw3]);
+    const handlers = createNoopHandlers();
+    const mgr = new GatewayConnectionManager(pool, handlers);
+
+    await mgr.start();
+
+    expect(mockConnect).toHaveBeenCalledTimes(3);
+    expect(mgr.getConnectedCount()).toBe(3);
+
+    mgr.stop();
+  });
+});

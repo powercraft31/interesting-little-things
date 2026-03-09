@@ -1,0 +1,87 @@
+/**
+ * Solfacil Protocol v1.1 — MQTT message envelope and payload types.
+ * All protocol values are strings; parsing to numbers happens in the ACL handlers.
+ */
+
+/** Protocol envelope for all Solfacil MQTT messages (subscribe + publish). */
+export interface SolfacilMessage {
+  readonly DS: number;
+  readonly ackFlag: number;
+  readonly clientId: string;
+  readonly deviceName: string;
+  readonly productKey: string;
+  readonly messageId: string;
+  readonly timeStamp: string; // epoch ms as string
+  readonly data: Record<string, unknown>;
+}
+
+/** A sub-device entry in the deviceList payload. */
+export interface SolfacilDevice {
+  readonly bindStatus: boolean;
+  readonly connectStatus: string; // "online" | "offline"
+  readonly deviceBrand: string;
+  readonly deviceSn: string;
+  readonly fatherSn: string;
+  readonly name: string;
+  readonly nodeType: string; // "major" | "minor"
+  readonly productType: string; // "meter" | "inverter" | "ems"
+  readonly vendor: string;
+  readonly modelId?: string;
+  readonly portName?: string;
+  readonly protocolAddr?: string;
+  readonly subDevId?: string;
+  readonly subDevIntId?: number;
+  readonly maxCurrent?: string;
+  readonly maxPower?: string;
+  readonly minCurrent?: string;
+  readonly minPower?: string;
+}
+
+/** A telemetry list item (batList, gridList, pvList, etc.) */
+export interface SolfacilListItem {
+  readonly deviceSn: string;
+  readonly fatherSn?: string;
+  readonly name: string;
+  readonly properties: Record<string, string>;
+  readonly subDevId?: string;
+  readonly bindStatus?: boolean;
+  readonly connectStatus?: string;
+  readonly deviceBrand?: string;
+  readonly productType?: string;
+  readonly modelId?: string;
+  readonly portName?: string;
+  readonly protocolAddr?: string;
+  readonly protocolType?: string;
+  readonly vendor?: string;
+}
+
+/** Gateway row from the gateways table. */
+export interface GatewayRecord {
+  readonly gateway_id: string;
+  readonly client_id: string;
+  readonly org_id: string;
+  readonly home_id: string | null;
+  readonly mqtt_broker_host: string;
+  readonly mqtt_broker_port: number;
+  readonly mqtt_username: string;
+  readonly mqtt_password: string;
+  readonly device_name: string;
+  readonly product_key: string;
+  readonly status: "online" | "offline" | "decommissioned";
+  readonly last_seen_at: Date | null;
+}
+
+/** Domain asset type enum matching assets.asset_type column. */
+export type AssetType = "SMART_METER" | "INVERTER_BATTERY" | "EMS";
+
+/** Map protocol productType to domain AssetType. */
+export function mapProductType(productType: string): AssetType {
+  switch (productType) {
+    case "meter":
+      return "SMART_METER";
+    case "inverter":
+      return "INVERTER_BATTERY";
+    default:
+      return "INVERTER_BATTERY";
+  }
+}

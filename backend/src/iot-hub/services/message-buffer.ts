@@ -39,8 +39,13 @@ export class MessageBuffer {
            (asset_id, recorded_at, battery_soc, battery_power, pv_power,
             grid_power_kw, load_power, grid_import_kwh, grid_export_kwh,
             battery_soh, battery_voltage, battery_current, battery_temperature,
-            do0_active, do1_active)
-         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)`,
+            do0_active, do1_active,
+            flload_power, inverter_temp, pv_daily_energy_kwh,
+            max_charge_current, max_discharge_current,
+            daily_charge_kwh, daily_discharge_kwh,
+            telemetry_extra)
+         VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15,
+                 $16, $17, $18, $19, $20, $21, $22, $23)`,
         [
           assetId,
           t.recordedAt,
@@ -59,6 +64,16 @@ export class MessageBuffer {
           // v5.16: DO relay states
           t.do0Active || null,
           t.do1Active || null,
+          // v5.18: new hot-path columns
+          t.flloadPowerKw || null,
+          t.inverterTemp || null,
+          t.pvDailyEnergyKwh || null,
+          t.maxChargeCurrent || null,
+          t.maxDischargeCurrent || null,
+          t.dailyChargeKwh || null,
+          t.dailyDischargeKwh || null,
+          // v5.18: JSONB extra for per-phase detail
+          t.telemetryExtra ? JSON.stringify(t.telemetryExtra) : null,
         ],
       );
     } catch (err) {
