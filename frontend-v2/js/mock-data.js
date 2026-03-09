@@ -863,10 +863,12 @@ function formatBRL(value) {
 }
 
 function formatPercent(value) {
+  if (value === null || value === undefined) return "—%";
   return value.toFixed(1).replace(".", ",") + "%";
 }
 
 function formatNumber(value, decimals) {
+  if (value === null || value === undefined) return "—";
   if (decimals === undefined) decimals = 0;
   if (decimals === 0) return value.toLocaleString("pt-BR");
   return value.toFixed(decimals).replace(".", ",");
