@@ -1,0 +1,99 @@
+import { Pool } from "pg";
+import type { SolfacilMessage } from "../../shared/types/solfacil-protocol";
+import {
+  validateSchedule,
+  buildConfigSetPayload,
+} from "./schedule-translator";
+import type { DomainSchedule } from "./schedule-translator";
+
+/**
+ * PR5: Publish Functions
+ *
+ * publishConfigGet — request current config from gateway
+ * publishConfigSet — push new schedule to gateway (validates first)
+ *
+ * These are called by BFF and M2, not by MQTT message handlers.
+ */
+
+type MqttPublishFn = (topic: string, message: string) => void;
+
+/**
+ * Publish a config/get request to retrieve current battery_schedule.
+ * Logs a pending 'get' command in device_command_logs.
+ * Returns the messageId for tracking.
+ */
+export async function publishConfigGet(
+  pool: Pool,
+  gatewayId: string,
+  clientId: string,
+  publish: MqttPublishFn,
+): Promise<string> {
+  const messageId = String(Date.now());
+  const now = String(Date.now());
+
+  const message: SolfacilMessage = {
+    DS: 0,
+    ackFlag: 0,
+    data: { configname: "battery_schedule" },
+    clientId,
+    deviceName: "EMS_N2",
+    productKey: "ems",
+    messageId,
+    timeStamp: now,
+  };
+
+  // Log the pending get command
+  await pool.query(
+    `INSERT INTO device_command_logs
+       (gateway_id, client_id, command_type, config_name, message_id, result)
+     VALUES ($1, $2, 'get', 'battery_schedule', $3, 'pending')`,
+    [gatewayId, clientId, messageId],
+  );
+
+  const topic = `platform/ems/${clientId}/config/get`;
+  publish(topic, JSON.stringify(message));
+
+  console.log(
+    `[PublishConfig] config/get sent to ${clientId}, messageId=${messageId}`,
+  );
+
+  return messageId;
+}
+
+/**
+ * Publish a config/set command to push a new battery schedule.
+ * Validates the schedule FIRST — throws ScheduleValidationError on failure.
+ * Logs a pending 'set' command in device_command_logs.
+ * Returns the messageId for tracking.
+ */
+export async function publishConfigSet(
+  pool: Pool,
+  gatewayId: string,
+  clientId: string,
+  schedule: DomainSchedule,
+  publish: MqttPublishFn,
+): Promise<string> {
+  // HARD CRASH on validation failure — never publish invalid config
+  validateSchedule(schedule);
+
+  const messageId = String(Date.now());
+  const protocolMessage = buildConfigSetPayload(clientId, schedule, messageId);
+
+  // Log the pending set command
+  await pool.query(
+    `INSERT INTO device_command_logs
+       (gateway_id, client_id, command_type, config_name, message_id,
+        payload_json, result)
+     VALUES ($1, $2, 'set', 'battery_schedule', $3, $4, 'pending')`,
+    [gatewayId, clientId, messageId, JSON.stringify(schedule)],
+  );
+
+  const topic = `platform/ems/${clientId}/config/set`;
+  publish(topic, JSON.stringify(protocolMessage));
+
+  console.log(
+    `[PublishConfig] config/set sent to ${clientId}, messageId=${messageId}`,
+  );
+
+  return messageId;
+}
