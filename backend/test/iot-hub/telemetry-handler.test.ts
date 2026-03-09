@@ -1,4 +1,8 @@
-import { handleTelemetry, safeFloat } from "../../src/iot-hub/handlers/telemetry-handler";
+import {
+  handleTelemetry,
+  _destroyAssembler,
+  safeFloat,
+} from "../../src/iot-hub/handlers/telemetry-handler";
 import type { SolfacilMessage } from "../../src/shared/types/solfacil-protocol";
 
 // ─── Mock DeviceAssetCache ──────────────────────────────────────────────────
@@ -171,6 +175,7 @@ const FULL_TELEMETRY_PAYLOAD: SolfacilMessage = {
         deviceSn: "meter_1",
         fatherSn: "WKRD24070202100144F",
         name: "Chint-three-1",
+        deviceBrand: "Meter-Chint-DTSU666Three",
         properties: {
           grid_voltA: "230",
           grid_voltB: "230",
@@ -188,7 +193,6 @@ const FULL_TELEMETRY_PAYLOAD: SolfacilMessage = {
           grid_factorB: "0.99",
           grid_factorC: "0.99",
         },
-        subDevId: "meter1",
       },
     ],
   },
@@ -196,13 +200,22 @@ const FULL_TELEMETRY_PAYLOAD: SolfacilMessage = {
 
 // ─── Tests ──────────────────────────────────────────────────────────────────
 describe("TelemetryHandler", () => {
+  let pool: import("pg").Pool;
+
   beforeEach(() => {
     jest.clearAllMocks();
+    jest.useFakeTimers();
+    pool = createMockPool();
+  });
+
+  afterEach(() => {
+    _destroyAssembler(pool);
+    jest.useRealTimers();
   });
 
   it("parses timestamp from payload.timeStamp (never NOW())", async () => {
-    const pool = createMockPool();
     await handleTelemetry(pool, "gw-001", "CID", FULL_TELEMETRY_PAYLOAD);
+    await jest.advanceTimersByTimeAsync(100);
 
     expect(mockEnqueue).toHaveBeenCalledTimes(1);
     const parsed = mockEnqueue.mock.calls[0][1];
@@ -212,8 +225,8 @@ describe("TelemetryHandler", () => {
   });
 
   it("converts all string values to numbers", async () => {
-    const pool = createMockPool();
     await handleTelemetry(pool, "gw-001", "CID", FULL_TELEMETRY_PAYLOAD);
+    await jest.advanceTimersByTimeAsync(100);
 
     const parsed = mockEnqueue.mock.calls[0][1];
 
@@ -231,17 +244,17 @@ describe("TelemetryHandler", () => {
     expect(parsed.flloadPowerKw).toBe(5200);
   });
 
-  it("handles total_bat_vlotage typo → batteryVoltage", async () => {
-    const pool = createMockPool();
+  it("handles total_bat_vlotage typo -> batteryVoltage", async () => {
     await handleTelemetry(pool, "gw-001", "CID", FULL_TELEMETRY_PAYLOAD);
+    await jest.advanceTimersByTimeAsync(100);
 
     const parsed = mockEnqueue.mock.calls[0][1];
     expect(parsed.batteryVoltage).toBe(51.6);
   });
 
   it("builds telemetry_extra JSONB with per-phase fields", async () => {
-    const pool = createMockPool();
     await handleTelemetry(pool, "gw-001", "CID", FULL_TELEMETRY_PAYLOAD);
+    await jest.advanceTimersByTimeAsync(100);
 
     const parsed = mockEnqueue.mock.calls[0][1];
     const extra = parsed.telemetryExtra;
@@ -257,10 +270,10 @@ describe("TelemetryHandler", () => {
     expect(extra.grid.frequency).toBe(60);
     expect(extra.grid.total_buy_kwh).toBe(5000);
 
-    // Meter per-phase
-    expect(extra.meter.volt_a).toBe(230);
-    expect(extra.meter.total_active_power).toBe(6900);
-    expect(extra.meter.factor).toBe(0.99);
+    // Meter per-phase (classified as meter_three via deviceBrand)
+    expect(extra.meter_three.volt_a).toBe(230);
+    expect(extra.meter_three.total_active_power).toBe(6900);
+    expect(extra.meter_three.factor).toBe(0.99);
 
     // Load per-phase
     expect(extra.load.volt_a).toBe(230);
@@ -278,8 +291,8 @@ describe("TelemetryHandler", () => {
   });
 
   it("parses PV MPPT fields into hot-path columns", async () => {
-    const pool = createMockPool();
     await handleTelemetry(pool, "gw-001", "CID", FULL_TELEMETRY_PAYLOAD);
+    await jest.advanceTimersByTimeAsync(100);
 
     const parsed = mockEnqueue.mock.calls[0][1];
     expect(parsed.pv1Voltage).toBe(380);
@@ -291,8 +304,7 @@ describe("TelemetryHandler", () => {
     expect(parsed.inverterTemp).toBe(42.5);
   });
 
-  it("handles missing Lists gracefully (null → 0)", async () => {
-    const pool = createMockPool();
+  it("handles missing Lists gracefully (null -> 0)", async () => {
     const minimalPayload: SolfacilMessage = {
       ...FULL_TELEMETRY_PAYLOAD,
       data: {
@@ -313,6 +325,7 @@ describe("TelemetryHandler", () => {
     };
 
     await handleTelemetry(pool, "gw-001", "CID", minimalPayload);
+    await jest.advanceTimersByTimeAsync(100);
 
     const parsed = mockEnqueue.mock.calls[0][1];
     expect(parsed.gridPowerKw).toBe(0);
@@ -323,8 +336,7 @@ describe("TelemetryHandler", () => {
     expect(parsed.telemetryExtra).toBeNull();
   });
 
-  it("skips message when batList is absent", async () => {
-    const pool = createMockPool();
+  it("does not write telemetry when batList is absent (routes to assembler, no core)", async () => {
     const noBat: SolfacilMessage = {
       ...FULL_TELEMETRY_PAYLOAD,
       data: {
@@ -333,12 +345,14 @@ describe("TelemetryHandler", () => {
     };
 
     await handleTelemetry(pool, "gw-001", "CID", noBat);
+    // Wait past debounce — no core message means no telemetry write
+    await jest.advanceTimersByTimeAsync(3100);
     expect(mockEnqueue).not.toHaveBeenCalled();
   });
 
   it("updates device_state for real-time dashboard", async () => {
-    const pool = createMockPool();
     await handleTelemetry(pool, "gw-001", "CID", FULL_TELEMETRY_PAYLOAD);
+    await jest.advanceTimersByTimeAsync(100);
 
     expect(pool.query).toHaveBeenCalledWith(
       expect.stringContaining("INSERT INTO device_state"),
@@ -347,13 +361,133 @@ describe("TelemetryHandler", () => {
   });
 
   it("parses BMS limits for ScheduleTranslator validation", async () => {
-    const pool = createMockPool();
     await handleTelemetry(pool, "gw-001", "CID", FULL_TELEMETRY_PAYLOAD);
+    await jest.advanceTimersByTimeAsync(100);
 
     const parsed = mockEnqueue.mock.calls[0][1];
     expect(parsed.maxChargeCurrent).toBe(25.0);
     expect(parsed.maxDischargeCurrent).toBe(25.0);
     expect(parsed.maxChargeVoltage).toBe(57.6);
+  });
+
+  // ─── PR3 new tests: classification paths ──────────────────────────────────
+
+  it("does not discard MSG#1 (emsList) — routes to assembler", async () => {
+    const emsOnly: SolfacilMessage = {
+      ...FULL_TELEMETRY_PAYLOAD,
+      data: {
+        emsList: [
+          {
+            deviceSn: "WKRD24070202100144F",
+            name: "ems",
+            properties: { wifi_signal_dbm: "-45", uptime_seconds: "86400" },
+          },
+        ],
+      },
+    };
+
+    await handleTelemetry(pool, "gw-001", "CID", emsOnly);
+    // Wait past debounce — no core, so only ems_health written
+    await jest.advanceTimersByTimeAsync(3100);
+
+    // ems_health should be written to gateways
+    const gwCall = (pool.query as jest.Mock).mock.calls.find(
+      (c: unknown[]) =>
+        typeof c[0] === "string" && (c[0] as string).includes("ems_health"),
+    );
+    expect(gwCall).toBeDefined();
+    // No telemetry enqueued (no core)
+    expect(mockEnqueue).not.toHaveBeenCalled();
+  });
+
+  it("does not discard MSG#2 (dido) — DO values reach parsed telemetry", async () => {
+    const didoThenCore: SolfacilMessage = {
+      ...FULL_TELEMETRY_PAYLOAD,
+      data: {
+        dido: {
+          do: [
+            { id: "DO0", type: "DO", value: "1" },
+            { id: "DO1", type: "DO", value: "0" },
+          ],
+        },
+      },
+    };
+
+    // First send dido fragment
+    await handleTelemetry(pool, "gw-001", "CID", didoThenCore);
+
+    // Then send core (batList)
+    const corePayload: SolfacilMessage = {
+      ...FULL_TELEMETRY_PAYLOAD,
+      data: {
+        batList: FULL_TELEMETRY_PAYLOAD.data.batList,
+        gridList: FULL_TELEMETRY_PAYLOAD.data.gridList,
+        pvList: FULL_TELEMETRY_PAYLOAD.data.pvList,
+      },
+    };
+    await handleTelemetry(pool, "gw-001", "CID", corePayload);
+    await jest.advanceTimersByTimeAsync(100);
+
+    const parsed = mockEnqueue.mock.calls[0][1];
+    expect(parsed.do0Active).toBe(true);
+    expect(parsed.do1Active).toBe(false);
+  });
+
+  it("does not discard MSG#3/4 (meterList) — meters reach telemetryExtra", async () => {
+    const meterSingle: SolfacilMessage = {
+      ...FULL_TELEMETRY_PAYLOAD,
+      data: {
+        meterList: [
+          {
+            deviceSn: "Meter-Single",
+            name: "Chint-single-1",
+            deviceBrand: "Meter-Chint-DTSU666Single",
+            properties: { grid_voltA: "228", grid_activePowerA: "500" },
+          },
+        ],
+      },
+    };
+
+    await handleTelemetry(pool, "gw-001", "CID", meterSingle);
+
+    // Then send core
+    const corePayload: SolfacilMessage = {
+      ...FULL_TELEMETRY_PAYLOAD,
+      data: {
+        batList: FULL_TELEMETRY_PAYLOAD.data.batList,
+      },
+    };
+    await handleTelemetry(pool, "gw-001", "CID", corePayload);
+    await jest.advanceTimersByTimeAsync(100);
+
+    const parsed = mockEnqueue.mock.calls[0][1];
+    expect(parsed.telemetryExtra!.meter_single).toBeDefined();
+    expect(parsed.telemetryExtra!.meter_single.volt_a).toBe(228);
+  });
+
+  it("MSG#5 alone behaves identically to pre-refactor", async () => {
+    // Core-only message (same as pre-refactor "full" message minus meter)
+    const coreOnly: SolfacilMessage = {
+      ...FULL_TELEMETRY_PAYLOAD,
+      data: {
+        batList: FULL_TELEMETRY_PAYLOAD.data.batList,
+        gridList: FULL_TELEMETRY_PAYLOAD.data.gridList,
+        pvList: FULL_TELEMETRY_PAYLOAD.data.pvList,
+        loadList: FULL_TELEMETRY_PAYLOAD.data.loadList,
+        flloadList: FULL_TELEMETRY_PAYLOAD.data.flloadList,
+      },
+    };
+
+    await handleTelemetry(pool, "gw-001", "CID", coreOnly);
+    await jest.advanceTimersByTimeAsync(100);
+
+    const parsed = mockEnqueue.mock.calls[0][1];
+    expect(parsed.batterySoc).toBe(75.5);
+    expect(parsed.gridPowerKw).toBe(3450);
+    expect(parsed.pvPowerKw).toBe(6342);
+    // DO defaults to false when no dido fragment present
+    expect(parsed.do0Active).toBe(false);
+    expect(parsed.do1Active).toBe(false);
   });
 });
 

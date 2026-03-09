@@ -27,8 +27,18 @@ interface Accumulator {
   readonly recordedAt: Date;
   ems?: SolfacilListItem;
   dido?: {
-    readonly do: ReadonlyArray<{ id: string; type: string; value: string; gpionum?: string }>;
-    readonly di?: ReadonlyArray<{ id: string; type: string; value: string; gpionum?: string }>;
+    readonly do: ReadonlyArray<{
+      id: string;
+      type: string;
+      value: string;
+      gpionum?: string;
+    }>;
+    readonly di?: ReadonlyArray<{
+      id: string;
+      type: string;
+      value: string;
+      gpionum?: string;
+    }>;
   };
   meters: SolfacilListItem[];
   core?: Record<string, unknown>;
@@ -41,9 +51,10 @@ const instanceMap = new WeakMap<
   { cache: DeviceAssetCache; buffer: MessageBuffer }
 >();
 
-function getInstances(
-  pool: Pool,
-): { cache: DeviceAssetCache; buffer: MessageBuffer } {
+function getInstances(pool: Pool): {
+  cache: DeviceAssetCache;
+  buffer: MessageBuffer;
+} {
   let instances = instanceMap.get(pool);
   if (!instances) {
     instances = {
@@ -96,36 +107,40 @@ export class FragmentAssembler {
     acc: Accumulator,
     data: Record<string, unknown>,
   ): boolean {
+    // Process ALL fields in a single message (not early-return).
+    // This handles both fragmented (v1.2) and combined (v1.1) payloads.
+    let isCoreMessage = false;
+
     if (data.emsList) {
       const emsList = data.emsList as SolfacilListItem[];
       if (emsList.length > 0) {
         acc.ems = emsList[0];
       }
-      return false;
     }
 
     if (data.dido) {
       acc.dido = data.dido as Accumulator["dido"];
-      return false;
     }
 
     if (data.meterList) {
       const meters = data.meterList as SolfacilListItem[];
       // Append — may receive multiple meterList messages (single + three phase)
       acc.meters = [...acc.meters, ...meters];
-      return false;
     }
 
     if (data.batList) {
       // Core message (MSG#5) — contains batList + gridList + loadList + flloadList + pvList
       acc.core = data;
-      return true;
+      isCoreMessage = true;
     }
 
-    return false;
+    return isCoreMessage;
   }
 
-  private getOrCreateAccumulator(clientId: string, recordedAt: Date): Accumulator {
+  private getOrCreateAccumulator(
+    clientId: string,
+    recordedAt: Date,
+  ): Accumulator {
     const existing = this.accumulators.get(clientId);
     if (existing) return existing;
 
@@ -176,7 +191,7 @@ export class FragmentAssembler {
     } else if (acc.ems || acc.meters.length > 0) {
       console.warn(
         `[FragmentAssembler] ${clientId}: No core (MSG#5) in cycle. ` +
-        `Wrote ems_health only. fragments: ems=${!!acc.ems}, dido=${!!acc.dido}, meters=${acc.meters.length}`,
+          `Wrote ems_health only. fragments: ems=${!!acc.ems}, dido=${!!acc.dido}, meters=${acc.meters.length}`,
       );
     }
   }
@@ -232,7 +247,14 @@ export class FragmentAssembler {
 
     // Build telemetry_extra with meters + dido DI + ems_health
     const telemetryExtra = this.buildTelemetryExtra(
-      grid, load, flload, pv1, pv2, acc.meters, acc.dido, acc.ems,
+      grid,
+      load,
+      flload,
+      pv1,
+      pv2,
+      acc.meters,
+      acc.dido,
+      acc.ems,
     );
 
     const parsed: ParsedTelemetry = {

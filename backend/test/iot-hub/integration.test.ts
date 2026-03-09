@@ -13,7 +13,10 @@
  */
 import { handleHeartbeat } from "../../src/iot-hub/handlers/heartbeat-handler";
 import { handleDeviceList } from "../../src/iot-hub/handlers/device-list-handler";
-import { handleTelemetry } from "../../src/iot-hub/handlers/telemetry-handler";
+import {
+  handleTelemetry,
+  _destroyAssembler,
+} from "../../src/iot-hub/handlers/telemetry-handler";
 import {
   handleGetReply,
   handleSetReply,
@@ -507,6 +510,7 @@ describe("Scenario 1: Full Lifecycle", () => {
   });
 
   it("Step 3: data → TelemetryHandler writes with all 6 lists parsed", async () => {
+    jest.useFakeTimers();
     const pool = createMockPool({
       assetResolve: [
         { serial_number: BATTERY_DEVICE_SN, asset_id: "asset-bat-001" },
@@ -515,6 +519,8 @@ describe("Scenario 1: Full Lifecycle", () => {
 
     const payload = makeDataPayload(NOW_TS);
     await handleTelemetry(asPool(pool), GATEWAY_ID, CLIENT_ID, payload);
+    // FragmentAssembler flush is async — advance timers to allow completion
+    await jest.advanceTimersByTimeAsync(100);
 
     // Should have:
     // 1. DeviceAssetCache refresh query
@@ -539,9 +545,13 @@ describe("Scenario 1: Full Lifecycle", () => {
     expect(deviceStateQ!.params[4]).toBe(6902);
     // load_power = 3452
     expect(deviceStateQ!.params[5]).toBe(3452);
+
+    _destroyAssembler(asPool(pool));
+    jest.useRealTimers();
   });
 
   it("Step 4: recordedAt comes from payload.timeStamp, not NOW()", async () => {
+    jest.useFakeTimers();
     const pool = createMockPool({
       assetResolve: [
         { serial_number: BATTERY_DEVICE_SN, asset_id: "asset-bat-001" },
@@ -551,6 +561,7 @@ describe("Scenario 1: Full Lifecycle", () => {
     const specificTs = "1609459200000"; // 2021-01-01T00:00:00Z
     const payload = makeDataPayload(specificTs);
     await handleTelemetry(asPool(pool), GATEWAY_ID, CLIENT_ID, payload);
+    await jest.advanceTimersByTimeAsync(100);
 
     // The telemetry is buffered; the device_state uses the parsed telemetry
     const deviceStateQ = pool.queries.find((q) =>
@@ -559,6 +570,9 @@ describe("Scenario 1: Full Lifecycle", () => {
     expect(deviceStateQ).toBeDefined();
     // The handler doesn't use NOW() for device_state either — it uses NOW() for updated_at
     // but the telemetry recordedAt is from the payload (verified by MessageBuffer flush)
+
+    _destroyAssembler(asPool(pool));
+    jest.useRealTimers();
   });
 });
 
@@ -888,6 +902,7 @@ describe("Scenario 4: ScheduleTranslator Boundary Validation", () => {
 
 describe("Scenario 5: Historical Backfill", () => {
   it("data with historical timestamp → recordedAt from payload, not NOW()", async () => {
+    jest.useFakeTimers();
     const pool = createMockPool({
       assetResolve: [
         { serial_number: BATTERY_DEVICE_SN, asset_id: "asset-bat-001" },
@@ -898,6 +913,7 @@ describe("Scenario 5: Historical Backfill", () => {
     const twoHoursAgo = String(Date.now() - 2 * 60 * 60 * 1000);
     const payload = makeDataPayload(twoHoursAgo);
     await handleTelemetry(asPool(pool), GATEWAY_ID, CLIENT_ID, payload);
+    await jest.advanceTimersByTimeAsync(100);
 
     // The device_state query should have been issued
     const deviceStateQ = pool.queries.find((q) =>
@@ -907,10 +923,8 @@ describe("Scenario 5: Historical Backfill", () => {
     // device_state uses NOW() for updated_at (that's fine for real-time dashboard)
     // But telemetry_history (via MessageBuffer) uses recordedAt from payload
 
-    // Verify the handler doesn't alter the timestamp — the parsed telemetry
-    // gets the recordedAt from parseInt(payload.timeStamp)
-    // This is verified by the handler's behavior: safeFloat on bat properties
-    // and new Date(parseInt(...)) for recordedAt
+    _destroyAssembler(asPool(pool));
+    jest.useRealTimers();
   });
 
   it("heartbeat with historical timestamp → stored as-is", async () => {

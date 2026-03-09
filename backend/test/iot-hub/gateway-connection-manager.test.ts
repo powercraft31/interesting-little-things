@@ -5,6 +5,7 @@ const mockSubscribe = jest.fn(
 );
 const mockEnd = jest.fn();
 const mockOn = jest.fn();
+const mockPublish = jest.fn();
 const mockConnect = jest.fn(() => {
   const client = {
     on: (event: string, handler: Function) => {
@@ -15,6 +16,7 @@ const mockConnect = jest.fn(() => {
       }
     },
     subscribe: mockSubscribe,
+    publish: mockPublish,
     end: mockEnd,
   };
   return client;
@@ -27,6 +29,15 @@ jest.mock(
   }),
   { virtual: true },
 );
+
+// ─── Mock publish-config (intercept subDevicesGet + configGet) ───────────────
+const mockSubDevicesGet = jest.fn();
+const mockConfigGet = jest.fn().mockResolvedValue("msg-001");
+
+jest.mock("../../src/iot-hub/handlers/publish-config", () => ({
+  publishSubDevicesGet: (...args: unknown[]) => mockSubDevicesGet(...args),
+  publishConfigGet: (...args: unknown[]) => mockConfigGet(...args),
+}));
 
 import {
   GatewayConnectionManager,
@@ -245,5 +256,72 @@ describe("GatewayConnectionManager", () => {
     expect(mgr.getConnectedCount()).toBe(3);
 
     mgr.stop();
+  });
+
+  // ─── PR5: subDevices/get + hourly polling ─────────────────────────────────
+
+  it("publishes subDevices/get on connect (startup)", async () => {
+    const pool = createMockPool([GATEWAY_FIXTURE]);
+    const handlers = createNoopHandlers();
+    const mgr = new GatewayConnectionManager(pool, handlers);
+
+    await mgr.start();
+    // Trigger the "connect" callback which fires subscribe → then subDevices/get
+    await jest.advanceTimersByTimeAsync(10);
+
+    expect(mockSubDevicesGet).toHaveBeenCalledWith(
+      "WKRD24070202100144F",
+      expect.any(Function),
+    );
+
+    mgr.stop();
+  });
+
+  it("hourly timer fires subDevices/get + config/get for all gateways", async () => {
+    const gw2 = {
+      ...GATEWAY_FIXTURE,
+      gateway_id: "gw-002",
+      client_id: "WKRD24070202100228G",
+    };
+    const pool = createMockPool([GATEWAY_FIXTURE, gw2]);
+    const handlers = createNoopHandlers();
+    const mgr = new GatewayConnectionManager(pool, handlers);
+
+    await mgr.start();
+    await jest.advanceTimersByTimeAsync(10); // fire connect
+
+    // Clear startup calls
+    mockSubDevicesGet.mockClear();
+    mockConfigGet.mockClear();
+
+    // Advance to 1 hour
+    await jest.advanceTimersByTimeAsync(3_600_000);
+
+    // subDevices/get for each gateway
+    expect(mockSubDevicesGet).toHaveBeenCalledTimes(2);
+    // config/get for each gateway
+    expect(mockConfigGet).toHaveBeenCalledTimes(2);
+
+    mgr.stop();
+  });
+
+  it("stop() clears hourly timer", async () => {
+    const pool = createMockPool([GATEWAY_FIXTURE]);
+    const handlers = createNoopHandlers();
+    const mgr = new GatewayConnectionManager(pool, handlers);
+
+    await mgr.start();
+    await jest.advanceTimersByTimeAsync(10);
+
+    mockSubDevicesGet.mockClear();
+    mockConfigGet.mockClear();
+
+    mgr.stop();
+
+    // Advance past hourly interval — timer should not fire
+    await jest.advanceTimersByTimeAsync(3_600_000);
+
+    expect(mockSubDevicesGet).not.toHaveBeenCalled();
+    expect(mockConfigGet).not.toHaveBeenCalled();
   });
 });

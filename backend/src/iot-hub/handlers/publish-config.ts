@@ -1,9 +1,6 @@
 import { Pool } from "pg";
 import type { SolfacilMessage } from "../../shared/types/solfacil-protocol";
-import {
-  validateSchedule,
-  buildConfigSetPayload,
-} from "./schedule-translator";
+import { validateSchedule, buildConfigSetPayload } from "./schedule-translator";
 import type { DomainSchedule } from "./schedule-translator";
 
 /**
@@ -66,6 +63,37 @@ export async function publishConfigGet(
  * Logs a pending 'set' command in device_command_logs.
  * Returns the messageId for tracking.
  */
+/**
+ * Publish a subDevices/get request to query the gateway's sub-device list.
+ * Topic: platform/ems/{clientId}/subDevices/get
+ * No device_command_logs — response arrives on existing deviceList handler.
+ */
+export function publishSubDevicesGet(
+  clientId: string,
+  publish: MqttPublishFn,
+): void {
+  const messageId = String(Date.now());
+  const now = String(Date.now());
+
+  const message: SolfacilMessage = {
+    DS: 0,
+    ackFlag: 0,
+    data: { reason: "periodic_query" },
+    clientId,
+    deviceName: "EMS_N2",
+    productKey: "ems",
+    messageId,
+    timeStamp: now,
+  };
+
+  const topic = `platform/ems/${clientId}/subDevices/get`;
+  publish(topic, JSON.stringify(message));
+
+  console.log(
+    `[PublishConfig] subDevices/get sent to ${clientId}, messageId=${messageId}`,
+  );
+}
+
 export async function publishConfigSet(
   pool: Pool,
   gatewayId: string,

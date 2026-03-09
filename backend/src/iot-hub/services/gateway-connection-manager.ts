@@ -3,6 +3,8 @@ import type {
   SolfacilMessage,
   GatewayRecord,
 } from "../../shared/types/solfacil-protocol";
+import { publishSubDevicesGet } from "../handlers/publish-config";
+import { publishConfigGet } from "../handlers/publish-config";
 
 /**
  * PR3: MQTT Connection Manager
@@ -35,11 +37,13 @@ interface GatewayClient {
 
 const POLL_INTERVAL_MS = 60_000;
 const OFFLINE_THRESHOLD_MS = 90_000;
+const HOURLY_POLL_MS = 3_600_000;
 
 export class GatewayConnectionManager {
   private readonly gatewayClients = new Map<string, GatewayClient>();
   private pollTimer: NodeJS.Timeout | null = null;
   private watchdogTimer: NodeJS.Timeout | null = null;
+  private hourlyTimer: NodeJS.Timeout | null = null;
   private stopped = false;
 
   constructor(
@@ -60,13 +64,19 @@ export class GatewayConnectionManager {
     }
 
     // Poll for new gateways every 60s
-    this.pollTimer = setInterval(() => this.pollNewGateways(), POLL_INTERVAL_MS);
+    this.pollTimer = setInterval(
+      () => this.pollNewGateways(),
+      POLL_INTERVAL_MS,
+    );
 
     // Watchdog: mark offline if no heartbeat for 90s
     this.watchdogTimer = setInterval(
       () => this.heartbeatWatchdog(),
       POLL_INTERVAL_MS,
     );
+
+    // Hourly poll: subDevices/get + config/get for all gateways
+    this.hourlyTimer = setInterval(() => this.hourlyPoll(), HOURLY_POLL_MS);
   }
 
   /** Graceful shutdown: disconnect all MQTT clients. */
@@ -79,6 +89,10 @@ export class GatewayConnectionManager {
     if (this.watchdogTimer) {
       clearInterval(this.watchdogTimer);
       this.watchdogTimer = null;
+    }
+    if (this.hourlyTimer) {
+      clearInterval(this.hourlyTimer);
+      this.hourlyTimer = null;
     }
 
     for (const [, gc] of this.gatewayClients) {
@@ -148,6 +162,10 @@ export class GatewayConnectionManager {
           console.log(
             `[GatewayConnectionManager] Subscribed ${topics.length} topics for ${cid}`,
           );
+          // v1.2: Request initial sub-device list after connecting
+          const publishFn = (topic: string, msg: string) =>
+            client.publish(topic, msg);
+          publishSubDevicesGet(cid, publishFn);
         }
       });
     });
@@ -209,19 +227,9 @@ export class GatewayConnectionManager {
           payload,
         );
       } else if (topic.endsWith("/config/get_reply")) {
-        await this.handlers.onGetReply(
-          this.pool,
-          gatewayId,
-          clientId,
-          payload,
-        );
+        await this.handlers.onGetReply(this.pool, gatewayId, clientId, payload);
       } else if (topic.endsWith("/config/set_reply")) {
-        await this.handlers.onSetReply(
-          this.pool,
-          gatewayId,
-          clientId,
-          payload,
-        );
+        await this.handlers.onSetReply(this.pool, gatewayId, clientId, payload);
       } else if (topic.endsWith("/status")) {
         await this.handlers.onHeartbeat(
           this.pool,
@@ -230,9 +238,7 @@ export class GatewayConnectionManager {
           payload,
         );
       } else {
-        console.warn(
-          `[GatewayConnectionManager] Unhandled topic: ${topic}`,
-        );
+        console.warn(`[GatewayConnectionManager] Unhandled topic: ${topic}`);
       }
     } catch (err) {
       console.error(
@@ -255,10 +261,7 @@ export class GatewayConnectionManager {
         }
       }
     } catch (err) {
-      console.error(
-        "[GatewayConnectionManager] Poll error:",
-        err,
-      );
+      console.error("[GatewayConnectionManager] Poll error:", err);
     }
   }
 
@@ -273,10 +276,27 @@ export class GatewayConnectionManager {
            AND last_seen_at < NOW() - INTERVAL '${OFFLINE_THRESHOLD_MS} milliseconds'`,
       );
     } catch (err) {
-      console.error(
-        "[GatewayConnectionManager] Watchdog error:",
-        err,
-      );
+      console.error("[GatewayConnectionManager] Watchdog error:", err);
+    }
+  }
+
+  /** Hourly poll: subDevices/get + config/get for all connected gateways. */
+  private async hourlyPoll(): Promise<void> {
+    for (const [, gc] of this.gatewayClients) {
+      try {
+        const client = gc.mqttClient as {
+          publish: (topic: string, msg: string) => void;
+        };
+        const publishFn = (topic: string, msg: string) =>
+          client.publish(topic, msg);
+        publishSubDevicesGet(gc.clientId, publishFn);
+        await publishConfigGet(this.pool, gc.gatewayId, gc.clientId, publishFn);
+      } catch (err) {
+        console.error(
+          `[GatewayConnectionManager] Hourly poll error for ${gc.clientId}:`,
+          err,
+        );
+      }
     }
   }
 
