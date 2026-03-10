@@ -1,920 +1,524 @@
 /* ============================================
-   SOLFACIL Admin Portal — P2: Device Management
-   Device list table, drill-down panel, commissioning wizard,
-   commissioning history.
+   SOLFACIL Admin Portal — P2: Device Management (v5.19)
+   Gateway-first architecture:
+   Layer 1 — Gateway card list with expandable device rows
+   Layer 3 — Device detail (energy flow + telemetry + config + schedule)
    ============================================ */
 
-const DevicesPage = {
-  _filters: { type: "all", status: "all", search: "" },
+var DevicesPage = {
+  _gateways: null,
+  _expandedGw: null,
+  _currentDetail: null,
 
   // =========================================================
   // INIT / LIFECYCLE
   // =========================================================
 
-  async init() {
-    const self = this;
-    const container = document.getElementById("devices-content");
+  init: async function () {
+    var self = this;
+    var container = document.getElementById("devices-content");
     if (!container) return;
 
     container.innerHTML = this._buildSkeleton();
 
     try {
-      const [devices, homes] = await Promise.all([
-        DataSource.devices.list(),
-        DataSource.devices.homes(),
-      ]);
-      self._devices = devices;
-      self._homes = homes;
+      self._gateways = await DataSource.devices.gateways();
     } catch (err) {
       showErrorBoundary("devices-content", err);
       return;
     }
 
-    container.innerHTML = self._buildContent(currentRole);
-    self._setupEventListeners();
+    if (!self._gateways || self._gateways.length === 0) {
+      container.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-title">No Data</div><div class="empty-state-detail">No gateways found.</div></div>';
+      return;
+    }
+
+    container.innerHTML = self._buildLayer1();
+    self._setupLayer1Events();
   },
 
-  onRoleChange(role) {
-    this._filters = { type: "all", status: "all", search: "" };
-    const tableWrap = document.getElementById("p2-device-table-wrap");
-    if (tableWrap) {
-      tableWrap.innerHTML = this._buildDeviceTable(role);
-      this._updateDeviceCount(role);
-      this._attachRowListeners();
-    }
+  onRoleChange: function () {
+    this._expandedGw = null;
+    this._currentDetail = null;
+    this.init();
   },
 
   // =========================================================
   // SKELETON
   // =========================================================
 
-  _buildSkeleton() {
-    return `
-      <div style="display:flex;gap:8px;margin-bottom:16px">
-        <div class="skeleton" style="width:160px;height:38px;border-radius:6px"></div>
-        <div class="skeleton" style="width:160px;height:38px;border-radius:6px"></div>
-        <div class="skeleton" style="width:220px;height:38px;border-radius:6px"></div>
-      </div>
-      ${Components.skeletonTable(10)}
-      <div style="margin-top:24px">${Components.skeletonTable(3)}</div>
-    `;
+  _buildSkeleton: function () {
+    return '<div style="display:flex;flex-direction:column;gap:12px">' +
+      '<div class="skeleton" style="height:90px;border-radius:10px"></div>' +
+      '<div class="skeleton" style="height:90px;border-radius:10px"></div>' +
+      '<div class="skeleton" style="height:90px;border-radius:10px"></div>' +
+      '<div class="skeleton" style="height:90px;border-radius:10px"></div>' +
+      '</div>';
   },
 
   // =========================================================
-  // CONTENT
+  // LAYER 1: Gateway List
   // =========================================================
 
-  _buildContent(role) {
-    return `
-      ${this._buildFilterBar()}
-      <div class="p2-device-count" id="p2-device-count"></div>
-      ${Components.sectionCard(
-        t("devices.list"),
-        '<div id="p2-device-table-wrap">' +
-          this._buildDeviceTable(role) +
-          "</div>",
-      )}
-      ${this._buildCommissioningHistoryCard()}
-    `;
+  _buildLayer1: function () {
+    var gateways = this._gateways || [];
+    var totalDevices = gateways.reduce(function (sum, g) { return sum + (g.deviceCount || 0); }, 0);
+
+    var header = '<div class="p2-header">' +
+      '<h2>Device Management</h2>' +
+      '<div class="p2-summary">' + gateways.length + ' Gateways \u00b7 ' + totalDevices + ' Devices</div>' +
+      '</div>';
+
+    var cards = gateways.map(function (gw) {
+      return DevicesPage._buildGwCard(gw);
+    }).join('');
+
+    return '<div id="layer1">' + header +
+      '<div class="gw-list">' + cards + '</div></div>' +
+      '<div id="layer3" style="display:none"></div>';
   },
 
-  // =========================================================
-  // FILTER BAR
-  // =========================================================
+  _buildGwCard: function (gw) {
+    var statusClass = gw.status === 'online' ? 'online' : 'offline';
+    var isExpanded = this._expandedGw === gw.gatewayId;
+    var health = gw.emsHealth || {};
+    var rssi = health.wifiRssi != null ? health.wifiRssi + ' dBm' : '--';
+    var fw = health.firmwareVersion || '--';
+    var uptime = health.uptimeSeconds != null ? Math.round(health.uptimeSeconds / 3600) + 'h' : '--';
+    var lastSeen = gw.lastSeenAt ? formatISODateTime(gw.lastSeenAt) : '--';
 
-  _buildFilterBar() {
-    const typeOptions = [
-      { value: "all", label: t("devices.allTypes") },
-      { value: "Inverter + Battery", label: t("dtype.Inverter + Battery") },
-      { value: "Smart Meter", label: t("dtype.Smart Meter") },
-      { value: "AC", label: t("dtype.AC") },
-      { value: "EV Charger", label: t("dtype.EV Charger") },
-    ];
-
-    const statusOptions = [
-      { value: "all", label: t("devices.allStatus") },
-      { value: "online", label: t("shared.online") },
-      { value: "offline", label: t("shared.offline") },
-    ];
-
-    return `
-      <div class="p2-filter-bar">
-        <select id="p2-filter-type">
-          ${typeOptions.map((o) => `<option value="${o.value}">${o.label}</option>`).join("")}
-        </select>
-        <select id="p2-filter-status">
-          ${statusOptions.map((o) => `<option value="${o.value}">${o.label}</option>`).join("")}
-        </select>
-        <input type="text" id="p2-filter-search" placeholder="${t("devices.searchPlaceholder")}">
-        <div class="filter-spacer"></div>
-        <button class="p2-btn-commission" id="p2-btn-commission" data-role="admin">${t("devices.commission")}</button>
-      </div>
-    `;
+    return '<div class="gw-card" data-gw-id="' + gw.gatewayId + '">' +
+      '<div class="gw-header">' +
+        '<div class="gw-status ' + statusClass + '"></div>' +
+        '<div class="gw-name-block">' +
+          '<div class="gw-name-primary">' + gw.name + '</div>' +
+          '<div class="gw-sn">' + gw.gatewayId + '</div>' +
+        '</div>' +
+        '<div class="gw-meta">' +
+          '<span>' + (gw.deviceCount || 0) + ' devices</span>' +
+          '<span>WiFi ' + rssi + '</span>' +
+          '<span>FW ' + fw + '</span>' +
+          '<span>Up ' + uptime + '</span>' +
+          '<span>Seen ' + lastSeen + '</span>' +
+        '</div>' +
+        '<div class="gw-chevron' + (isExpanded ? ' expanded' : '') + '">\u25B6</div>' +
+      '</div>' +
+      '<div class="device-list" id="gw-devices-' + gw.gatewayId + '" style="display:' + (isExpanded ? 'block' : 'none') + '">' +
+        (isExpanded ? '' : '') +
+      '</div>' +
+    '</div>';
   },
 
-  // =========================================================
-  // DEVICE TABLE
-  // =========================================================
-
-  _getFilteredDevices(role) {
-    let list = this._devices || DEVICES;
-
-    if (role === "integrador") {
-      list = list.filter((d) => d.orgId === "org-001");
-    }
-
-    if (this._filters.type !== "all") {
-      list = list.filter((d) => d.type === this._filters.type);
-    }
-
-    if (this._filters.status !== "all") {
-      list = list.filter((d) => d.status === this._filters.status);
-    }
-
-    if (this._filters.search) {
-      const q = this._filters.search.toLowerCase();
-      list = list.filter(
-        (d) =>
-          d.deviceId.toLowerCase().includes(q) ||
-          d.homeName.toLowerCase().includes(q),
-      );
-    }
-
-    return list;
-  },
-
-  _buildDeviceTable(role) {
-    const devices = this._getFilteredDevices(role);
-
-    if (devices.length === 0) {
-      return (
-        '<div class="table-empty" style="padding:24px;text-align:center;color:var(--muted)">' +
-        t("devices.noMatch") +
-        "</div>"
-      );
-    }
-
-    let html =
-      '<div class="data-table-wrapper"><table class="data-table p2-device-table">';
-    html += "<thead><tr>";
-    html +=
-      "<th>" +
-      t("devices.col.deviceId") +
-      "</th>" +
-      "<th>" +
-      t("devices.col.type") +
-      "</th>" +
-      "<th>" +
-      t("devices.col.brand") +
-      "</th>" +
-      "<th>" +
-      t("devices.col.home") +
-      "</th>" +
-      "<th>" +
-      t("devices.col.status") +
-      "</th>" +
-      "<th>" +
-      t("devices.col.lastSeen") +
-      "</th>";
-    html += "</tr></thead><tbody>";
-
-    devices.forEach((d) => {
-      const statusBadge =
-        d.status === "online"
-          ? Components.statusBadge("online", t("devices.status.online"))
-          : Components.statusBadge("offline", t("devices.status.offline"));
-
-      html += `<tr data-device-id="${d.deviceId}">`;
-      html += `<td class="font-data">${d.deviceId}</td>`;
-      html += `<td>${t("dtype." + d.type)}</td>`;
-      html += `<td>${d.brand}</td>`;
-      html += `<td>${d.homeName}</td>`;
-      html += `<td>${statusBadge}</td>`;
-      html += `<td class="font-data">${d.lastSeen}</td>`;
-      html += "</tr>";
-    });
-
-    html += "</tbody></table></div>";
-    return html;
-  },
-
-  _updateDeviceCount(role) {
-    const el = document.getElementById("p2-device-count");
-    if (!el) return;
-    const devices = this._getFilteredDevices(role);
-    const allDevices = this._devices || DEVICES;
-    const total =
-      role === "integrador"
-        ? allDevices.filter((d) => d.orgId === "org-001").length
-        : allDevices.length;
-    el.textContent = t("devices.showing")
-      .replace("{0}", devices.length)
-      .replace("{1}", total);
-  },
-
-  // =========================================================
-  // EVENT LISTENERS
-  // =========================================================
-
-  _setupEventListeners() {
-    const typeEl = document.getElementById("p2-filter-type");
-    const statusEl = document.getElementById("p2-filter-status");
-    const searchEl = document.getElementById("p2-filter-search");
-
-    if (typeEl) {
-      typeEl.addEventListener("change", () => {
-        this._filters.type = typeEl.value;
-        this._refreshTable(currentRole);
+  _setupLayer1Events: function () {
+    var self = this;
+    document.querySelectorAll('.gw-header').forEach(function (header) {
+      header.addEventListener('click', function () {
+        var card = header.closest('.gw-card');
+        var gwId = card.dataset.gwId;
+        self._toggleGateway(gwId);
       });
-    }
-    if (statusEl) {
-      statusEl.addEventListener("change", () => {
-        this._filters.status = statusEl.value;
-        this._refreshTable(currentRole);
-      });
-    }
-    if (searchEl) {
-      searchEl.addEventListener("input", () => {
-        this._filters.search = searchEl.value;
-        this._refreshTable(currentRole);
-      });
-    }
-
-    const commBtn = document.getElementById("p2-btn-commission");
-    if (commBtn) {
-      commBtn.addEventListener("click", () => this._openWizard());
-    }
-
-    this._attachRowListeners();
-    this._updateDeviceCount(currentRole);
-  },
-
-  _refreshTable(role) {
-    const tableWrap = document.getElementById("p2-device-table-wrap");
-    if (tableWrap) {
-      tableWrap.innerHTML = this._buildDeviceTable(role);
-      this._updateDeviceCount(role);
-      this._attachRowListeners();
-    }
-  },
-
-  _attachRowListeners() {
-    document
-      .querySelectorAll(".p2-device-table tr[data-device-id]")
-      .forEach((row) => {
-        row.addEventListener("click", () => {
-          const id = row.dataset.deviceId;
-          const allDevices = this._devices || DEVICES;
-          const device = allDevices.find((d) => d.deviceId === id);
-          if (device) this._openDrillDown(device);
-        });
-      });
-  },
-
-  // =========================================================
-  // DEVICE DRILL-DOWN PANEL
-  // =========================================================
-
-  _openDrillDown(device) {
-    this._closeDrillDown();
-
-    const overlay = document.createElement("div");
-    overlay.className = "device-panel-overlay";
-    overlay.id = "device-panel-overlay";
-    overlay.innerHTML = `
-      <div class="device-panel" id="device-panel">
-        <div class="device-panel-header">
-          <h3>${t("devices.panel.title")}</h3>
-          <button class="panel-close" id="panel-close">&times;</button>
-        </div>
-        <div class="device-panel-body" id="device-panel-body">
-          ${this._buildDrillDownContent(device)}
-        </div>
-      </div>
-    `;
-
-    document.body.appendChild(overlay);
-
-    overlay.addEventListener("click", (e) => {
-      if (e.target === overlay) this._closeDrillDown();
-    });
-
-    const closeBtn = overlay.querySelector("#panel-close");
-    if (closeBtn)
-      closeBtn.addEventListener("click", () => this._closeDrillDown());
-
-    requestAnimationFrame(() => overlay.classList.add("open"));
-  },
-
-  _closeDrillDown() {
-    const overlay = document.getElementById("device-panel-overlay");
-    if (overlay) {
-      overlay.classList.remove("open");
-      setTimeout(() => overlay.remove(), 250);
-    }
-  },
-
-  _buildDrillDownContent(device) {
-    const typeIcons = {
-      "Inverter + Battery": "\u{1F50B}",
-      "Smart Meter": "\u{1F4CA}",
-      AC: "\u{2744}\u{FE0F}",
-      "EV Charger": "\u{1F50C}",
-    };
-
-    const statusBadge =
-      device.status === "online"
-        ? Components.statusBadge("online", t("devices.status.online"))
-        : Components.statusBadge("offline", t("devices.status.offline"));
-
-    let html = `
-      <div class="panel-device-header">
-        <span class="panel-device-type-icon">${typeIcons[device.type] || ""}</span>
-        <span class="panel-device-id">${device.deviceId}</span>
-        ${statusBadge}
-      </div>
-
-      <div class="panel-info-grid">
-        <div class="panel-info-item">
-          <div class="panel-info-label">${t("devices.panel.type")}</div>
-          <div class="panel-info-value">${t("dtype." + device.type)}</div>
-        </div>
-        <div class="panel-info-item">
-          <div class="panel-info-label">${t("devices.panel.brandModel")}</div>
-          <div class="panel-info-value">${device.brand} ${device.model}</div>
-        </div>
-        <div class="panel-info-item">
-          <div class="panel-info-label">${t("devices.panel.home")}</div>
-          <div class="panel-info-value">${device.homeName}</div>
-        </div>
-        <div class="panel-info-item">
-          <div class="panel-info-label">${t("devices.panel.org")}</div>
-          <div class="panel-info-value">${device.orgName}</div>
-        </div>
-        <div class="panel-info-item">
-          <div class="panel-info-label">${t("devices.panel.commissioned")}</div>
-          <div class="panel-info-value">${device.commissionDate}</div>
-        </div>
-        <div class="panel-info-item">
-          <div class="panel-info-label">${t("devices.panel.lastSeen")}</div>
-          <div class="panel-info-value">${device.lastSeen}</div>
-        </div>
-      </div>
-
-      <div class="panel-section-title">${t("devices.panel.telemetry")}</div>
-      ${this._buildTelemetrySection(device)}
-    `;
-
-    return html;
-  },
-
-  _buildTelemetrySection(device) {
-    const telem = device.telemetry;
-
-    if (telem.status === "offline") {
-      return `<div style="padding:16px;text-align:center;color:var(--muted);font-size:0.88rem">
-        ${t("devices.telem.noData")}
-      </div>`;
-    }
-
-    let items = [];
-
-    switch (device.type) {
-      case "Inverter + Battery":
-        items = [
-          {
-            value: formatNumber(telem.pvPower, 2) + " kW",
-            label: t("devices.telem.pvPower"),
-            color: "var(--positive)",
-          },
-          {
-            value: telem.batterySoc + "%",
-            label: t("devices.telem.batterySoc"),
-            color: "var(--neutral)",
-          },
-          {
-            value: formatNumber(telem.chargeRate, 2) + " kW",
-            label: t("devices.telem.chargeRate"),
-            color: "var(--neutral)",
-          },
-          {
-            value: formatNumber(telem.gridExport, 2) + " kW",
-            label: t("devices.telem.gridExport"),
-            color: "var(--accent)",
-          },
-        ];
-        break;
-      case "Smart Meter":
-        items = [
-          {
-            value: formatNumber(telem.consumption, 2) + " kW",
-            label: t("devices.telem.consumption"),
-            color: "var(--text)",
-          },
-          {
-            value: formatNumber(telem.voltage, 1) + " V",
-            label: t("devices.telem.voltage"),
-            color: "var(--amber)",
-          },
-          {
-            value: formatNumber(telem.current, 1) + " A",
-            label: t("devices.telem.current"),
-            color: "var(--accent)",
-          },
-          {
-            value: formatNumber(telem.powerFactor, 2),
-            label: t("devices.telem.powerFactor"),
-            color: "var(--positive)",
-          },
-        ];
-        break;
-      case "AC":
-        items = [
-          {
-            value: telem.on ? t("devices.telem.on") : t("devices.telem.off"),
-            label: t("devices.telem.status"),
-            color: telem.on ? "var(--positive)" : "var(--negative)",
-          },
-          {
-            value: telem.setTemp + "\u00B0C",
-            label: t("devices.telem.setTemp"),
-            color: "var(--accent)",
-          },
-          {
-            value: formatNumber(telem.roomTemp, 1) + "\u00B0C",
-            label: t("devices.telem.roomTemp"),
-            color: "var(--text)",
-          },
-          {
-            value: formatNumber(telem.powerDraw, 2) + " kW",
-            label: t("devices.telem.powerDraw"),
-            color: "var(--amber)",
-          },
-        ];
-        break;
-      case "EV Charger":
-        items = [
-          {
-            value: telem.charging
-              ? t("devices.telem.charging")
-              : t("devices.telem.idle"),
-            label: t("devices.telem.status"),
-            color: telem.charging ? "var(--positive)" : "var(--muted)",
-          },
-          {
-            value: formatNumber(telem.chargeRate, 1) + " kW",
-            label: t("devices.telem.chargeRate"),
-            color: "var(--accent)",
-          },
-          {
-            value: formatNumber(telem.sessionEnergy, 1) + " kWh",
-            label: t("devices.telem.sessionEnergy"),
-            color: "var(--neutral)",
-          },
-          {
-            value: telem.evSoc + "%",
-            label: t("devices.telem.evSoc"),
-            color: "var(--positive)",
-          },
-        ];
-        break;
-    }
-
-    return `<div class="panel-telemetry-grid">
-      ${items
-        .map(
-          (item) => `
-        <div class="panel-telemetry-item">
-          <div class="panel-telemetry-value" style="color:${item.color}">${item.value}</div>
-          <div class="panel-telemetry-label">${item.label}</div>
-        </div>
-      `,
-        )
-        .join("")}
-    </div>`;
-  },
-
-  // =========================================================
-  // COMMISSIONING WIZARD
-  // =========================================================
-
-  _wizardStep: 1,
-  _wizardData: {},
-  _wizardTimers: [],
-
-  _openWizard() {
-    this._wizardStep = 1;
-    this._wizardData = {
-      homeId: "HOME-001",
-      gatewaySn: "",
-      selectedDevices: UNASSIGNED_DEVICES.map((d) => d.deviceId),
-      testResults: {},
-    };
-    this._wizardTimers = [];
-
-    const overlay = document.createElement("div");
-    overlay.className = "wizard-overlay";
-    overlay.id = "commission-wizard";
-    overlay.innerHTML = `
-      <div class="wizard-header">
-        <h2>${t("devices.wizard.title")}</h2>
-        <button class="wizard-close" id="wizard-close">&times;</button>
-      </div>
-      <div class="wizard-progress" id="wizard-progress"></div>
-      <div class="wizard-body" id="wizard-body"></div>
-      <div class="wizard-footer" id="wizard-footer"></div>
-    `;
-
-    document.body.appendChild(overlay);
-
-    const closeBtn = overlay.querySelector("#wizard-close");
-    closeBtn.addEventListener("click", () => this._closeWizard());
-
-    requestAnimationFrame(() => {
-      overlay.classList.add("open");
-      this._renderWizardStep();
     });
   },
 
-  _closeWizard() {
-    this._wizardTimers.forEach((timer) => clearTimeout(timer));
-    this._wizardTimers = [];
+  _toggleGateway: async function (gwId) {
+    var self = this;
+    var deviceList = document.getElementById('gw-devices-' + gwId);
+    var chevron = document.querySelector('.gw-card[data-gw-id="' + gwId + '"] .gw-chevron');
 
-    const overlay = document.getElementById("commission-wizard");
-    if (overlay) {
-      overlay.classList.remove("open");
-      setTimeout(() => overlay.remove(), 250);
+    if (self._expandedGw === gwId) {
+      // Collapse
+      self._expandedGw = null;
+      if (deviceList) deviceList.style.display = 'none';
+      if (chevron) chevron.classList.remove('expanded');
+      return;
     }
-  },
 
-  _renderWizardStep() {
-    this._renderProgressBar();
-    this._renderStepContent();
-    this._renderFooterButtons();
-  },
+    // Collapse previous
+    if (self._expandedGw) {
+      var prev = document.getElementById('gw-devices-' + self._expandedGw);
+      var prevChev = document.querySelector('.gw-card[data-gw-id="' + self._expandedGw + '"] .gw-chevron');
+      if (prev) prev.style.display = 'none';
+      if (prevChev) prevChev.classList.remove('expanded');
+    }
 
-  _renderProgressBar() {
-    const container = document.getElementById("wizard-progress");
-    if (!container) return;
+    self._expandedGw = gwId;
+    if (chevron) chevron.classList.add('expanded');
+    if (deviceList) {
+      deviceList.style.display = 'block';
+      deviceList.innerHTML = '<div class="device-loading">Loading devices...</div>';
+    }
 
-    const stepKeys = [
-      "devices.wizard.step.home",
-      "devices.wizard.step.gateway",
-      "devices.wizard.step.discover",
-      "devices.wizard.step.test",
-      "devices.wizard.step.done",
-    ];
-    let html = "";
-
-    stepKeys.forEach((key, i) => {
-      const num = i + 1;
-      let circleClass = "wizard-step-circle";
-      if (num < this._wizardStep) circleClass += " completed";
-      else if (num === this._wizardStep) circleClass += " active";
-
-      html += `<div class="wizard-step-item">
-        <div class="${circleClass}">${num < this._wizardStep ? "\u2713" : num}</div>
-      </div>`;
-
-      if (i < stepKeys.length - 1) {
-        const lineClass =
-          num < this._wizardStep
-            ? "wizard-step-line completed"
-            : "wizard-step-line";
-        html += `<div class="${lineClass}"></div>`;
+    try {
+      var result = await DataSource.devices.gatewayDevices(gwId);
+      var devices = result.devices || [];
+      if (deviceList) {
+        if (devices.length === 0) {
+          deviceList.innerHTML = '<div class="device-empty">No devices under this gateway</div>';
+        } else {
+          deviceList.innerHTML = devices.map(function (dev) {
+            return self._buildDeviceRow(dev);
+          }).join('');
+          self._attachDeviceRowListeners(deviceList);
+        }
       }
-    });
-
-    container.innerHTML = html;
-  },
-
-  _renderStepContent() {
-    const body = document.getElementById("wizard-body");
-    if (!body) return;
-
-    switch (this._wizardStep) {
-      case 1:
-        this._renderStep1(body);
-        break;
-      case 2:
-        this._renderStep2(body);
-        break;
-      case 3:
-        this._renderStep3(body);
-        break;
-      case 4:
-        this._renderStep4(body);
-        break;
-      case 5:
-        this._renderStep5(body);
-        break;
+    } catch (err) {
+      if (deviceList) {
+        deviceList.innerHTML = '<div class="device-error">Failed to load devices</div>';
+      }
+      console.error('[P2] gatewayDevices error:', err);
     }
   },
 
-  _renderFooterButtons() {
-    const footer = document.getElementById("wizard-footer");
-    if (!footer) return;
+  _buildDeviceRow: function (dev) {
+    var st = dev.state || {};
+    var socText = st.batterySoc != null ? st.batterySoc + '%' : '--';
+    var powerText = st.pvPower != null ? formatNumber(st.pvPower, 1) + ' kW' : '--';
+    var sohText = st.batSoh != null ? st.batSoh + '%' : '--';
+    var tempText = st.batteryTemperature != null ? st.batteryTemperature + '\u00b0C' : '--';
 
-    const step = this._wizardStep;
-    let html = "";
+    var typeIcons = {
+      'Inverter + Battery': '\ud83d\udd0b',
+      'Smart Meter': '\ud83d\udcca',
+      'AC': '\u2744\ufe0f',
+      'EV Charger': '\ud83d\udd0c',
+    };
+    var icon = typeIcons[dev.assetType] || '\ud83d\udd0c';
 
-    if (step > 1 && step < 5) {
-      html +=
-        '<button class="wizard-btn-back" id="wizard-back">' +
-        t("shared.back") +
-        "</button>";
-    }
-
-    if (step < 5) {
-      const disabled = step === 3 || step === 4 ? " disabled" : "";
-      html +=
-        '<button class="wizard-btn-next" id="wizard-next"' +
-        disabled +
-        ">" +
-        t("shared.next") +
-        "</button>";
-    } else {
-      html +=
-        '<button class="wizard-btn-done" id="wizard-done">' +
-        t("shared.done") +
-        "</button>";
-    }
-
-    footer.innerHTML = html;
-
-    const backBtn = footer.querySelector("#wizard-back");
-    const nextBtn = footer.querySelector("#wizard-next");
-    const doneBtn = footer.querySelector("#wizard-done");
-
-    if (backBtn) backBtn.addEventListener("click", () => this._wizardBack());
-    if (nextBtn) nextBtn.addEventListener("click", () => this._wizardNext());
-    if (doneBtn) doneBtn.addEventListener("click", () => this._wizardDone());
+    return '<div class="device-row" data-asset-id="' + dev.assetId + '">' +
+      '<div class="dev-icon">' + icon + '</div>' +
+      '<div class="dev-id-block">' +
+        '<div class="dev-id">' + dev.assetId + '</div>' +
+        '<div class="dev-type">' + (dev.brand || '') + ' ' + (dev.model || '') + '</div>' +
+      '</div>' +
+      '<div class="dev-stats">' +
+        '<span class="dev-stat">SoC ' + socText + '</span>' +
+        '<span class="dev-stat">PV ' + powerText + '</span>' +
+        '<span class="dev-stat">SoH ' + sohText + '</span>' +
+        '<span class="dev-stat">Temp ' + tempText + '</span>' +
+      '</div>' +
+    '</div>';
   },
 
-  _wizardBack() {
-    this._wizardTimers.forEach((timer) => clearTimeout(timer));
-    this._wizardTimers = [];
-
-    if (this._wizardStep > 1) {
-      this._wizardStep--;
-      this._renderWizardStep();
-    }
-  },
-
-  _wizardNext() {
-    if (this._wizardStep < 5) {
-      this._wizardStep++;
-      this._renderWizardStep();
-    }
-  },
-
-  _wizardDone() {
-    DemoStore.set("lastCommission", {
-      homeId: this._wizardData.homeId,
-      devices: this._wizardData.selectedDevices,
-      timestamp: "04/03/2026 14:32",
-    });
-    this._closeWizard();
-  },
-
-  // ---- Step 1: Home Selection ----
-  _renderStep1(body) {
-    body.innerHTML = `
-      <div class="wizard-step-content">
-        <h3>${t("devices.wizard.s1.title")}</h3>
-        <p>${t("devices.wizard.s1.desc")}</p>
-        <div class="wizard-input-group">
-          <label for="wizard-home-id">${t("devices.wizard.s1.label")}</label>
-          <input type="text" id="wizard-home-id" value="${this._wizardData.homeId}" placeholder="HOME-001">
-        </div>
-      </div>
-    `;
-
-    const input = body.querySelector("#wizard-home-id");
-    if (input) {
-      input.addEventListener("input", () => {
-        this._wizardData.homeId = input.value;
+  _attachDeviceRowListeners: function (container) {
+    var self = this;
+    container.querySelectorAll('.device-row').forEach(function (row) {
+      row.addEventListener('click', function () {
+        var assetId = row.dataset.assetId;
+        self._openLayer3(assetId);
       });
-    }
-  },
-
-  // ---- Step 2: Gateway Scan ----
-  _renderStep2(body) {
-    body.innerHTML = `
-      <div class="wizard-step-content">
-        <h3>${t("devices.wizard.s2.title")}</h3>
-        <p>${t("devices.wizard.s2.desc")}</p>
-        <div class="wizard-input-row">
-          <div class="wizard-input-group">
-            <label for="wizard-gateway-sn">${t("devices.wizard.s2.label")}</label>
-            <input type="text" id="wizard-gateway-sn" value="${this._wizardData.gatewaySn}" placeholder="GW-2026-XXXX">
-          </div>
-          <button class="wizard-btn-scan" title="QR scan requires mobile device">${t("devices.wizard.s2.scan")}</button>
-        </div>
-      </div>
-    `;
-
-    const input = body.querySelector("#wizard-gateway-sn");
-    if (input) {
-      input.addEventListener("input", () => {
-        this._wizardData.gatewaySn = input.value;
-      });
-    }
-  },
-
-  // ---- Step 3: Device Discovery (animated) ----
-  _renderStep3(body) {
-    body.innerHTML = `
-      <div class="wizard-step-content">
-        <h3>${t("devices.wizard.s3.title")}</h3>
-        <p>${t("devices.wizard.s3.scanning")}</p>
-        <div class="wizard-spinner">
-          <div class="wizard-spinner-ring"></div>
-          <div class="wizard-spinner-text">${t("devices.wizard.s3.discovering")}</div>
-        </div>
-      </div>
-    `;
-
-    const timer = setTimeout(() => {
-      const content = body.querySelector(".wizard-step-content");
-      if (!content) return;
-
-      content.innerHTML = `
-        <h3>${t("devices.wizard.s3.title")}</h3>
-        <p>${t("devices.wizard.s3.found").replace("{n}", UNASSIGNED_DEVICES.length)}</p>
-        <div class="wizard-device-list">
-          ${UNASSIGNED_DEVICES.map(
-            (d) => `
-            <div class="wizard-device-item">
-              <input type="checkbox" data-device-id="${d.deviceId}"
-                ${this._wizardData.selectedDevices.includes(d.deviceId) ? "checked" : ""}>
-              <div class="wizard-device-info">
-                <div class="dev-id">${d.deviceId}</div>
-                <div class="dev-detail">${t("dtype." + d.type)} \u2014 ${d.brand} ${d.model}</div>
-              </div>
-            </div>
-          `,
-          ).join("")}
-        </div>
-      `;
-
-      content.querySelectorAll('input[type="checkbox"]').forEach((cb) => {
-        cb.addEventListener("change", () => {
-          const id = cb.dataset.deviceId;
-          if (cb.checked) {
-            if (!this._wizardData.selectedDevices.includes(id)) {
-              this._wizardData.selectedDevices = [
-                ...this._wizardData.selectedDevices,
-                id,
-              ];
-            }
-          } else {
-            this._wizardData.selectedDevices =
-              this._wizardData.selectedDevices.filter((x) => x !== id);
-          }
-        });
-      });
-
-      const nextBtn = document.getElementById("wizard-next");
-      if (nextBtn) nextBtn.disabled = false;
-    }, 2000);
-
-    this._wizardTimers.push(timer);
-  },
-
-  // ---- Step 4: Communication Test (animated) ----
-  _renderStep4(body) {
-    const devices = UNASSIGNED_DEVICES.filter((d) =>
-      this._wizardData.selectedDevices.includes(d.deviceId),
-    );
-
-    body.innerHTML = `
-      <div class="wizard-step-content">
-        <h3>${t("devices.wizard.s4.title")}</h3>
-        <p>${t("devices.wizard.s4.testing")}</p>
-        <div class="wizard-progress-bar">
-          <div class="wizard-progress-fill" id="wizard-test-progress" style="width:0%"></div>
-        </div>
-        <div id="wizard-test-results">
-          ${devices
-            .map(
-              (d) => `
-            <div class="wizard-test-item" id="test-${d.deviceId}">
-              <span class="wizard-test-id">${d.deviceId}</span>
-              <span>${t("dtype." + d.type)}</span>
-              <span class="wizard-test-status pending" id="test-status-${d.deviceId}">${t("devices.wizard.s4.testingStatus")}</span>
-            </div>
-          `,
-            )
-            .join("")}
-        </div>
-      </div>
-    `;
-
-    const delays = [1000, 1500, 2000, 3000];
-    let completed = 0;
-
-    devices.forEach((d, i) => {
-      const delay = delays[i] || 1000 + i * 1000;
-      const timer = setTimeout(() => {
-        const statusEl = document.getElementById("test-status-" + d.deviceId);
-        if (statusEl) {
-          statusEl.className = "wizard-test-status pass";
-          statusEl.textContent = t("devices.wizard.s4.pass");
-        }
-        this._wizardData.testResults[d.deviceId] = "pass";
-
-        completed++;
-        const progressEl = document.getElementById("wizard-test-progress");
-        if (progressEl) {
-          progressEl.style.width =
-            Math.round((completed / devices.length) * 100) + "%";
-        }
-
-        if (completed === devices.length) {
-          const nextBtn = document.getElementById("wizard-next");
-          if (nextBtn) nextBtn.disabled = false;
-        }
-      }, delay);
-
-      this._wizardTimers.push(timer);
     });
-  },
-
-  // ---- Step 5: Result Report ----
-  _renderStep5(body) {
-    const devices = UNASSIGNED_DEVICES.filter((d) =>
-      this._wizardData.selectedDevices.includes(d.deviceId),
-    );
-
-    body.innerHTML = `
-      <div class="wizard-step-content">
-        <div class="wizard-success">
-          <div class="wizard-success-icon">\u2705</div>
-          <h3>${t("devices.wizard.s5.complete")}</h3>
-          <p><strong>${t("devices.wizard.s5.home")}</strong> ${this._wizardData.homeId}</p>
-          <p><strong>${t("devices.wizard.s5.devicesCom")}</strong> ${devices.length}</p>
-          <p><strong>${t("devices.wizard.s5.elapsed")}</strong> 92 min</p>
-        </div>
-
-        <div class="wizard-result-list">
-          ${devices
-            .map(
-              (d) => `
-            <div class="wizard-result-item">
-              <span>\u2705</span>
-              <span class="dev-id">${d.deviceId}</span>
-              <span>${t("dtype." + d.type)}</span>
-              <span style="margin-left:auto;color:var(--positive);font-weight:600">${t("shared.online")}</span>
-            </div>
-          `,
-            )
-            .join("")}
-        </div>
-      </div>
-    `;
   },
 
   // =========================================================
-  // COMMISSIONING HISTORY TABLE
+  // LAYER 3: Device Detail
   // =========================================================
 
-  _buildCommissioningHistoryCard() {
-    const table = Components.dataTable({
-      columns: [
-        {
-          key: "homeId",
-          label: t("devices.commHistory.col.homeId"),
-          mono: true,
-        },
-        { key: "integrador", label: t("devices.commHistory.col.integrador") },
-        { key: "start", label: t("devices.commHistory.col.start") },
-        { key: "complete", label: t("devices.commHistory.col.complete") },
-        {
-          key: "durationMin",
-          label: t("devices.commHistory.col.duration"),
-          align: "right",
-          mono: true,
-          format: (val) => {
-            const icon = val > 120 ? "\u26A0\uFE0F" : "\u2705";
-            const cls = val > 120 ? "duration-warn" : "duration-ok";
-            return `<span class="${cls}">${val} min ${icon}</span>`;
-          },
-        },
-        {
-          key: "devices",
-          label: t("devices.commHistory.col.devices"),
-          align: "right",
-          mono: true,
-        },
-        {
-          key: "firstTelemetry",
-          label: t("devices.commHistory.col.firstTelemetry"),
-        },
-      ],
-      rows: COMMISSIONING_HISTORY,
-    });
+  _openLayer3: async function (assetId) {
+    var self = this;
+    var layer1 = document.getElementById('layer1');
+    var layer3 = document.getElementById('layer3');
+    if (!layer1 || !layer3) return;
 
-    return Components.sectionCard(t("devices.commHistory"), table);
+    layer1.style.display = 'none';
+    layer3.style.display = 'block';
+    layer3.innerHTML = '<div class="detail-loading"><div class="skeleton" style="height:400px;border-radius:10px"></div></div>';
+
+    try {
+      var results = await Promise.all([
+        DataSource.devices.deviceDetail(assetId),
+        DataSource.devices.getSchedule(assetId),
+      ]);
+      self._currentDetail = results[0];
+      self._currentSchedule = results[1];
+    } catch (err) {
+      layer3.innerHTML = '<div class="error-boundary"><div class="error-icon">&#9888;</div><div class="error-title">Error</div><div class="error-detail">Failed to load device detail.</div><button class="btn btn-secondary" onclick="DevicesPage._closeLayer3()">Back</button></div>';
+      console.error('[P2] deviceDetail error:', err);
+      return;
+    }
+
+    if (!self._currentDetail || !self._currentDetail.device) {
+      layer3.innerHTML = '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-title">No Data</div><div class="empty-state-detail">Device not found.</div><button class="btn btn-secondary" onclick="DevicesPage._closeLayer3()">Back</button></div>';
+      return;
+    }
+
+    layer3.innerHTML = self._buildLayer3();
+    self._setupLayer3Events();
+  },
+
+  _closeLayer3: function () {
+    var layer1 = document.getElementById('layer1');
+    var layer3 = document.getElementById('layer3');
+    if (layer1) layer1.style.display = 'block';
+    if (layer3) layer3.style.display = 'none';
+    this._currentDetail = null;
+    this._currentSchedule = null;
+  },
+
+  _buildLayer3: function () {
+    var detail = this._currentDetail;
+    var dev = detail.device;
+    var state = detail.state || {};
+    var extra = detail.telemetryExtra || {};
+    var config = detail.config || {};
+    var schedule = this._currentSchedule || { syncStatus: 'unknown', slots: [] };
+
+    var statusTag = state.isOnline
+      ? '<span class="tag-online">Online</span>'
+      : '<span class="tag-offline">Offline</span>';
+
+    var gwName = dev.gatewayName || dev.gatewayId || '--';
+
+    return '<div class="detail-header">' +
+        '<div class="breadcrumb">' +
+          '<a href="#" class="bc-link" id="bc-back">Devices</a>' +
+          ' \u203a <span>' + gwName + '</span>' +
+          ' \u203a <span>' + dev.assetId + '</span>' +
+        '</div>' +
+        '<h2>' + dev.assetId + ' ' + statusTag + '</h2>' +
+        '<div class="detail-subtitle">' + dev.brand + ' ' + dev.model + ' \u00b7 ' + dev.assetType + '</div>' +
+      '</div>' +
+      '<div class="detail-page">' +
+        '<div class="left-col">' +
+          this._buildEnergyFlow(state) +
+          this._buildBatteryStatus(state) +
+          this._buildInverterGrid(state, extra) +
+        '</div>' +
+        '<div class="right-col">' +
+          this._buildDeviceConfig(dev, config) +
+          this._buildScheduleCard(schedule) +
+        '</div>' +
+      '</div>' +
+      '<div class="action-bar">' +
+        '<button class="btn btn-secondary" id="detail-back">Back to List</button>' +
+        '<button class="btn btn-primary" id="detail-apply">Apply to Gateway</button>' +
+      '</div>';
+  },
+
+  // ---- Energy Flow Diamond ----
+  _buildEnergyFlow: function (state) {
+    var pvVal = state.pvPower != null ? formatNumber(state.pvPower, 1) + ' kW' : '0 kW';
+    var batVal = state.batteryPower != null ? formatNumber(Math.abs(state.batteryPower), 1) + ' kW' : '0 kW';
+    var loadVal = state.loadPower != null ? formatNumber(state.loadPower, 1) + ' kW' : '0 kW';
+    var gridVal = state.gridPowerKw != null ? formatNumber(Math.abs(state.gridPowerKw), 1) + ' kW' : '0 kW';
+
+    var batSub = 'Idle';
+    if (state.batteryPower > 0.05) batSub = 'SoC ' + (state.batterySoc || 0) + '% \u00b7 Charging';
+    else if (state.batteryPower < -0.05) batSub = 'SoC ' + (state.batterySoc || 0) + '% \u00b7 Discharging';
+    else batSub = 'SoC ' + (state.batterySoc || 0) + '% \u00b7 Idle';
+
+    var gridClass = state.gridPowerKw > 0 ? 'importing' : state.gridPowerKw < 0 ? 'exporting' : '';
+    var gridSub = state.gridPowerKw > 0 ? 'Importing' : state.gridPowerKw < 0 ? 'Exporting' : 'Idle';
+
+    var showTop = state.pvPower > 0.01;
+    var showLeft = Math.abs(state.batteryPower || 0) > 0.01;
+    var showRight = (state.loadPower || 0) > 0.01;
+    var showBottom = Math.abs(state.gridPowerKw || 0) > 0.01;
+
+    var body = '<div class="energy-flow-diamond">' +
+      '<div class="ef-pv ef-node"><div class="ef-node-icon">\u2600\ufe0f</div><div class="ef-node-value">' + pvVal + '</div><div class="ef-node-label">Solar PV</div></div>' +
+      '<div class="ef-line-top' + (showTop ? '' : ' hidden') + '"></div>' +
+      '<div class="ef-battery ef-node"><div class="ef-node-icon">\ud83d\udd0b</div><div class="ef-node-value">' + batVal + '</div><div class="ef-node-sub">' + batSub + '</div></div>' +
+      '<div class="ef-line-left' + (showLeft ? '' : ' hidden') + '"></div>' +
+      '<div class="ef-center"><div class="ef-center-hub"></div></div>' +
+      '<div class="ef-line-right' + (showRight ? '' : ' hidden') + '"></div>' +
+      '<div class="ef-load ef-node"><div class="ef-node-icon">\ud83c\udfe0</div><div class="ef-node-value">' + loadVal + '</div><div class="ef-node-label">Load</div></div>' +
+      '<div class="ef-line-bottom' + (showBottom ? '' : ' hidden') + '"></div>' +
+      '<div class="ef-grid ef-node ' + gridClass + '"><div class="ef-node-icon">\u26a1</div><div class="ef-node-value">' + gridVal + '</div><div class="ef-node-sub">' + gridSub + '</div></div>' +
+    '</div>';
+
+    return Components.sectionCard('Energy Flow', body);
+  },
+
+  // ---- Battery Status ----
+  _buildBatteryStatus: function (state) {
+    var rows = [
+      { label: 'State of Charge', value: state.batterySoc != null ? state.batterySoc + '%' : '--' },
+      { label: 'State of Health', value: state.batSoh != null ? state.batSoh + '%' : '--' },
+      { label: 'Voltage', value: state.batteryVoltage != null ? formatNumber(state.batteryVoltage, 1) + ' V' : '--' },
+      { label: 'Current', value: state.batteryCurrent != null ? formatNumber(state.batteryCurrent, 1) + ' A' : '--' },
+      { label: 'Temperature', value: state.batteryTemperature != null ? state.batteryTemperature + '\u00b0C' : '--' },
+      { label: 'Charge/Discharge Rate', value: state.batteryPower != null ? formatNumber(state.batteryPower, 2) + ' kW' : '--' },
+      { label: 'Max Charge Current', value: state.maxChargeCurrent != null ? state.maxChargeCurrent + ' A' : '--' },
+      { label: 'Max Discharge Current', value: state.maxDischargeCurrent != null ? state.maxDischargeCurrent + ' A' : '--' },
+    ];
+    var body = rows.map(function (r) {
+      return '<div class="tele-row"><span class="tele-label">' + r.label + '</span><span class="tele-value">' + r.value + '</span></div>';
+    }).join('');
+    return Components.sectionCard('Battery Status', body);
+  },
+
+  // ---- Inverter & Grid ----
+  _buildInverterGrid: function (state, extra) {
+    var rows = [
+      { label: 'PV Power', value: state.pvPower != null ? formatNumber(state.pvPower, 2) + ' kW' : '--' },
+      { label: 'Inverter Temp', value: state.inverterTemp != null ? state.inverterTemp + '\u00b0C' : '--' },
+      { label: 'Grid Power', value: state.gridPowerKw != null ? formatNumber(state.gridPowerKw, 2) + ' kW' : '--' },
+      { label: 'Grid Voltage', value: extra.gridVoltageR != null ? formatNumber(extra.gridVoltageR, 1) + ' V' : '--' },
+      { label: 'Grid Current', value: extra.gridCurrentR != null ? formatNumber(extra.gridCurrentR, 1) + ' A' : '--' },
+      { label: 'Power Factor', value: extra.gridPf != null ? formatNumber(extra.gridPf, 2) : '--' },
+      { label: 'Home Load', value: state.loadPower != null ? formatNumber(state.loadPower, 2) + ' kW' : '--' },
+      { label: 'Total Buy', value: extra.totalBuyKwh != null ? formatNumber(extra.totalBuyKwh, 1) + ' kWh' : '--' },
+      { label: 'Total Sell', value: extra.totalSellKwh != null ? formatNumber(extra.totalSellKwh, 1) + ' kWh' : '--' },
+    ];
+    var body = rows.map(function (r) {
+      return '<div class="tele-row"><span class="tele-label">' + r.label + '</span><span class="tele-value">' + r.value + '</span></div>';
+    }).join('');
+    return Components.sectionCard('Inverter & Grid', body);
+  },
+
+  // ---- Device Configuration ----
+  _buildDeviceConfig: function (dev, config) {
+    var defaults = config.defaults || {};
+    var modeOptions = ['self_consumption', 'peak_valley_arbitrage', 'peak_shaving'];
+    var modeLabels = { self_consumption: 'Self Consumption', peak_valley_arbitrage: 'Peak Valley Arbitrage', peak_shaving: 'Peak Shaving' };
+
+    var modeSelect = '<select id="cfg-mode" class="config-input">' +
+      modeOptions.map(function (m) {
+        return '<option value="' + m + '"' + (dev.operationMode === m ? ' selected' : '') + '>' + modeLabels[m] + '</option>';
+      }).join('') + '</select>';
+
+    var rows = [
+      { label: 'Operation Mode', input: modeSelect },
+      { label: 'Capacity (kW)', input: '<input type="number" id="cfg-cap-kw" class="config-input" step="0.1" value="' + (dev.capacidadeKw || 5) + '">' },
+      { label: 'Capacity (kWh)', input: '<input type="number" id="cfg-cap-kwh" class="config-input" step="0.1" value="' + (dev.capacityKwh || 10) + '">' },
+      { label: 'SOC Min (%)', input: '<input type="number" id="cfg-soc-min" class="config-input" min="0" max="100" value="' + (config.socMin != null ? config.socMin : 10) + '">' + (defaults.socMin != null ? ' <span class="config-default">\u2190 Default ' + defaults.socMin + '</span>' : '') },
+      { label: 'SOC Max (%)', input: '<input type="number" id="cfg-soc-max" class="config-input" min="0" max="100" value="' + (config.socMax != null ? config.socMax : 95) + '">' + (defaults.socMax != null ? ' <span class="config-default">\u2190 Default ' + defaults.socMax + '</span>' : '') },
+      { label: 'Max Charge Rate (kW)', input: '<input type="number" id="cfg-charge" class="config-input" step="0.1" value="' + (config.maxChargeRateKw || 5) + '">' },
+      { label: 'Max Discharge Rate (kW)', input: '<input type="number" id="cfg-discharge" class="config-input" step="0.1" value="' + (config.maxDischargeRateKw || 5) + '">' },
+      { label: 'Allow Export', input: '<select id="cfg-export" class="config-input"><option value="false"' + (!dev.allowExport ? ' selected' : '') + '>No</option><option value="true"' + (dev.allowExport ? ' selected' : '') + '>Yes</option></select>' },
+      { label: 'Grid Import Limit (kW)', input: '<input type="number" id="cfg-grid-limit" class="config-input" step="0.1" min="0" value="' + (config.gridImportLimitKw || 3) + '">' },
+    ];
+
+    var body = rows.map(function (r) {
+      return '<div class="config-row"><span class="config-label">' + r.label + '</span><div class="config-field">' + r.input + '</div></div>';
+    }).join('');
+
+    return Components.sectionCard('Device Configuration', body);
+  },
+
+  // ---- Daily Schedule ----
+  _buildScheduleCard: function (schedule) {
+    var syncBadgeClass = schedule.syncStatus === 'synced' ? 'sync-ok' : schedule.syncStatus === 'pending' ? 'sync-pending' : 'sync-unknown';
+    var syncLabel = schedule.syncStatus === 'synced' ? 'Synced' : schedule.syncStatus === 'pending' ? 'Pending' : 'Unknown';
+    var lastAck = schedule.lastAckAt ? formatISODateTime(schedule.lastAckAt) : '--';
+
+    var modeColors = {
+      self_consumption: '#22c55e',
+      peak_valley_arbitrage: '#3b82f6',
+      peak_shaving: '#a855f7',
+    };
+    var modeLabels = { self_consumption: 'Self Consumption', peak_valley_arbitrage: 'Peak Valley Arb.', peak_shaving: 'Peak Shaving' };
+
+    // Timeline bar
+    var barSegments = (schedule.slots || []).map(function (slot) {
+      var widthPct = ((slot.endHour - slot.startHour) / 24 * 100).toFixed(2);
+      var color = modeColors[slot.mode] || '#6b7280';
+      return '<div class="schedule-segment" style="width:' + widthPct + '%;background:' + color + '" title="' + slot.startHour + ':00-' + slot.endHour + ':00 ' + (modeLabels[slot.mode] || slot.mode) + '"></div>';
+    }).join('');
+
+    var timeMarkers = '<div class="schedule-markers"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span></div>';
+
+    // Table
+    var tableRows = (schedule.slots || []).map(function (slot, i) {
+      var color = modeColors[slot.mode] || '#6b7280';
+      return '<tr>' +
+        '<td>' + String(slot.startHour).padStart(2, '0') + ':00</td>' +
+        '<td>' + String(slot.endHour).padStart(2, '0') + ':00</td>' +
+        '<td><span class="schedule-mode-badge" style="background:' + color + '">' + (modeLabels[slot.mode] || slot.mode) + '</span></td>' +
+        '</tr>';
+    }).join('');
+
+    var body = '<div class="sync-status ' + syncBadgeClass + '">' +
+        '<span class="sync-dot"></span> ' + syncLabel +
+        '<span class="sync-ack">Last ACK: ' + lastAck + '</span>' +
+      '</div>' +
+      '<div class="schedule-bar">' + barSegments + '</div>' +
+      timeMarkers +
+      '<table class="schedule-table"><thead><tr><th>Start</th><th>End</th><th>Mode</th></tr></thead><tbody>' + tableRows + '</tbody></table>';
+
+    return Components.sectionCard('Daily Schedule', body);
+  },
+
+  // =========================================================
+  // LAYER 3 EVENTS
+  // =========================================================
+
+  _setupLayer3Events: function () {
+    var self = this;
+    var bcBack = document.getElementById('bc-back');
+    var detailBack = document.getElementById('detail-back');
+    var applyBtn = document.getElementById('detail-apply');
+
+    if (bcBack) {
+      bcBack.addEventListener('click', function (e) {
+        e.preventDefault();
+        self._closeLayer3();
+      });
+    }
+    if (detailBack) {
+      detailBack.addEventListener('click', function () {
+        self._closeLayer3();
+      });
+    }
+    if (applyBtn) {
+      applyBtn.addEventListener('click', function () {
+        self._handleApply();
+      });
+    }
+  },
+
+  _handleApply: async function () {
+    var self = this;
+    var dev = self._currentDetail ? self._currentDetail.device : null;
+    if (!dev) return;
+
+    var applyBtn = document.getElementById('detail-apply');
+    if (applyBtn) {
+      applyBtn.disabled = true;
+      applyBtn.textContent = 'Submitting...';
+    }
+
+    try {
+      // Gather schedule from current state
+      var schedule = self._currentSchedule || { slots: [] };
+      await DataSource.devices.putSchedule(dev.assetId, schedule.slots || []);
+
+      if (applyBtn) {
+        applyBtn.textContent = 'Submitted \u2713';
+        applyBtn.classList.add('btn-success');
+      }
+
+      // Show toast
+      self._showToast('Schedule submitted. Waiting for gateway confirmation.', 'success');
+
+      setTimeout(function () {
+        if (applyBtn) {
+          applyBtn.textContent = 'Apply to Gateway';
+          applyBtn.disabled = false;
+          applyBtn.classList.remove('btn-success');
+        }
+      }, 3000);
+    } catch (err) {
+      console.error('[P2] putSchedule error:', err);
+      self._showToast('Failed to submit schedule.', 'error');
+      if (applyBtn) {
+        applyBtn.textContent = 'Apply to Gateway';
+        applyBtn.disabled = false;
+      }
+    }
+  },
+
+  _showToast: function (message, type) {
+    type = type || 'info';
+    var toast = document.createElement('div');
+    toast.className = 'p4-toast p4-toast-' + type;
+    var icons = { success: '\u2705', warning: '\u26a0\ufe0f', info: '\u2139\ufe0f', error: '\u274c' };
+    toast.innerHTML = '<span class="p4-toast-icon">' + (icons[type] || '') + '</span><span class="p4-toast-msg">' + message + '</span>';
+    document.body.appendChild(toast);
+    requestAnimationFrame(function () { toast.classList.add('p4-toast-show'); });
+    setTimeout(function () {
+      toast.classList.remove('p4-toast-show');
+      setTimeout(function () { if (toast.parentNode) toast.parentNode.removeChild(toast); }, 300);
+    }, 3000);
   },
 };

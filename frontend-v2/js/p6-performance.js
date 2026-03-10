@@ -77,7 +77,7 @@ var PerformancePage = {
       { titleKey: "perf.obj2", key: "optimization", icon: "\uD83D\uDCCA" },
       { titleKey: "perf.obj3", key: "operations", icon: "\u2699\uFE0F" },
     ];
-    var scorecard = self._scorecard || SCORECARD;
+    var scorecard = self._scorecard || {};
 
     var columns = sections
       .map(function (sec) {
@@ -165,7 +165,7 @@ var PerformancePage = {
   _renderSavingsChart: function () {
     // Customer sees only their own home (Casa Silva); Admin/Integrador see all
     var role = typeof currentRole !== "undefined" ? currentRole : "admin";
-    var allSavings = this._savings || SAVINGS_BY_HOME;
+    var allSavings = this._savings || [];
     var savingsData =
       role === "customer"
         ? allSavings.filter(function (h) {

@@ -46,9 +46,11 @@ var HEMSPage = {
       var results = await Promise.all([
         DataSource.hems.overview(),
         DataSource.devices.list(),
+        DataSource.devices.gateways(),
       ]);
       self._overview = results[0];
       self._devices = results[1];
+      self._gateways = results[2];
     } catch (err) {
       showErrorBoundary("hems-content", err);
       return;
@@ -109,7 +111,7 @@ var HEMSPage = {
   _buildModeCards: function (isAdmin) {
     var dist =
       DemoStore.get("targetModeDistribution") ||
-      (this._overview ? this._overview.modeDistribution : MODE_DISTRIBUTION);
+      (this._overview ? this._overview.modeDistribution : {});
     var total =
       dist.self_consumption + dist.peak_valley_arbitrage + dist.peak_shaving;
     var modes = Object.keys(this._modeKeys);
@@ -164,19 +166,17 @@ var HEMSPage = {
     var tooltip = isAdmin ? "" : ' title="' + t("hems.requiresAdmin") + '"';
 
     // Build integrador options
-    var integradores = this._overview
-      ? this._overview.integradores
-      : INTEGRADORES;
-    var intOptions = (integradores || INTEGRADORES)
+    var integradores = this._overview ? this._overview.integradores : [];
+    var intOptions = (integradores || [])
       .map(function (ig) {
         return '<option value="' + ig.orgId + '">' + ig.name + "</option>";
       })
       .join("");
 
-    // Build home options
-    var homeOptions = (this._homes || HOMES)
-      .map(function (h) {
-        return '<option value="' + h.id + '">' + h.name + "</option>";
+    // Build gateway options
+    var homeOptions = (this._gateways || [])
+      .map(function (gw) {
+        return '<option value="' + gw.gatewayId + '">' + gw.name + "</option>";
       })
       .join("");
 
@@ -284,7 +284,7 @@ var HEMSPage = {
   _buildTarifaCard: function (isAdmin) {
     var rates =
       DemoStore.get("tarifaRates") ||
-      (this._overview ? this._overview.tarifaRates : TARIFA_RATES);
+      (this._overview ? this._overview.tarifaRates : {});
 
     var body = [
       '<div class="p4-tarifa-table">',
@@ -337,7 +337,7 @@ var HEMSPage = {
 
   // ---- T4.4: ACK Status Panel (D3: simplified — no ackList table) ----
   _buildAckStatusCard: function () {
-    var dispatch = this._overview ? this._overview.lastDispatch : LAST_DISPATCH;
+    var dispatch = this._overview ? this._overview.lastDispatch : {};
 
     var toLabel = this._modeKeys[dispatch.toMode]
       ? t(this._modeKeys[dispatch.toMode].titleKey)
@@ -481,7 +481,7 @@ var HEMSPage = {
     var typeVal = filtType ? filtType.value : "";
     var modeVal = filtMode ? filtMode.value : "";
 
-    var devices = (this._devices || DEVICES).slice();
+    var devices = (this._devices || []).slice();
 
     if (orgVal) {
       devices = devices.filter(function (d) {
@@ -490,7 +490,7 @@ var HEMSPage = {
     }
     if (homeVal) {
       devices = devices.filter(function (d) {
-        return d.homeId === homeVal;
+        return d.gatewayId === homeVal;
       });
     }
     if (typeVal) {
@@ -499,7 +499,7 @@ var HEMSPage = {
       });
     }
     // Mode filter: we simulate device modes by distributing across devices
-    // For demo, assign modes round-robin based on MODE_DISTRIBUTION
+    // For demo, assign modes round-robin based on mode distribution
     if (modeVal) {
       var modeAssignment = this._getDeviceModeAssignment();
       devices = devices.filter(function (d) {
@@ -514,7 +514,7 @@ var HEMSPage = {
     // Assign modes to devices based on distribution
     var dist =
       DemoStore.get("targetModeDistribution") ||
-      (this._overview ? this._overview.modeDistribution : MODE_DISTRIBUTION);
+      (this._overview ? this._overview.modeDistribution : {});
     var assignment = {};
     var modes = [];
 
@@ -531,7 +531,7 @@ var HEMSPage = {
     });
 
     // Assign to devices in order
-    (this._devices || DEVICES).forEach(function (d, idx) {
+    (this._devices || []).forEach(function (d, idx) {
       assignment[d.deviceId] = modes[idx % modes.length] || "self_consumption";
     });
 
@@ -551,11 +551,12 @@ var HEMSPage = {
       return;
     }
 
-    // Group by home
+    // Group by gateway
     var homeGroups = {};
     devices.forEach(function (d) {
-      if (!homeGroups[d.homeName]) homeGroups[d.homeName] = 0;
-      homeGroups[d.homeName]++;
+      var key = d.gatewayName || d.gatewayId || "Unknown";
+      if (!homeGroups[key]) homeGroups[key] = 0;
+      homeGroups[key]++;
     });
 
     var offlineCount = devices.filter(function (d) {
@@ -643,9 +644,7 @@ var HEMSPage = {
           var newDist = Object.assign(
             {},
             DemoStore.get("targetModeDistribution") ||
-              (self._overview
-                ? self._overview.modeDistribution
-                : MODE_DISTRIBUTION),
+              (self._overview ? self._overview.modeDistribution : {}),
           );
           // Move all filtered devices to target mode
           var perMode = {};
@@ -705,7 +704,7 @@ var HEMSPage = {
   _showTarifaModal: function () {
     var rates =
       DemoStore.get("tarifaRates") ||
-      (this._overview ? this._overview.tarifaRates : TARIFA_RATES);
+      (this._overview ? this._overview.tarifaRates : {});
     var self = this;
 
     var modalHTML = [

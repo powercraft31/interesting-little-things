@@ -45,7 +45,7 @@ const FLEET = {
   onlineCount: 44,
   offlineCount: 3,
   onlineRate: 93.6,
-  totalHomes: 3,
+  totalGateways: 4,
   totalIntegradores: 2,
 };
 
@@ -362,26 +362,72 @@ function initMockData() {
 }
 
 // =========================================================
-// HOMES
+// GATEWAYS (v5.19: replaces HOMES)
 // =========================================================
-const HOMES = [
+const GATEWAYS = [
   {
-    id: "HOME-001",
-    name: "Casa Silva",
-    orgId: "org-001",
-    orgName: "Solar São Paulo",
+    gatewayId: "WKRD24070202100144F",
+    name: "Casa Silva \u00b7 Home-1",
+    orgId: "ORG_ENERGIA_001",
+    orgName: "Solfacil Pilot Corp",
+    status: "online",
+    lastSeenAt: "2026-03-10T10:15:30Z",
+    deviceCount: 12,
+    emsHealth: {
+      wifiRssi: -42,
+      firmwareVersion: "v2.1.3",
+      uptimeSeconds: 1231200,
+      errorCodes: [],
+    },
+    contractedDemandKw: 15.0,
   },
   {
-    id: "HOME-002",
-    name: "Casa Santos",
-    orgId: "org-001",
-    orgName: "Solar São Paulo",
+    gatewayId: "WKRD24070202100228G",
+    name: "Casa Santos \u00b7 Home-2",
+    orgId: "ORG_ENERGIA_001",
+    orgName: "Solfacil Pilot Corp",
+    status: "online",
+    lastSeenAt: "2026-03-10T10:15:22Z",
+    deviceCount: 8,
+    emsHealth: {
+      wifiRssi: -58,
+      firmwareVersion: "v2.1.3",
+      uptimeSeconds: 612000,
+      errorCodes: [],
+    },
+    contractedDemandKw: 12.0,
   },
   {
-    id: "HOME-003",
-    name: "Casa Oliveira",
-    orgId: "org-002",
-    orgName: "Green Energy Rio",
+    gatewayId: "WKRD24070202100212P",
+    name: "Casa Oliveira \u00b7 Home-3",
+    orgId: "ORG_ENERGIA_001",
+    orgName: "Solfacil Pilot Corp",
+    status: "offline",
+    lastSeenAt: "2026-03-10T07:15:00Z",
+    deviceCount: 6,
+    emsHealth: {
+      wifiRssi: null,
+      firmwareVersion: "v2.0.8",
+      uptimeSeconds: null,
+      errorCodes: ["E_WIFI_LOST"],
+    },
+    contractedDemandKw: 10.0,
+  },
+  {
+    gatewayId: "WKRD24070202100141I",
+    name: "Test Gateway",
+    orgId: "ORG_ENERGIA_001",
+    orgName: "Solfacil Pilot Corp",
+    status: "online",
+    lastSeenAt: "2026-03-10T10:15:26Z",
+    deviceCount: 0,
+    emsHealth: {
+      wifiRssi: -35,
+      firmwareVersion: "v2.1.3",
+      uptimeSeconds: 97200,
+      errorCodes: [],
+    },
+    contractedDemandKw: null,
   },
 ];
 
@@ -495,7 +541,7 @@ function generateDeviceList() {
     brandCounter[type]++;
 
     const homeSpec = homeBounds.find((h) => i >= h.start && i <= h.end);
-    const home = HOMES[homeSpec.idx];
+    const gw = GATEWAYS[homeSpec.idx];
     const isOffline = offlineSet.has(deviceId);
 
     const commDay = 15 + Math.floor(i / 5);
@@ -521,10 +567,10 @@ function generateDeviceList() {
       type,
       brand: bm.brand,
       model: bm.model,
-      homeId: home.id,
-      homeName: home.name,
-      orgId: home.orgId,
-      orgName: home.orgName,
+      gatewayId: gw.gatewayId,
+      gatewayName: gw.name,
+      orgId: gw.orgId,
+      orgName: gw.orgName,
       status: isOffline ? "offline" : "online",
       lastSeen,
       commissionDate: commDate,
@@ -559,39 +605,6 @@ const UNASSIGNED_DEVICES = [
     type: "EV Charger",
     brand: "ABB",
     model: "Terra AC W7-T-0",
-  },
-];
-
-// =========================================================
-// COMMISSIONING HISTORY
-// =========================================================
-const COMMISSIONING_HISTORY = [
-  {
-    homeId: "HOME-001",
-    integrador: "Solar São Paulo",
-    start: "15/02/2026 09:00",
-    complete: "15/02/2026 10:25",
-    durationMin: 85,
-    devices: 15,
-    firstTelemetry: "15/02/2026 10:43",
-  },
-  {
-    homeId: "HOME-002",
-    integrador: "Solar São Paulo",
-    start: "18/02/2026 14:00",
-    complete: "18/02/2026 15:50",
-    durationMin: 110,
-    devices: 11,
-    firstTelemetry: "18/02/2026 16:15",
-  },
-  {
-    homeId: "HOME-003",
-    integrador: "Green Energy Rio",
-    start: "22/02/2026 10:00",
-    complete: "22/02/2026 12:25",
-    durationMin: 145,
-    devices: 21,
-    firstTelemetry: "22/02/2026 12:52",
   },
 ];
 
@@ -838,10 +851,24 @@ const SCORECARD = {
 };
 
 const SAVINGS_BY_HOME = [
-  { home: "Casa Silva", total: 145.0, alpha: 74.2, sc: 85, tou: 40, ps: 20 },
-  { home: "Casa Santos", total: 118.5, alpha: 68.1, sc: 65, tou: 35, ps: 18.5 },
   {
-    home: "Casa Oliveira",
+    home: "Casa Silva \u00b7 Home-1",
+    total: 145.0,
+    alpha: 74.2,
+    sc: 85,
+    tou: 40,
+    ps: 20,
+  },
+  {
+    home: "Casa Santos \u00b7 Home-2",
+    total: 118.5,
+    alpha: 68.1,
+    sc: 65,
+    tou: 35,
+    ps: 18.5,
+  },
+  {
+    home: "Casa Oliveira \u00b7 Home-3",
     total: 167.3,
     alpha: 79.5,
     sc: 95,
@@ -849,6 +876,194 @@ const SAVINGS_BY_HOME = [
     ps: 24.3,
   },
 ];
+
+// =========================================================
+// v5.19: MOCK GATEWAY DEVICES (per-gateway device lists)
+// =========================================================
+const MOCK_GW_DEVICES = {
+  WKRD24070202100144F: {
+    gateway: {
+      gatewayId: "WKRD24070202100144F",
+      name: "Casa Silva \u00b7 Home-1",
+      status: "online",
+    },
+    devices: DEVICES.filter(function (d) {
+      return d.gatewayId === "WKRD24070202100144F";
+    }).map(function (d) {
+      return {
+        assetId: d.deviceId,
+        name: d.deviceId,
+        assetType: d.type,
+        brand: d.brand,
+        model: d.model,
+        serialNumber: "SN-" + d.deviceId,
+        capacidadeKw: 5.0,
+        capacityKwh: 10.0,
+        operationMode: "self_consumption",
+        allowExport: false,
+        isActive: true,
+        state: {
+          batterySoc: d.telemetry.batterySoc || 72,
+          batteryPower: d.telemetry.chargeRate || 2.3,
+          pvPower: d.telemetry.pvPower || 3.2,
+          gridPowerKw: d.telemetry.gridExport ? -d.telemetry.gridExport : -0.7,
+          loadPower: 4.8,
+          inverterTemp: 42.0,
+          batSoh: 96.0,
+          batteryTemperature: 28.0,
+          isOnline: d.status === "online",
+        },
+      };
+    }),
+  },
+  WKRD24070202100228G: {
+    gateway: {
+      gatewayId: "WKRD24070202100228G",
+      name: "Casa Santos \u00b7 Home-2",
+      status: "online",
+    },
+    devices: DEVICES.filter(function (d) {
+      return d.gatewayId === "WKRD24070202100228G";
+    }).map(function (d) {
+      return {
+        assetId: d.deviceId,
+        name: d.deviceId,
+        assetType: d.type,
+        brand: d.brand,
+        model: d.model,
+        serialNumber: "SN-" + d.deviceId,
+        capacidadeKw: 5.0,
+        capacityKwh: 10.0,
+        operationMode: "peak_valley_arbitrage",
+        allowExport: false,
+        isActive: true,
+        state: {
+          batterySoc: d.telemetry.batterySoc || 65,
+          batteryPower: d.telemetry.chargeRate || 1.8,
+          pvPower: d.telemetry.pvPower || 2.8,
+          gridPowerKw: d.telemetry.gridExport ? -d.telemetry.gridExport : 0.3,
+          loadPower: 3.5,
+          inverterTemp: 38.0,
+          batSoh: 94.0,
+          batteryTemperature: 26.0,
+          isOnline: d.status === "online",
+        },
+      };
+    }),
+  },
+  WKRD24070202100212P: {
+    gateway: {
+      gatewayId: "WKRD24070202100212P",
+      name: "Casa Oliveira \u00b7 Home-3",
+      status: "offline",
+    },
+    devices: DEVICES.filter(function (d) {
+      return d.gatewayId === "WKRD24070202100212P";
+    }).map(function (d) {
+      return {
+        assetId: d.deviceId,
+        name: d.deviceId,
+        assetType: d.type,
+        brand: d.brand,
+        model: d.model,
+        serialNumber: "SN-" + d.deviceId,
+        capacidadeKw: 5.0,
+        capacityKwh: 10.0,
+        operationMode: "peak_shaving",
+        allowExport: true,
+        isActive: true,
+        state: {
+          batterySoc: d.telemetry.batterySoc || 45,
+          batteryPower: 0,
+          pvPower: 0,
+          gridPowerKw: 0,
+          loadPower: 0,
+          inverterTemp: 0,
+          batSoh: 92.0,
+          batteryTemperature: 24.0,
+          isOnline: false,
+        },
+      };
+    }),
+  },
+  WKRD24070202100141I: {
+    gateway: {
+      gatewayId: "WKRD24070202100141I",
+      name: "Test Gateway",
+      status: "online",
+    },
+    devices: [],
+  },
+};
+
+// =========================================================
+// v5.19: DEVICE DETAIL MOCK
+// =========================================================
+const MOCK_DEVICE_DETAIL = {
+  device: {
+    assetId: "DEV-001",
+    name: "INV-BAT-001",
+    assetType: "Inverter + Battery",
+    brand: "Growatt",
+    model: "MIN 5000TL-XH",
+    serialNumber: "GW5048EM2301001",
+    capacidadeKw: 5.0,
+    capacityKwh: 10.0,
+    operationMode: "self_consumption",
+    allowExport: false,
+    retailBuyRateKwh: 0.8,
+    retailSellRateKwh: 0.25,
+    gatewayId: "WKRD24070202100144F",
+    gatewayName: "Casa Silva \u00b7 Home-1",
+    gatewayStatus: "online",
+  },
+  state: {
+    batterySoc: 72.0,
+    batSoh: 96.0,
+    batteryVoltage: 51.2,
+    batteryCurrent: 45.1,
+    batteryTemperature: 28.0,
+    batteryPower: 2.3,
+    pvPower: 3.2,
+    gridPowerKw: -0.7,
+    loadPower: 4.8,
+    flloadPower: 5.1,
+    inverterTemp: 42.0,
+    maxChargeCurrent: 100.0,
+    maxDischargeCurrent: 100.0,
+    isOnline: true,
+    updatedAt: "2026-03-10T10:15:30Z",
+  },
+  telemetryExtra: {
+    gridVoltageR: 221.0,
+    gridCurrentR: 3.2,
+    gridPf: 0.97,
+    totalBuyKwh: 1247.3,
+    totalSellKwh: 892.1,
+  },
+  config: {
+    socMin: 10,
+    socMax: 95,
+    maxChargeRateKw: 5.0,
+    maxDischargeRateKw: 5.0,
+    gridImportLimitKw: 3.0,
+    defaults: { socMin: 20, socMax: 95, source: "vpp_strategies" },
+  },
+};
+
+// =========================================================
+// v5.19: DEVICE SCHEDULE MOCK
+// =========================================================
+const MOCK_DEVICE_SCHEDULE = {
+  syncStatus: "synced",
+  lastAckAt: "2026-03-10T10:15:18Z",
+  slots: [
+    { startHour: 0, endHour: 5, mode: "peak_valley_arbitrage" },
+    { startHour: 5, endHour: 17, mode: "self_consumption" },
+    { startHour: 17, endHour: 20, mode: "peak_shaving" },
+    { startHour: 20, endHour: 24, mode: "peak_valley_arbitrage" },
+  ],
+};
 
 // =========================================================
 // BRAZILIAN LOCALE FORMATTERS

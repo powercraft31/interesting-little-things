@@ -25,9 +25,7 @@ const FleetPage = {
         integradores: integradores,
         offlineEvents: offlineEvents,
         uptimeTrend: uptimeTrend,
-        deviceTypes:
-          overview.deviceTypes ||
-          (typeof DEVICE_TYPES !== "undefined" ? DEVICE_TYPES : []),
+        deviceTypes: overview.deviceTypes || [],
       };
     } catch (err) {
       showErrorBoundary("fleet-content", err);
@@ -84,15 +82,15 @@ const FleetPage = {
   // ---- KPI Cards ----
   /**
    * Compute tenant-scoped fleet stats.
-   * Admin sees global FLEET; Integrador sees only org-001 (Solar São Paulo).
+   * Admin sees global fleet; Integrador sees only org-001 (Solar São Paulo).
    */
   /**
    * Tenant-scoped fleet stats.
    * Admin: full global view. Integrador: org-001 only. Customer: single home.
    */
   _getFleetStats(role) {
-    var integradores = this._data ? this._data.integradores : INTEGRADORES;
-    var fleet = this._data ? this._data.fleet : FLEET;
+    var integradores = this._data ? this._data.integradores : [];
+    var fleet = this._data ? this._data.fleet : {};
     if (role === "integrador") {
       var org = integradores.find(function (i) {
         return i.orgId === "org-001";
@@ -105,18 +103,17 @@ const FleetPage = {
         onlineCount: online,
         offlineCount: offline,
         onlineRate: org.onlineRate,
-        totalHomes: 1,
+        totalGateways: 1,
         totalIntegradores: 1,
       };
     }
     if (role === "customer") {
-      // Customer sees only their single home (Casa Silva = ~8 devices)
       return {
         totalDevices: 8,
         onlineCount: 8,
         offlineCount: 0,
         onlineRate: 100,
-        totalHomes: 1,
+        totalGateways: 1,
         totalIntegradores: 0,
       };
     }
@@ -147,7 +144,10 @@ const FleetPage = {
         label: t("fleet.onlineRate"),
         color: onlineColor,
       }),
-      Components.kpiCard({ value: f.totalHomes, label: t("fleet.homes") }),
+      Components.kpiCard({
+        value: f.totalGateways,
+        label: t("fleet.gateways"),
+      }),
       Components.kpiCard({
         value: f.totalIntegradores,
         label: t("fleet.integradores"),
@@ -183,7 +183,7 @@ const FleetPage = {
   },
 
   _buildIntegradorTable(role) {
-    let rows = this._data ? this._data.integradores : INTEGRADORES;
+    let rows = this._data ? this._data.integradores : [];
     if (role === "integrador") {
       rows = rows.filter((r) => r.orgId === "org-001");
     }
@@ -266,7 +266,7 @@ const FleetPage = {
                 : '<span class="backfill-pending" title="Backfill pending">\u26A0\uFE0F</span>',
           },
         ],
-        rows: this._data ? this._data.offlineEvents : OFFLINE_EVENTS,
+        rows: this._data ? this._data.offlineEvents : [],
       }),
     );
   },
@@ -384,9 +384,9 @@ const FleetPage = {
   },
 
   _initDeviceDistChart(role) {
-    var integradores = this._data ? this._data.integradores : INTEGRADORES;
-    var fleet = this._data ? this._data.fleet : FLEET;
-    var deviceTypes = this._data ? this._data.deviceTypes : DEVICE_TYPES;
+    var integradores = this._data ? this._data.integradores : [];
+    var fleet = this._data ? this._data.fleet : {};
+    var deviceTypes = this._data ? this._data.deviceTypes : [];
     // Color fallback for BFF responses missing color field
     var defaultColors = {
       "Inverter + Battery": "#3b82f6",

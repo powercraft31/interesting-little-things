@@ -5,55 +5,27 @@
    ============================================ */
 
 var EnergyPage = {
-  _currentHome: "home-a",
+  _currentGateway: null,
   _activeDeviceTab: "battery",
 
-  _homeKeys: ["home-a", "home-b", "home-c"],
+  _gatewayKeys: [],
 
-  _beforeAfterData: {
-    "home-a": {
+  _baCompare: {
+    0: {
       before: { selfCons: 82, peakKw: 3.2, gridImport: 18.5 },
       after: { selfCons: 97, peakKw: 1.8, gridImport: 4.2 },
     },
-    "home-b": {
+    1: {
       before: { selfCons: 78, peakKw: 3.5, gridImport: 22.1 },
       after: { selfCons: 95, peakKw: 2.0, gridImport: 6.8 },
     },
-    "home-c": {
+    2: {
       before: { selfCons: 85, peakKw: 3.0, gridImport: 16.2 },
       after: { selfCons: 98, peakKw: 1.6, gridImport: 3.1 },
     },
   },
 
-  _crossHomeSummary: [
-    {
-      homeId: "HOME-001",
-      name: "Casa Silva",
-      selfCons: 96.2,
-      gridExport: 5.3,
-      gridImport: 4.2,
-      peakLoad: 1.8,
-      mode: "self_consumption",
-    },
-    {
-      homeId: "HOME-002",
-      name: "Casa Santos",
-      selfCons: 94.1,
-      gridExport: 3.8,
-      gridImport: 6.8,
-      peakLoad: 2.0,
-      mode: "peak_valley_arbitrage",
-    },
-    {
-      homeId: "HOME-003",
-      name: "Casa Oliveira",
-      selfCons: 98.5,
-      gridExport: 7.1,
-      gridImport: 3.1,
-      peakLoad: 1.6,
-      mode: "peak_shaving",
-    },
-  ],
+  _crossGatewaySummary: [],
 
   // =========================================================
   // INIT / LIFECYCLE
@@ -68,15 +40,21 @@ var EnergyPage = {
 
     try {
       var results = await Promise.all([
-        DataSource.devices.homes(),
+        DataSource.devices.gateways(),
         DataSource.energy.summary(),
       ]);
-      self._homes = results[0];
-      self._crossHomeSummary =
-        results[1] && results[1].length ? results[1] : self._crossHomeSummary;
-      self._currentHome = self._homes[0].id;
+      self._gateways = results[0];
+      self._crossGatewaySummary =
+        results[1] && results[1].length
+          ? results[1]
+          : self._crossGatewaySummary;
+      self._currentGateway = self._gateways.length
+        ? self._gateways[0].gatewayId
+        : null;
 
-      var energyData = await DataSource.energy.homeEnergy(self._currentHome);
+      var energyData = self._currentGateway
+        ? await DataSource.energy.gatewayEnergy(self._currentGateway)
+        : {};
       self._currentEnergyData = energyData;
     } catch (err) {
       showErrorBoundary("energy-content", err);
@@ -117,29 +95,29 @@ var EnergyPage = {
 
   _buildContent: function () {
     return [
-      this._buildHomeSelector(),
+      this._buildGatewaySelector(),
       this._buildMainChartCard(),
       this._buildDeviceTabsCard(),
       this._buildBeforeAfterCard(),
-      this._buildCrossHomeSummaryCard(),
+      this._buildCrossGatewaySummaryCard(),
     ].join("");
   },
 
-  _buildHomeSelector: function () {
-    var homes = this._homes || HOMES;
-    var currentHome = this._currentHome;
-    var options = homes
-      .map(function (h) {
-        var selected = h.id === currentHome ? " selected" : "";
+  _buildGatewaySelector: function () {
+    var gateways = this._gateways || [];
+    var currentGw = this._currentGateway;
+    var options = gateways
+      .map(function (gw) {
+        var selected = gw.gatewayId === currentGw ? " selected" : "";
         return (
           '<option value="' +
-          h.id +
+          gw.gatewayId +
           '"' +
           selected +
           ">" +
-          h.name +
+          gw.name +
           " (" +
-          h.id +
+          gw.gatewayId +
           ")</option>"
         );
       })
@@ -148,7 +126,7 @@ var EnergyPage = {
     return (
       '<div class="p3-home-selector-wrap">' +
       '<label class="p3-selector-label">' +
-      t("energy.homeLabel") +
+      t("energy.gatewayLabel") +
       "</label>" +
       '<select id="p3-home-select" class="p3-home-select">' +
       options +
@@ -205,13 +183,12 @@ var EnergyPage = {
   },
 
   _buildBeforeAfterCard: function () {
-    // D1: Map homeId to homeKey for hardcoded BA data
-    var homes = this._homes || HOMES;
-    var homeIdx = homes.findIndex(function (h) {
-      return h.id === EnergyPage._currentHome;
+    var gateways = this._gateways || [];
+    var gwIdx = gateways.findIndex(function (gw) {
+      return gw.gatewayId === EnergyPage._currentGateway;
     });
-    var homeKey = ["home-a", "home-b", "home-c"][homeIdx] || "home-a";
-    var ba = this._beforeAfterData[homeKey];
+    if (gwIdx < 0) gwIdx = 0;
+    var ba = this._baCompare[gwIdx] || this._baCompare[0];
 
     var html =
       '<div class="p3-ba-header">' +
@@ -288,10 +265,10 @@ var EnergyPage = {
       .join("");
   },
 
-  _buildCrossHomeSummaryCard: function () {
+  _buildCrossGatewaySummaryCard: function () {
     var table = Components.dataTable({
       columns: [
-        { key: "name", label: t("energy.col.home") },
+        { key: "name", label: t("energy.col.gateway") },
         {
           key: "selfCons",
           label: t("energy.col.selfCons"),
@@ -345,10 +322,10 @@ var EnergyPage = {
           },
         },
       ],
-      rows: EnergyPage._crossHomeSummary,
+      rows: EnergyPage._crossGatewaySummary,
     });
 
-    return Components.sectionCard(t("energy.crossHome"), table);
+    return Components.sectionCard(t("energy.crossGateway"), table);
   },
 
   // =========================================================
@@ -359,7 +336,7 @@ var EnergyPage = {
     var select = document.getElementById("p3-home-select");
     if (select) {
       select.addEventListener("change", function () {
-        EnergyPage._switchHome(select.value);
+        EnergyPage._switchGateway(select.value);
       });
     }
 
@@ -370,23 +347,23 @@ var EnergyPage = {
     });
   },
 
-  _switchHome: async function (homeId) {
+  _switchGateway: async function (gatewayId) {
     var self = this;
-    self._currentHome = homeId;
+    self._currentGateway = gatewayId;
     try {
-      self._currentEnergyData = await DataSource.energy.homeEnergy(homeId);
+      self._currentEnergyData =
+        await DataSource.energy.gatewayEnergy(gatewayId);
       self._initMainChart();
       self._initActiveDeviceChart();
     } catch (err) {
-      console.error("[Energy] Home switch failed:", err);
+      console.error("[Energy] Gateway switch failed:", err);
     }
-    // D1: Before/After stays hardcoded — map homeId index to homeKey
-    var homes = self._homes || HOMES;
-    var homeIdx = homes.findIndex(function (h) {
-      return h.id === homeId;
+    var gateways = self._gateways || [];
+    var gwIdx = gateways.findIndex(function (gw) {
+      return gw.gatewayId === gatewayId;
     });
-    var homeKey = ["home-a", "home-b", "home-c"][homeIdx];
-    var ba = self._beforeAfterData[homeKey];
+    if (gwIdx < 0) gwIdx = 0;
+    var ba = self._baCompare[gwIdx];
     var cardsEl = document.getElementById("p3-ba-cards");
     if (cardsEl && ba) {
       cardsEl.innerHTML = self._buildBACards(ba);

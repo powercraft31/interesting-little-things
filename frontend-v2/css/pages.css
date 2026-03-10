@@ -1725,3 +1725,363 @@
 [data-theme="light"] .p6-metric-near {
   background: var(--amber-bg);
 }
+
+/* ============================================
+   P2: Gateway-first Device Management (v5.19)
+   ============================================ */
+
+/* ---- Layer 1: Gateway Card List ---- */
+.p2-header { display: flex; align-items: center; justify-content: space-between; margin-bottom: var(--space-lg); }
+.p2-header h2 { margin: 0; font-size: 1.25rem; }
+.p2-header-counts { display: flex; gap: var(--space-lg); font-size: 0.85rem; color: var(--text-muted); }
+.p2-header-counts strong { color: var(--text-primary); }
+
+.gw-list { display: flex; flex-direction: column; gap: var(--space-md); }
+
+.gw-card {
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  overflow: hidden;
+  transition: border-color 0.2s;
+}
+.gw-card:hover { border-color: var(--accent); }
+
+.gw-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-md) var(--space-lg);
+  cursor: pointer;
+  user-select: none;
+}
+
+.gw-status {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.gw-status.online { background: var(--positive); box-shadow: 0 0 6px var(--positive); }
+.gw-status.offline { background: var(--negative); }
+.gw-status.degraded { background: var(--amber); }
+
+.gw-info { flex: 1; min-width: 0; }
+.gw-name { font-weight: 600; font-size: 0.95rem; color: var(--text-primary); }
+.gw-sn { font-family: var(--font-mono); font-size: 0.8rem; color: var(--text-muted); margin-top: 2px; }
+
+.gw-meta {
+  display: flex;
+  gap: var(--space-lg);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+}
+.gw-meta span { white-space: nowrap; }
+.gw-meta strong { color: var(--text-primary); }
+
+.gw-chevron {
+  font-size: 1.1rem;
+  color: var(--text-muted);
+  transition: transform 0.2s;
+  flex-shrink: 0;
+}
+.gw-card[data-expanded="true"] .gw-chevron { transform: rotate(90deg); }
+
+/* ---- Device Rows (inside expanded gateway) ---- */
+.gw-devices {
+  border-top: 1px solid var(--border);
+  padding: var(--space-sm) var(--space-lg) var(--space-md);
+}
+
+.device-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  padding: var(--space-sm) var(--space-md);
+  border-radius: 6px;
+  cursor: pointer;
+  transition: background 0.15s;
+}
+.device-row:hover { background: rgba(255,255,255,0.04); }
+
+.dev-icon { font-size: 1.2rem; flex-shrink: 0; }
+
+.dev-id {
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+  color: var(--accent);
+  min-width: 120px;
+}
+
+.dev-brand { font-size: 0.82rem; color: var(--text-muted); min-width: 140px; }
+
+.dev-stats {
+  display: flex;
+  gap: var(--space-lg);
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  margin-left: auto;
+}
+.dev-stats span { white-space: nowrap; }
+.dev-stats strong { color: var(--text-primary); font-family: var(--font-mono); }
+
+/* ---- Layer 3: Device Detail Page ---- */
+.detail-page { padding: var(--space-lg) 0; }
+
+.detail-breadcrumb {
+  font-size: 0.82rem;
+  color: var(--text-muted);
+  margin-bottom: var(--space-md);
+}
+.detail-breadcrumb a { color: var(--accent); text-decoration: none; cursor: pointer; }
+.detail-breadcrumb a:hover { text-decoration: underline; }
+
+.detail-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-xl);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border);
+}
+.detail-header h2 { margin: 0; font-family: var(--font-mono); font-size: 1.1rem; }
+.detail-status-badge {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 20px;
+  font-size: 0.78rem;
+  font-weight: 600;
+}
+.detail-status-badge.online { background: var(--positive-bg); color: var(--positive); }
+.detail-status-badge.offline { background: var(--negative-bg); color: var(--negative); }
+
+.detail-cols {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-xl);
+}
+@media (max-width: 900px) {
+  .detail-cols { grid-template-columns: 1fr; }
+}
+
+/* ---- Energy Flow Diamond ---- */
+.energy-flow-diamond {
+  display: grid;
+  grid-template-columns: 1fr 1fr 1fr 1fr 1fr;
+  grid-template-rows: 1fr 1fr 1fr 1fr 1fr;
+  width: 280px;
+  height: 280px;
+  margin: var(--space-lg) auto;
+  position: relative;
+}
+
+.ef-node {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  text-align: center;
+  z-index: 2;
+}
+.ef-node-icon { font-size: 1.5rem; }
+.ef-node-label { font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; }
+.ef-node-value { font-family: var(--font-mono); font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+
+.ef-pv    { grid-column: 3; grid-row: 1; }
+.ef-bat   { grid-column: 1; grid-row: 3; }
+.ef-load  { grid-column: 5; grid-row: 3; }
+.ef-grid  { grid-column: 3; grid-row: 5; }
+
+.ef-center-hub {
+  grid-column: 3;
+  grid-row: 3;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1;
+}
+.ef-center-hub-dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 12px rgba(59,130,246,0.4);
+}
+
+/* Flow lines */
+.ef-line {
+  position: absolute;
+  height: 2px;
+  background: var(--accent);
+  opacity: 0;
+  transition: opacity 0.3s;
+}
+.ef-line.active { opacity: 0.7; }
+.ef-line-pv   { top: 25%;  left: 50%; width: 0; transform: rotate(90deg); transform-origin: top left; height: 2px; width: 56px; top: 56px; left: calc(50% - 1px); }
+.ef-line-bat  { top: 50%;  left: 18%; width: 72px; }
+.ef-line-load { top: 50%;  right: 18%; left: auto; width: 72px; }
+.ef-line-grid { bottom: 25%; left: 50%; width: 0; transform: rotate(90deg); transform-origin: bottom left; height: 2px; width: 56px; bottom: 56px; left: calc(50% - 1px); }
+
+/* ---- Telemetry Rows ---- */
+.tele-card { margin-bottom: var(--space-md); }
+
+.tele-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 6px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 0.82rem;
+}
+.tele-row:last-child { border-bottom: none; }
+.tele-label { color: var(--text-muted); }
+.tele-value { font-family: var(--font-mono); font-weight: 600; color: var(--text-primary); }
+
+/* ---- Config Rows ---- */
+.config-card { margin-bottom: var(--space-md); }
+
+.config-row {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 8px 0;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  font-size: 0.82rem;
+}
+.config-row:last-child { border-bottom: none; }
+.config-label { color: var(--text-muted); flex: 1; }
+.config-input {
+  width: 140px;
+  text-align: right;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  font-size: 0.82rem;
+}
+.config-input:focus { border-color: var(--accent); outline: none; }
+.config-select {
+  width: 160px;
+  padding: 4px 8px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  background: var(--bg);
+  color: var(--text-primary);
+  font-size: 0.82rem;
+}
+.config-default {
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  margin-left: var(--space-sm);
+}
+
+/* ---- Schedule Card ---- */
+.schedule-card { margin-bottom: var(--space-md); }
+
+.sync-status {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 10px;
+  border-radius: 12px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  margin-bottom: var(--space-md);
+}
+.sync-status.synced { background: var(--positive-bg); color: var(--positive); }
+.sync-status.pending { background: var(--amber-bg); color: var(--amber); }
+.sync-status.failed { background: var(--negative-bg); color: var(--negative); }
+
+.schedule-bar {
+  display: flex;
+  height: 28px;
+  border-radius: 6px;
+  overflow: hidden;
+  margin-bottom: var(--space-sm);
+  border: 1px solid var(--border);
+}
+.schedule-segment {
+  height: 100%;
+  position: relative;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 0.65rem;
+  font-weight: 600;
+  color: rgba(255,255,255,0.85);
+  overflow: hidden;
+  white-space: nowrap;
+}
+.schedule-segment[data-mode="self_consumption"] { background: #22c55e; }
+.schedule-segment[data-mode="peak_valley_arbitrage"] { background: #3b82f6; }
+.schedule-segment[data-mode="peak_shaving"] { background: #a855f7; }
+.schedule-segment[data-mode="idle"] { background: #374151; color: var(--text-muted); }
+
+.schedule-markers {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.7rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-bottom: var(--space-md);
+}
+
+.schedule-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.8rem;
+}
+.schedule-table th {
+  text-align: left;
+  padding: 6px 8px;
+  font-weight: 600;
+  color: var(--text-muted);
+  border-bottom: 1px solid var(--border);
+  font-size: 0.75rem;
+  text-transform: uppercase;
+  letter-spacing: 0.03em;
+}
+.schedule-table td {
+  padding: 6px 8px;
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+  color: var(--text-primary);
+}
+.schedule-table td:first-child { font-family: var(--font-mono); }
+
+.schedule-mode-dot {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  margin-right: 6px;
+}
+
+/* ---- Action Bar ---- */
+.action-bar {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-md);
+  padding-top: var(--space-lg);
+  border-top: 1px solid var(--border);
+  margin-top: var(--space-lg);
+}
+
+/* ---- Empty / Error States ---- */
+.p2-empty {
+  text-align: center;
+  padding: var(--space-xl) var(--space-lg);
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+.p2-empty-icon { font-size: 2rem; margin-bottom: var(--space-sm); }
+
+/* ---- Light theme overrides ---- */
+[data-theme="light"] .gw-card { border-color: var(--border); }
+[data-theme="light"] .device-row:hover { background: rgba(0,0,0,0.03); }
+[data-theme="light"] .tele-row { border-bottom-color: rgba(0,0,0,0.06); }
+[data-theme="light"] .config-row { border-bottom-color: rgba(0,0,0,0.06); }
+[data-theme="light"] .schedule-segment { color: #fff; }
