@@ -51,7 +51,7 @@ describe("GET /dashboard handler", () => {
     await closeAllPools();
   });
 
-  it("SOLFACIL_ADMIN sees all 47 assets aggregated", async () => {
+  it("SOLFACIL_ADMIN sees all 48 assets aggregated", async () => {
     const event = makeEvent(tokenFor("admin", "SOLFACIL", "SOLFACIL_ADMIN"));
     const result = (await handler(event)) as APIGatewayProxyStructuredResultV2;
 
@@ -61,10 +61,10 @@ describe("GET /dashboard handler", () => {
     expect(body.success).toBe(true);
 
     const data = body.data;
-    // SOLFACIL_ADMIN 看全部 47 台設備
-    expect(data.totalAssets).toBe(47);
+    // SOLFACIL_ADMIN 看全部 48 台設備 (47 seed + 1 ASSET_TEST_141I)
+    expect(data.totalAssets).toBe(48);
     expect(data.onlineAssets).toBeGreaterThanOrEqual(1);
-    expect(data.onlineAssets).toBeLessThanOrEqual(47);
+    expect(data.onlineAssets).toBeLessThanOrEqual(48);
 
     // avgSoc across all 47 assets — use range check for resilience
     expect(data.avgSoc).toBeGreaterThanOrEqual(1);
@@ -75,7 +75,7 @@ describe("GET /dashboard handler", () => {
     expect(parseFloat(data.totalPowerKw)).toBeGreaterThan(0);
   });
 
-  it("ORG_ENERGIA_001 only aggregates its 30 assets", async () => {
+  it("ORG_ENERGIA_001 only aggregates its 31 assets", async () => {
     const event = makeEvent(tokenFor("u1", "ORG_ENERGIA_001", "ORG_MANAGER"));
     const result = (await handler(event)) as APIGatewayProxyStructuredResultV2;
 
@@ -85,10 +85,10 @@ describe("GET /dashboard handler", () => {
     expect(body.success).toBe(true);
 
     const data = body.data;
-    // ORG_ENERGIA_001 有 30 台設備
-    expect(data.totalAssets).toBe(30);
+    // ORG_ENERGIA_001 有 31 台設備 (30 seed + 1 ASSET_TEST_141I)
+    expect(data.totalAssets).toBe(31);
     expect(data.onlineAssets).toBeGreaterThanOrEqual(1);
-    expect(data.onlineAssets).toBeLessThanOrEqual(30);
+    expect(data.onlineAssets).toBeLessThanOrEqual(31);
 
     // avgSoc across 30 assets — use range check for resilience
     expect(data.avgSoc).toBeGreaterThanOrEqual(1);

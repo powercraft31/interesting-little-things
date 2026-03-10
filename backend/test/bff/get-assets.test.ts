@@ -76,7 +76,7 @@ describe("GET /assets handler", () => {
 
     const body = JSON.parse(result.body as string);
     expect(body.success).toBe(true);
-    expect(body.data.assets).toHaveLength(47);
+    expect(body.data.assets).toHaveLength(48);
 
     // Verify original 4 asset IDs still present
     const ids = body.data.assets.map((a: { id: string }) => a.id);
@@ -117,7 +117,7 @@ describe("GET /assets handler", () => {
 
     const body = JSON.parse(result.body as string);
     expect(body.success).toBe(true);
-    expect(body.data.assets).toHaveLength(30);
+    expect(body.data.assets).toHaveLength(31);
 
     // Deep assert: every asset belongs to this org (no cross-tenant leak)
     expect(

@@ -125,7 +125,7 @@ describe("GET /api/fleet/overview", () => {
           { type: "SMART_METER", count: 12, online: 12 },
         ],
       })
-      .mockResolvedValueOnce({ rows: [{ total_homes: 3 }] })
+      .mockResolvedValueOnce({ rows: [{ total_gateways: 3 }] })
       .mockResolvedValueOnce({ rows: [{ total_integradores: 2 }] });
 
     const event = makeEvent("GET", "/api/fleet/overview", adminToken());
@@ -139,7 +139,7 @@ describe("GET /api/fleet/overview", () => {
     expect(body.data).toHaveProperty("totalDevices", 47);
     expect(body.data).toHaveProperty("onlineCount", 44);
     expect(body.data).toHaveProperty("offlineCount", 3);
-    expect(body.data).toHaveProperty("totalHomes", 3);
+    expect(body.data).toHaveProperty("totalGateways", 3);
     expect(body.data).toHaveProperty("deviceTypes");
   });
 
