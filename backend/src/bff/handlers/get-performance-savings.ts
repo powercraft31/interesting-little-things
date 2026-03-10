@@ -51,17 +51,17 @@ export async function handler(
 
   const { rows } = await queryWithOrg(
     `SELECT
-       h.name AS home,
+       g.name AS home,
        COALESCE(SUM(rd.client_savings_reais), 0) AS total,
        COALESCE(SUM(rd.sc_savings_reais), 0)     AS sc,
        COALESCE(SUM(rd.tou_savings_reais), 0)    AS tou,
        COALESCE(SUM(rd.ps_savings_reais), 0)     AS ps
      FROM revenue_daily rd
      JOIN assets a ON rd.asset_id = a.asset_id
-     JOIN homes h ON a.home_id = h.home_id
+     JOIN gateways g ON a.gateway_id = g.gateway_id
      WHERE rd.date >= date_trunc('${dateTrunc}', CURRENT_DATE)
        AND a.is_active = true
-     GROUP BY h.home_id, h.name
+     GROUP BY g.gateway_id, g.name
      ORDER BY total DESC`,
     [],
     rlsOrgId,

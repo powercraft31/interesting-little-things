@@ -33,12 +33,12 @@ export async function handler(
        o.org_id,
        o.name,
        COUNT(a.asset_id)::int AS device_count,
-       ROUND(100.0 * COUNT(*) FILTER (WHERE ds.is_online = true)
+       ROUND(100.0 * COUNT(a.asset_id) FILTER (WHERE g.status = 'online')
          / NULLIF(COUNT(a.asset_id), 0), 1) AS online_rate,
        MAX(a.commissioned_at) AS last_commission
      FROM organizations o
      LEFT JOIN assets a ON o.org_id = a.org_id AND a.is_active = true
-     LEFT JOIN device_state ds ON a.asset_id = ds.asset_id
+     LEFT JOIN gateways g ON a.gateway_id = g.gateway_id
      GROUP BY o.org_id, o.name
      ORDER BY o.name`,
     [],
@@ -50,10 +50,15 @@ export async function handler(
     name: r.name as string,
     deviceCount: Number(r.device_count),
     onlineRate: parseFloat(String(r.online_rate ?? 0)),
-    lastCommission: r.last_commission ? new Date(r.last_commission as string).toISOString() : null,
+    lastCommission: r.last_commission
+      ? new Date(r.last_commission as string).toISOString()
+      : null,
   }));
 
-  const body = ok({ integradores, _tenant: { orgId: ctx.orgId, role: ctx.role } });
+  const body = ok({
+    integradores,
+    _tenant: { orgId: ctx.orgId, role: ctx.role },
+  });
 
   return {
     statusCode: 200,

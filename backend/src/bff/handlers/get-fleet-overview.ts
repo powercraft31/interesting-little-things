@@ -35,45 +35,47 @@ export async function handler(
   const isAdmin = ctx.role === Role.SOLFACIL_ADMIN;
   const rlsOrgId = isAdmin ? null : ctx.orgId;
 
-  const [fleetResult, typeResult, homeResult, orgResult] = await Promise.all([
-    queryWithOrg(
-      `SELECT
-         COUNT(*)::int AS total_devices,
-         COUNT(*) FILTER (WHERE ds.is_online = true)::int AS online_count,
-         COUNT(*) FILTER (WHERE ds.is_online = false OR ds.is_online IS NULL)::int AS offline_count,
-         ROUND(100.0 * COUNT(*) FILTER (WHERE ds.is_online = true) / NULLIF(COUNT(*), 0), 1) AS online_rate
+  const [fleetResult, typeResult, gatewayResult, orgResult] = await Promise.all(
+    [
+      queryWithOrg(
+        `SELECT
+         COUNT(a.asset_id)::int AS total_devices,
+         COUNT(a.asset_id) FILTER (WHERE g.status = 'online')::int AS online_count,
+         COUNT(a.asset_id) FILTER (WHERE g.status != 'online' OR g.status IS NULL)::int AS offline_count,
+         ROUND(100.0 * COUNT(a.asset_id) FILTER (WHERE g.status = 'online') / NULLIF(COUNT(a.asset_id), 0), 1) AS online_rate
        FROM assets a
-       LEFT JOIN device_state ds ON a.asset_id = ds.asset_id
+       LEFT JOIN gateways g ON a.gateway_id = g.gateway_id
        WHERE a.is_active = true`,
-      [],
-      rlsOrgId,
-    ),
-    queryWithOrg(
-      `SELECT
+        [],
+        rlsOrgId,
+      ),
+      queryWithOrg(
+        `SELECT
          a.asset_type AS type,
-         COUNT(*)::int AS count,
-         COUNT(*) FILTER (WHERE ds.is_online = true)::int AS online
+         COUNT(a.asset_id)::int AS count,
+         COUNT(a.asset_id) FILTER (WHERE g.status = 'online')::int AS online
        FROM assets a
-       LEFT JOIN device_state ds ON a.asset_id = ds.asset_id
+       LEFT JOIN gateways g ON a.gateway_id = g.gateway_id
        WHERE a.is_active = true
        GROUP BY a.asset_type
        ORDER BY count DESC`,
-      [],
-      rlsOrgId,
-    ),
-    queryWithOrg(
-      `SELECT COUNT(DISTINCT home_id)::int AS total_homes
-       FROM assets WHERE is_active = true AND home_id IS NOT NULL`,
-      [],
-      rlsOrgId,
-    ),
-    queryWithOrg(
-      `SELECT COUNT(DISTINCT a.org_id)::int AS total_integradores
+        [],
+        rlsOrgId,
+      ),
+      queryWithOrg(
+        `SELECT COUNT(DISTINCT a.gateway_id)::int AS total_gateways
+       FROM assets a WHERE a.is_active = true AND a.gateway_id IS NOT NULL`,
+        [],
+        rlsOrgId,
+      ),
+      queryWithOrg(
+        `SELECT COUNT(DISTINCT a.org_id)::int AS total_integradores
        FROM assets a WHERE a.is_active = true`,
-      [],
-      rlsOrgId,
-    ),
-  ]);
+        [],
+        rlsOrgId,
+      ),
+    ],
+  );
 
   const fleet = fleetResult.rows[0] as Record<string, unknown>;
   const typeColors: Record<string, string> = {
@@ -96,8 +98,12 @@ export async function handler(
     onlineCount: Number(fleet.online_count),
     offlineCount: Number(fleet.offline_count),
     onlineRate: parseFloat(String(fleet.online_rate ?? 0)),
-    totalHomes: Number((homeResult.rows[0] as Record<string, unknown>).total_homes),
-    totalIntegradores: Number((orgResult.rows[0] as Record<string, unknown>).total_integradores),
+    totalGateways: Number(
+      (gatewayResult.rows[0] as Record<string, unknown>).total_gateways,
+    ),
+    totalIntegradores: Number(
+      (orgResult.rows[0] as Record<string, unknown>).total_integradores,
+    ),
     deviceTypes,
     _tenant: { orgId: ctx.orgId, role: ctx.role },
   });

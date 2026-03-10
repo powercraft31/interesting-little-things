@@ -46,23 +46,23 @@ export async function handler(
        a.asset_type AS type,
        a.brand,
        a.model,
-       a.home_id,
-       h.name AS home_name,
+       a.gateway_id,
+       g.name AS gateway_name,
        a.org_id,
        o.name AS org_name,
-       CASE WHEN ds.is_online THEN 'online' ELSE 'offline' END AS status,
-       ds.updated_at AS last_seen,
+       CASE WHEN g.status = 'online' THEN 'online' ELSE 'offline' END AS status,
+       COALESCE(g.last_seen_at, ds.updated_at) AS last_seen,
        a.commissioned_at AS commission_date,
        ds.telemetry_json AS telemetry
      FROM assets a
-     LEFT JOIN homes h ON a.home_id = h.home_id
+     LEFT JOIN gateways g ON a.gateway_id = g.gateway_id
      JOIN organizations o ON a.org_id = o.org_id
      LEFT JOIN device_state ds ON a.asset_id = ds.asset_id
      WHERE a.is_active = true
        AND ($1 = 'all' OR a.asset_type = $1)
-       AND ($2 = 'all' OR (CASE WHEN ds.is_online THEN 'online' ELSE 'offline' END) = $2)
+       AND ($2 = 'all' OR (CASE WHEN g.status = 'online' THEN 'online' ELSE 'offline' END) = $2)
        AND ($3 = '' OR a.asset_id ILIKE '%' || $3 || '%'
-            OR COALESCE(h.name, '') ILIKE '%' || $3 || '%'
+            OR COALESCE(g.name, '') ILIKE '%' || $3 || '%'
             OR a.name ILIKE '%' || $3 || '%')
      ORDER BY a.asset_id`,
     [typeFilter, statusFilter, searchFilter],
@@ -74,13 +74,17 @@ export async function handler(
     type: r.type as string,
     brand: r.brand as string,
     model: r.model as string,
-    homeId: r.home_id as string | null,
-    homeName: (r.home_name as string) ?? null,
+    gatewayId: r.gateway_id as string | null,
+    gatewayName: (r.gateway_name as string) ?? null,
     orgId: r.org_id as string,
     orgName: r.org_name as string,
     status: r.status as string,
-    lastSeen: r.last_seen ? new Date(r.last_seen as string).toISOString() : null,
-    commissionDate: r.commission_date ? new Date(r.commission_date as string).toISOString() : null,
+    lastSeen: r.last_seen
+      ? new Date(r.last_seen as string).toISOString()
+      : null,
+    commissionDate: r.commission_date
+      ? new Date(r.commission_date as string).toISOString()
+      : null,
     telemetry: r.telemetry ?? {},
   }));
 

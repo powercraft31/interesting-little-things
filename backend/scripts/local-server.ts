@@ -15,9 +15,15 @@ import { handler as fleetIntegradoresHandler } from "../src/bff/handlers/get-fle
 import { handler as fleetOfflineEventsHandler } from "../src/bff/handlers/get-fleet-offline-events";
 import { handler as fleetUptimeTrendHandler } from "../src/bff/handlers/get-fleet-uptime-trend";
 import { handler as devicesHandler } from "../src/bff/handlers/get-devices";
-import { handler as homesHandler } from "../src/bff/handlers/get-homes";
-import { handler as homeEnergyHandler } from "../src/bff/handlers/get-home-energy";
-import { handler as homesSummaryHandler } from "../src/bff/handlers/get-homes-summary";
+import { handler as gatewaysHandler } from "../src/bff/handlers/get-gateways";
+import { handler as gatewayEnergyHandler } from "../src/bff/handlers/get-gateway-energy";
+import { handler as gatewaysSummaryHandler } from "../src/bff/handlers/get-gateways-summary";
+import { handler as gatewayDevicesHandler } from "../src/bff/handlers/get-gateway-devices";
+import { handler as deviceDetailHandler } from "../src/bff/handlers/get-device-detail";
+import { handler as putDeviceHandler } from "../src/bff/handlers/put-device";
+import { handler as deviceScheduleHandler } from "../src/bff/handlers/get-device-schedule";
+import { handler as putDeviceScheduleHandler } from "../src/bff/handlers/put-device-schedule";
+import { handler as tariffsHandler } from "../src/bff/handlers/get-tariffs";
 import { handler as hemsOverviewHandler } from "../src/bff/handlers/get-hems-overview";
 import { handler as hemsDispatchHandler } from "../src/bff/handlers/post-hems-dispatch";
 import { handler as vppCapacityHandler } from "../src/bff/handlers/get-vpp-capacity";
@@ -124,7 +130,7 @@ app.use((req, _res, next) => {
   if (!req.headers.authorization) {
     req.headers.authorization = JSON.stringify({
       userId: "demo-user",
-      orgId: "ORG_SOLFACIL",
+      orgId: "ORG_ENERGIA_001",
       role: "SOLFACIL_ADMIN", // demo: see all 4 assets across orgs
     });
   }
@@ -172,17 +178,44 @@ app.get(
   "/api/fleet/uptime-trend",
   wrapHandler(fleetUptimeTrendHandler, "GET", "/api/fleet/uptime-trend"),
 );
-// Devices & Homes
+// Devices & Gateways (v5.19: homes → gateways)
 app.get("/api/devices", wrapHandler(devicesHandler, "GET", "/api/devices"));
 app.get(
-  "/api/homes/summary",
-  wrapHandler(homesSummaryHandler, "GET", "/api/homes/summary"),
+  "/api/gateways/summary",
+  wrapHandler(gatewaysSummaryHandler, "GET", "/api/gateways/summary"),
 );
 app.get(
-  "/api/homes/:homeId/energy",
-  wrapHandler(homeEnergyHandler, "GET", "/api/homes/:homeId/energy"),
+  "/api/gateways/:gatewayId/energy",
+  wrapHandler(gatewayEnergyHandler, "GET", "/api/gateways/:gatewayId/energy"),
 );
-app.get("/api/homes", wrapHandler(homesHandler, "GET", "/api/homes"));
+app.get(
+  "/api/gateways/:gatewayId/devices",
+  wrapHandler(gatewayDevicesHandler, "GET", "/api/gateways/:gatewayId/devices"),
+);
+app.get("/api/gateways", wrapHandler(gatewaysHandler, "GET", "/api/gateways"));
+// Device detail & config (v5.19 new)
+app.get(
+  "/api/devices/:assetId/schedule",
+  wrapHandler(deviceScheduleHandler, "GET", "/api/devices/:assetId/schedule"),
+);
+app.put(
+  "/api/devices/:assetId/schedule",
+  wrapHandler(
+    putDeviceScheduleHandler,
+    "PUT",
+    "/api/devices/:assetId/schedule",
+  ),
+);
+app.get(
+  "/api/devices/:assetId",
+  wrapHandler(deviceDetailHandler, "GET", "/api/devices/:assetId"),
+);
+app.put(
+  "/api/devices/:assetId",
+  wrapHandler(putDeviceHandler, "PUT", "/api/devices/:assetId"),
+);
+// Tariffs (v5.19 new)
+app.get("/api/tariffs", wrapHandler(tariffsHandler, "GET", "/api/tariffs"));
 // HEMS
 app.get(
   "/api/hems/overview",
@@ -266,9 +299,15 @@ app.listen(PORT, () => {
   console.log("  GET  /api/fleet/offline-events      (v5.12)");
   console.log("  GET  /api/fleet/uptime-trend        (v5.12)");
   console.log("  GET  /api/devices                   (v5.12)");
-  console.log("  GET  /api/homes                     (v5.12)");
-  console.log("  GET  /api/homes/:homeId/energy      (v5.12)");
-  console.log("  GET  /api/homes/summary             (v5.12)");
+  console.log("  GET  /api/gateways                  (v5.19)");
+  console.log("  GET  /api/gateways/summary          (v5.19)");
+  console.log("  GET  /api/gateways/:id/energy       (v5.19)");
+  console.log("  GET  /api/gateways/:id/devices      (v5.19)");
+  console.log("  GET  /api/devices/:id               (v5.19)");
+  console.log("  PUT  /api/devices/:id               (v5.19)");
+  console.log("  GET  /api/devices/:id/schedule      (v5.19)");
+  console.log("  PUT  /api/devices/:id/schedule      (v5.19)");
+  console.log("  GET  /api/tariffs                   (v5.19)");
   console.log("  GET  /api/hems/overview             (v5.12)");
   console.log("  POST /api/hems/dispatch             (v5.12)");
   console.log("  GET  /api/vpp/capacity              (v5.12)");
