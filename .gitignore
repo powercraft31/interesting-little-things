@@ -27,4 +27,5 @@ backup/
 config.local.js
 
 # Claude AI files
+.claude/test-results/
 .claude/

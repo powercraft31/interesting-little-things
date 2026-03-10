@@ -1,7 +1,7 @@
 -- ============================================================
--- SOLFACIL VPP — Base DDL (v5.10)
--- Extracted from design/backend_architecture/10_DATABASE_SCHEMA_v5.10.md §3
--- 19 tables total. Run as superuser (postgres).
+-- SOLFACIL VPP — Base DDL (v5.19)
+-- Updated: 2026-03-10 — homes merged into gateways, gateway_id = SN
+-- 18 tables total. Run as superuser (postgres).
 -- ============================================================
 
 -- BEGIN;
@@ -38,30 +38,16 @@ CREATE TABLE IF NOT EXISTS user_org_roles (
 );
 
 -- ============================================================
--- v5.12: Homes (must precede assets ALTER for FK)
--- ============================================================
-
-CREATE TABLE IF NOT EXISTS homes (
-  home_id              VARCHAR(50)  PRIMARY KEY,
-  org_id               VARCHAR(50)  NOT NULL REFERENCES organizations(org_id),
-  name                 VARCHAR(200) NOT NULL,
-  address              TEXT,
-  contracted_demand_kw REAL,  -- v5.15: peak shaving threshold (v5.16)
-  created_at           TIMESTAMPTZ  DEFAULT NOW(),
-  updated_at           TIMESTAMPTZ  DEFAULT NOW()
-);
-CREATE INDEX IF NOT EXISTS idx_homes_org ON homes(org_id);
-
--- ============================================================
 -- M1 IoT Hub
 -- ============================================================
 
--- v5.18: Gateway registry (must precede assets for FK)
+-- v5.19: Gateway registry (homes merged in, gateway_id = SN)
 CREATE TABLE IF NOT EXISTS gateways (
-  gateway_id        VARCHAR(50)  PRIMARY KEY,
-  client_id         VARCHAR(100) NOT NULL UNIQUE,
+  gateway_id        VARCHAR(50)  PRIMARY KEY,           -- = hardware SN (e.g. WKRD24070202100144F)
   org_id            VARCHAR(50)  NOT NULL REFERENCES organizations(org_id),
-  home_id           VARCHAR(50)  REFERENCES homes(home_id),
+  name              VARCHAR(200),                       -- v5.19: from homes.name (e.g. Casa Silva · Home-1)
+  address           TEXT,                               -- v5.19: from homes.address
+  contracted_demand_kw REAL,                            -- v5.19: from homes.contracted_demand_kw
   mqtt_broker_host  VARCHAR(255) NOT NULL DEFAULT '18.141.63.142',
   mqtt_broker_port  INTEGER      NOT NULL DEFAULT 1883,
   mqtt_username     VARCHAR(100) NOT NULL DEFAULT 'xuheng',
@@ -71,12 +57,13 @@ CREATE TABLE IF NOT EXISTS gateways (
   status            VARCHAR(20)  NOT NULL DEFAULT 'online'
                       CHECK (status IN ('online', 'offline', 'decommissioned')),
   last_seen_at      TIMESTAMPTZ,
+  ems_health        JSONB        DEFAULT '{}',          -- v5.18: EMS health data
+  ems_health_at     TIMESTAMPTZ,                        -- v5.18: device-side timestamp of last emsList
   commissioned_at   TIMESTAMPTZ  DEFAULT NOW(),
   created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_gateways_org ON gateways(org_id);
-CREATE INDEX IF NOT EXISTS idx_gateways_home ON gateways(home_id);
 CREATE INDEX IF NOT EXISTS idx_gateways_status ON gateways(status);
 
 CREATE TABLE IF NOT EXISTS assets (
@@ -93,19 +80,17 @@ CREATE TABLE IF NOT EXISTS assets (
   retail_sell_rate_kwh NUMERIC(8,4) NOT NULL DEFAULT 0.25,
   asset_type     VARCHAR(30)  NOT NULL DEFAULT 'INVERTER_BATTERY'
       CHECK (asset_type IN ('INVERTER_BATTERY','SMART_METER','HVAC','EV_CHARGER','SOLAR_PANEL')),
-  home_id        VARCHAR(50)  REFERENCES homes(home_id),
   brand          VARCHAR(100),
   model          VARCHAR(100),
   serial_number  VARCHAR(100),
   commissioned_at TIMESTAMPTZ,
   is_active      BOOLEAN      NOT NULL DEFAULT true,
   allow_export   BOOLEAN      NOT NULL DEFAULT false,  -- v5.15: grid export permission
-  gateway_id     VARCHAR(50)  REFERENCES gateways(gateway_id),  -- v5.18: FK to gateway
+  gateway_id     VARCHAR(50)  REFERENCES gateways(gateway_id),  -- v5.18→v5.19: FK to gateway (SN)
   created_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW(),
   updated_at     TIMESTAMPTZ  NOT NULL DEFAULT NOW()
 );
 CREATE INDEX IF NOT EXISTS idx_assets_org ON assets (org_id);
-CREATE INDEX IF NOT EXISTS idx_assets_home ON assets (home_id);
 CREATE INDEX IF NOT EXISTS idx_assets_type ON assets (asset_type);
 CREATE INDEX IF NOT EXISTS idx_assets_gateway ON assets (gateway_id);
 
@@ -175,11 +160,10 @@ CREATE TABLE IF NOT EXISTS telemetry_history_default
 CREATE INDEX IF NOT EXISTS idx_telemetry_asset_time
   ON telemetry_history (asset_id, recorded_at DESC);
 
--- v5.18: device command logs (config get/set tracking)
+-- v5.18→v5.19: device command logs (config get/set tracking)
 CREATE TABLE IF NOT EXISTS device_command_logs (
   id                BIGSERIAL    PRIMARY KEY,
   gateway_id        VARCHAR(50)  NOT NULL REFERENCES gateways(gateway_id),
-  client_id         VARCHAR(100) NOT NULL,
   command_type      VARCHAR(20)  NOT NULL
                       CHECK (command_type IN ('get', 'get_reply', 'set', 'set_reply')),
   config_name       VARCHAR(100) NOT NULL DEFAULT 'battery_schedule',
@@ -456,7 +440,7 @@ CREATE UNIQUE INDEX IF NOT EXISTS uq_feature_flags_name_org
   ON feature_flags (flag_name, COALESCE(org_id, ''));
 
 -- ============================================================
--- RLS — Pure Tenant Isolation (v5.10)
+-- RLS — Pure Tenant Isolation (v5.19)
 -- ============================================================
 
 ALTER TABLE gateways ENABLE ROW LEVEL SECURITY;
@@ -499,11 +483,6 @@ CREATE POLICY rls_trade_schedules_tenant ON trade_schedules
 ALTER TABLE algorithm_metrics ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_algorithm_metrics_tenant ON algorithm_metrics
   USING (org_id::TEXT = current_setting('app.current_org_id', true));
-
--- v5.12: RLS for new tables
-ALTER TABLE homes ENABLE ROW LEVEL SECURITY;
-CREATE POLICY rls_homes_tenant ON homes
-  USING (org_id = current_setting('app.current_org_id', true));
 
 ALTER TABLE offline_events ENABLE ROW LEVEL SECURITY;
 CREATE POLICY rls_offline_events_tenant ON offline_events
