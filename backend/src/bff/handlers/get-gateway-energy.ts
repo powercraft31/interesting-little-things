@@ -45,7 +45,8 @@ export async function handler(
     return apiError(400, "gatewayId is required");
   }
 
-  const dateParam = event.queryStringParameters?.date ?? new Date().toISOString().slice(0, 10);
+  const dateParam =
+    event.queryStringParameters?.date ?? new Date().toISOString().slice(0, 10);
 
   const [energyResult, tariffResult] = await Promise.all([
     queryWithOrg(
@@ -84,7 +85,9 @@ export async function handler(
   const timeLabels: string[] = [];
   for (let h = 0; h < 24; h++) {
     for (let m = 0; m < 60; m += 15) {
-      timeLabels.push(`${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`);
+      timeLabels.push(
+        `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`,
+      );
     }
   }
 
@@ -115,29 +118,42 @@ export async function handler(
 
   // Compute daily savings using tariff rates
   const tariff = tariffResult.rows[0] as Record<string, unknown> | undefined;
-  const peakRate = tariff ? parseFloat(String(tariff.peak_rate)) : 0.85;
-  const offpeakRate = tariff ? parseFloat(String(tariff.offpeak_rate)) : 0.41;
-  const intermediateRate = tariff ? parseFloat(String(tariff.intermediate_rate)) : 0.62;
+  const peakRate = tariff ? parseFloat(String(tariff.peak_rate)) : null;
+  const offpeakRate = tariff ? parseFloat(String(tariff.offpeak_rate)) : null;
+  const intermediateRate = tariff
+    ? parseFloat(String(tariff.intermediate_rate))
+    : null;
 
   // Parse peak hours for rate assignment
-  const peakStartHour = tariff ? parseInt(String(tariff.peak_start ?? "17:00").slice(0, 2), 10) : 17;
-  const peakEndHour = tariff ? parseInt(String(tariff.peak_end ?? "20:00").slice(0, 2), 10) : 20;
-  const intStartHour = tariff ? parseInt(String(tariff.intermediate_start ?? "16:00").slice(0, 2), 10) : 16;
-  const intEndHour = tariff ? parseInt(String(tariff.intermediate_end ?? "21:00").slice(0, 2), 10) : 21;
+  const peakStartHour = tariff
+    ? parseInt(String(tariff.peak_start ?? "17:00").slice(0, 2), 10)
+    : 17;
+  const peakEndHour = tariff
+    ? parseInt(String(tariff.peak_end ?? "20:00").slice(0, 2), 10)
+    : 20;
+  const intStartHour = tariff
+    ? parseInt(String(tariff.intermediate_start ?? "16:00").slice(0, 2), 10)
+    : 16;
+  const intEndHour = tariff
+    ? parseInt(String(tariff.intermediate_end ?? "21:00").slice(0, 2), 10)
+    : 21;
 
-  let savingsBrl = 0;
-  for (let i = 0; i < 96; i++) {
-    const hour = Math.floor(i / 4);
-    const savedKwh = Math.max(0, baseline[i] - Math.max(0, grid[i])) * 0.25; // 15-min bucket → kWh
-    let rate = offpeakRate;
-    if (hour >= peakStartHour && hour < peakEndHour) {
-      rate = peakRate;
-    } else if (hour >= intStartHour && hour < intEndHour) {
-      rate = intermediateRate;
+  let savingsBrl: number | null = null;
+  if (peakRate != null && offpeakRate != null && intermediateRate != null) {
+    savingsBrl = 0;
+    for (let i = 0; i < 96; i++) {
+      const hour = Math.floor(i / 4);
+      const savedKwh = Math.max(0, baseline[i] - Math.max(0, grid[i])) * 0.25; // 15-min bucket → kWh
+      let rate = offpeakRate;
+      if (hour >= peakStartHour && hour < peakEndHour) {
+        rate = peakRate;
+      } else if (hour >= intStartHour && hour < intEndHour) {
+        rate = intermediateRate;
+      }
+      savingsBrl += savedKwh * rate;
     }
-    savingsBrl += savedKwh * rate;
+    savingsBrl = Math.round(savingsBrl * 100) / 100;
   }
-  savingsBrl = Math.round(savingsBrl * 100) / 100;
 
   const body = ok({
     gatewayId,

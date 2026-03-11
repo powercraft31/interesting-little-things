@@ -42,13 +42,13 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
         COALESCE(vs.min_soc, 20)   AS min_soc,
         COALESCE(vs.max_soc, 95)   AS max_soc,
         COALESCE(a.allow_export, false) AS allow_export,
-        h.contracted_demand_kw
+        g.contracted_demand_kw
       FROM assets a
       LEFT JOIN device_state d ON d.asset_id = a.asset_id
       LEFT JOIN vpp_strategies vs ON vs.org_id = a.org_id
         AND vs.target_mode = a.operation_mode
         AND vs.is_active = true
-      LEFT JOIN homes h ON h.home_id = a.home_id
+      LEFT JOIN gateways g ON g.gateway_id = a.gateway_id
       WHERE a.is_active = true
     `);
 

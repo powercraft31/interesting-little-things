@@ -63,10 +63,10 @@ export async function runCommandDispatcher(pool: Pool): Promise<void> {
             billing_power_factor: number;
           }>(
             `
-            SELECT h.contracted_demand_kw,
+            SELECT g.contracted_demand_kw,
                    COALESCE(ts.billing_power_factor, 0.92) AS billing_power_factor
             FROM assets a
-            JOIN homes h ON h.home_id = a.home_id
+            JOIN gateways g ON g.gateway_id = a.gateway_id
             LEFT JOIN tariff_schedules ts ON ts.org_id = a.org_id
               AND ts.effective_from <= CURRENT_DATE
               AND (ts.effective_to IS NULL OR ts.effective_to >= CURRENT_DATE)

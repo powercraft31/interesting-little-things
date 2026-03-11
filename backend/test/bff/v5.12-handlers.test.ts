@@ -641,7 +641,9 @@ describe("GET /api/performance/scorecard", () => {
         rows: [{ total_baseline: 100, total_actual: 30, total_best_tou: 20 }],
       })
       .mockResolvedValueOnce({ rows: [{ avg_sc: 78.5 }] }) // self-consumption
-      .mockResolvedValueOnce({ rows: [{ avg_ss: 62.3 }] }); // v5.14: self-sufficiency
+      .mockResolvedValueOnce({ rows: [{ avg_ss: 62.3 }] }) // v5.14: self-sufficiency
+      .mockResolvedValueOnce({ rows: [{ avg_commission_min: 42 }] }) // v5.20: commissioning time
+      .mockResolvedValueOnce({ rows: [{ manual_count: 1 }] }); // v5.20: manual interventions
 
     const event = makeEvent("GET", "/api/performance/scorecard", adminToken());
     const result = (await perfScorecardHandler(
@@ -707,7 +709,9 @@ describe("GET /api/performance/scorecard", () => {
         rows: [{ total_baseline: 50, total_actual: 50, total_best_tou: 50 }],
       })
       .mockResolvedValueOnce({ rows: [{ avg_sc: 78.5 }] })
-      .mockResolvedValueOnce({ rows: [{ avg_ss: 0 }] });
+      .mockResolvedValueOnce({ rows: [{ avg_ss: 0 }] })
+      .mockResolvedValueOnce({ rows: [{ avg_commission_min: null }] }) // v5.20: commissioning time
+      .mockResolvedValueOnce({ rows: [{ manual_count: 0 }] }); // v5.20: manual interventions
 
     const event = makeEvent("GET", "/api/performance/scorecard", adminToken());
     const result = (await perfScorecardHandler(

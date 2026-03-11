@@ -51,6 +51,8 @@ export async function handler(
     costsResult,
     scResult,
     ssResult,
+    commissionResult,
+    manualResult,
   ] = await Promise.all([
     // 4-week uptime average
     queryWithOrg(
@@ -109,11 +111,33 @@ export async function handler(
       [],
       rlsOrgId,
     ),
+    // Commissioning Time (avg minutes from commissioned_at to first telemetry)
+    queryWithOrg(
+      `SELECT ROUND(AVG(
+         EXTRACT(EPOCH FROM (
+           (SELECT MIN(recorded_at) FROM telemetry_history th WHERE th.asset_id = a.asset_id)
+           - a.commissioned_at
+         )) / 60
+       ), 0) AS avg_commission_min
+       FROM assets a
+       WHERE a.is_active = true AND a.commissioned_at IS NOT NULL`,
+      [],
+      rlsOrgId,
+    ),
+    // Manual Interventions (last 7 days)
+    queryWithOrg(
+      `SELECT COUNT(*)::int AS manual_count
+       FROM device_command_logs
+       WHERE command_type = 'manual'
+         AND created_at > NOW() - INTERVAL '7 days'`,
+      [],
+      rlsOrgId,
+    ),
   ]);
 
-  const avgUptime = parseFloat(
-    String((uptimeResult.rows[0] as Record<string, unknown>)?.avg_uptime ?? 95),
-  );
+  const uptimeRaw = (uptimeResult.rows[0] as Record<string, unknown>)
+    ?.avg_uptime;
+  const avgUptime = uptimeRaw != null ? parseFloat(String(uptimeRaw)) : null;
   const dispatchRow = dispatchResult.rows[0] as
     | Record<string, unknown>
     | undefined;
@@ -143,11 +167,28 @@ export async function handler(
 
   // Self-consumption from query
   const scRow = scResult.rows[0] as Record<string, unknown>;
-  const selfConsumptionPct = parseFloat(String(scRow?.avg_sc ?? 0));
+  const selfConsumptionPct =
+    scRow?.avg_sc != null ? parseFloat(String(scRow.avg_sc)) : null;
 
   // v5.14: Self-Sufficiency from query
   const ssRow = ssResult.rows[0] as Record<string, unknown>;
-  const selfSufficiencyPct = parseFloat(String(ssRow?.avg_ss ?? 0));
+  const selfSufficiencyPct =
+    ssRow?.avg_ss != null ? parseFloat(String(ssRow.avg_ss)) : null;
+
+  // Extract commissioning time and manual intervention count
+  const commissionRow = commissionResult.rows[0] as
+    | Record<string, unknown>
+    | undefined;
+  const commissioningTime =
+    commissionRow?.avg_commission_min != null
+      ? parseFloat(String(commissionRow.avg_commission_min))
+      : null;
+
+  const manualRow = manualResult.rows[0] as Record<string, unknown> | undefined;
+  const manualInterventions = parseInt(
+    String(manualRow?.manual_count ?? 0),
+    10,
+  );
 
   function evalStatus(
     value: number | null,
@@ -163,10 +204,17 @@ export async function handler(
   const hardware: Metric[] = [
     {
       name: "Commissioning Time",
-      value: 45,
+      value: commissioningTime,
       unit: "min",
       target: 60,
-      status: "pass",
+      status:
+        commissioningTime != null
+          ? commissioningTime <= 60
+            ? "pass"
+            : commissioningTime <= 90
+              ? "near"
+              : "warn"
+          : "warn",
     },
     {
       name: "Offline Resilience",
@@ -184,10 +232,10 @@ export async function handler(
     },
     {
       name: "First Telemetry",
-      value: 5,
+      value: null,
       unit: "min",
       target: 10,
-      status: "pass",
+      status: "warn",
     },
   ];
 
@@ -222,17 +270,17 @@ export async function handler(
     },
     {
       name: "PV Forecast MAPE",
-      value: 8.2,
+      value: null,
       unit: "%",
       target: 15,
-      status: "pass",
+      status: "warn",
     },
     {
       name: "Load Forecast Adapt",
-      value: 92,
+      value: null,
       unit: "%",
       target: 85,
-      status: "pass",
+      status: "warn",
     },
   ];
 
@@ -246,24 +294,29 @@ export async function handler(
     },
     {
       name: "Training Time",
-      value: 2,
+      value: null,
       unit: "hrs",
       target: 4,
-      status: "pass",
+      status: "warn",
     },
     {
       name: "Manual Interventions",
-      value: 0,
+      value: manualInterventions,
       unit: "/week",
       target: 2,
-      status: "pass",
+      status:
+        manualInterventions <= 2
+          ? "pass"
+          : manualInterventions <= 4
+            ? "near"
+            : "warn",
     },
     {
       name: "App Uptime",
-      value: 99.9,
+      value: null,
       unit: "%",
       target: 99.5,
-      status: "pass",
+      status: "warn",
     },
   ];
 

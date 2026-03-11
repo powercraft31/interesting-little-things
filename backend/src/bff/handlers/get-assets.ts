@@ -12,6 +12,19 @@ import {
 } from "../middleware/auth";
 import { queryWithOrg } from "../../shared/db";
 
+/** Parse numeric DB value; returns null if input is null/undefined. */
+function toNum(val: unknown): number | null {
+  if (val == null) return null;
+  const n = parseFloat(String(val));
+  return Number.isNaN(n) ? null : n;
+}
+
+function toInt(val: unknown): number | null {
+  if (val == null) return null;
+  const n = parseInt(String(val), 10);
+  return Number.isNaN(n) ? null : n;
+}
+
 // ---------------------------------------------------------------------------
 // AppConfig — 功能开关
 // ---------------------------------------------------------------------------
@@ -160,43 +173,43 @@ export async function handler(
       is_online: (r.is_online as boolean) ?? false,
       bat_work_status: (r.bat_work_status as string) || "idle",
     }),
-    capacidade: parseFloat(String(r.capacidade)) || 0,
-    capacity_kwh: parseFloat(String(r.capacity_kwh)) || 0,
-    socMedio: Math.round(parseFloat(String(r.battery_soc)) || 0),
+    capacidade: toNum(r.capacidade),
+    capacity_kwh: toNum(r.capacity_kwh),
+    socMedio: r.battery_soc != null ? Math.round(toNum(r.battery_soc)!) : null,
     operationMode: r.operation_mode as string,
     // 財務欄位 — Stage 5: from assets + revenue_daily
-    investimento: parseFloat(String(r.investimento_brl)) || 0,
-    receitaHoje: parseFloat(String(r.receita_hoje_brl)) || 0,
-    receitaMes: parseFloat(String(r.receita_mes_brl)) || 0,
+    investimento: toNum(r.investimento_brl),
+    receitaHoje: toNum(r.receita_hoje_brl),
+    receitaMes: toNum(r.receita_mes_brl),
     roi: r.roi_pct != null ? parseFloat(String(r.roi_pct)) : null,
-    custoHoje: parseFloat(String(r.custo_hoje_brl)) || 0,
-    lucroHoje: parseFloat(String(r.lucro_hoje_brl)) || 0,
+    custoHoje: toNum(r.custo_hoje_brl),
+    lucroHoje: toNum(r.lucro_hoje_brl),
     payback: (r.payback_str as string) ?? null,
     // 遙測（三層嵌套）
     metering: {
-      pv_power: parseFloat(String(r.pv_power)) || 0,
-      battery_power: parseFloat(String(r.battery_power)) || 0,
-      grid_power_kw: parseFloat(String(r.grid_power_kw)) || 0,
-      load_power: parseFloat(String(r.load_power)) || 0,
+      pv_power: toNum(r.pv_power),
+      battery_power: toNum(r.battery_power),
+      grid_power_kw: toNum(r.grid_power_kw),
+      load_power: toNum(r.load_power),
       // 日累計 — Stage 5: from device_state
-      grid_import_kwh: parseFloat(String(r.grid_import_kwh)) || 0,
-      grid_export_kwh: parseFloat(String(r.grid_export_kwh)) || 0,
-      pv_daily_energy: parseFloat(String(r.pv_daily_energy)) || 0,
-      bat_charged_today: parseFloat(String(r.bat_charged_today)) || 0,
-      bat_discharged_today: parseFloat(String(r.bat_discharged_today)) || 0,
+      grid_import_kwh: toNum(r.grid_import_kwh),
+      grid_export_kwh: toNum(r.grid_export_kwh),
+      pv_daily_energy: toNum(r.pv_daily_energy),
+      bat_charged_today: toNum(r.bat_charged_today),
+      bat_discharged_today: toNum(r.bat_discharged_today),
     },
     status: {
-      battery_soc: parseFloat(String(r.battery_soc)) || 0,
-      bat_soh: parseFloat(String(r.bat_soh)) || 0,
+      battery_soc: toNum(r.battery_soc),
+      bat_soh: toNum(r.bat_soh),
       bat_work_status: ((r.bat_work_status as string) || "idle") as
         | "charging"
         | "discharging"
         | "idle",
-      battery_voltage: parseFloat(String(r.battery_voltage)) || 0,
-      bat_cycle_count: parseInt(String(r.bat_cycle_count), 10) || 0,
-      inverter_temp: parseFloat(String(r.inverter_temp)) || 0,
+      battery_voltage: toNum(r.battery_voltage),
+      bat_cycle_count: toInt(r.bat_cycle_count),
+      inverter_temp: toNum(r.inverter_temp),
       is_online: (r.is_online as boolean) ?? false,
-      grid_frequency: parseFloat(String(r.grid_frequency)) || 0,
+      grid_frequency: toNum(r.grid_frequency),
     },
     config:
       r.vs_min_soc != null
