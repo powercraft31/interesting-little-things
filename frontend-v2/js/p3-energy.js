@@ -43,9 +43,9 @@ var EnergyPage = {
         self._currentGateway
           ? DataSource.energy.gatewayEnergy(self._currentGateway)
           : Promise.resolve({}),
-        DataSource.energy.baCompare(0),
-        DataSource.energy.baCompare(1),
-        DataSource.energy.baCompare(2),
+        DataSource.energy.baCompare(0).catch(function() { return {}; }),
+        DataSource.energy.baCompare(1).catch(function() { return {}; }),
+        DataSource.energy.baCompare(2).catch(function() { return {}; }),
       ]);
       self._currentEnergyData = secondResults[0];
       self._baCompare = {
@@ -205,6 +205,9 @@ var EnergyPage = {
   },
 
   _buildBACards: function (ba) {
+    if (!ba || !ba.before || !ba.after) {
+      return '<div class="empty-state-detail">' + t("shared.noData") + '</div>';
+    }
     var cards = [
       {
         label: t("energy.ba.selfCons"),
@@ -427,7 +430,7 @@ var EnergyPage = {
 
   _initMainChart: function () {
     var data = this._getHomeData();
-    if (!data) return;
+    if (!data || !data.timeLabels || data.timeLabels.length === 0) return;
 
     var pv = data.pv;
     var load = data.load;

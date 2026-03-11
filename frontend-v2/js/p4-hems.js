@@ -337,7 +337,7 @@ var HEMSPage = {
 
   // ---- T4.4: ACK Status Panel (D3: simplified — no ackList table) ----
   _buildAckStatusCard: function () {
-    var dispatch = this._overview ? this._overview.lastDispatch : {};
+    var dispatch = (this._overview && this._overview.lastDispatch) ? this._overview.lastDispatch : {};
 
     var toLabel = this._modeKeys[dispatch.toMode]
       ? t(this._modeKeys[dispatch.toMode].titleKey)
