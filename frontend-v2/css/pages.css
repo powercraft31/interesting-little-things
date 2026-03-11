@@ -1642,6 +1642,10 @@
   color: var(--amber);
 }
 
+.p6-status-na {
+  opacity: 0.5;
+}
+
 /* Savings chart */
 .p6-savings-chart {
   height: 380px;

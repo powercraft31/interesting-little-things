@@ -85,7 +85,15 @@ var PerformancePage = {
         var rows = metrics
           .map(function (m) {
             var statusIcon, statusClass;
-            if (m.status === "pass") {
+            if (
+              m.target === "TBD" ||
+              m.target === "\u2014" ||
+              m.target === "-" ||
+              m.status === "na"
+            ) {
+              statusIcon = "\u26AA";
+              statusClass = "p6-status-na";
+            } else if (m.status === "pass") {
               statusIcon = "\u2705";
               statusClass = "p6-status-pass";
             } else if (m.status === "near") {

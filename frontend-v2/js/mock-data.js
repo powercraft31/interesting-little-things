@@ -40,6 +40,13 @@ for (let h = 0; h < 24; h++) {
 // =========================================================
 // STATIC MOCK DATA
 // =========================================================
+const DEVICE_TYPES = [
+  { type: "Inverter + Battery", count: 20, online: 19, color: "#a855f7" },
+  { type: "Smart Meter", count: 12, online: 12, color: "#06b6d4" },
+  { type: "AC", count: 10, online: 9, color: "#3b82f6" },
+  { type: "EV Charger", count: 5, online: 4, color: "#ec4899" },
+];
+
 const FLEET = {
   totalDevices: 47,
   onlineCount: 44,
@@ -47,14 +54,8 @@ const FLEET = {
   onlineRate: 93.6,
   totalGateways: 4,
   totalIntegradores: 2,
+  deviceTypes: DEVICE_TYPES,
 };
-
-const DEVICE_TYPES = [
-  { type: "Inverter + Battery", count: 20, online: 19, color: "#a855f7" },
-  { type: "Smart Meter", count: 12, online: 12, color: "#06b6d4" },
-  { type: "AC", count: 10, online: 9, color: "#3b82f6" },
-  { type: "EV Charger", count: 5, online: 4, color: "#ec4899" },
-];
 
 const INTEGRADORES = [
   {
@@ -359,7 +360,46 @@ function initMockData() {
   DemoStore.set("homeData", homeData);
   DemoStore.set("uptimeTrend", generateUptimeTrend());
   DemoStore.set("mockDataVersion", MOCK_DATA_VERSION);
+
+  // Export uptimeTrend to global for DataSource fallback
+  window.uptimeTrendData = DemoStore.get("uptimeTrend");
 }
+
+// =========================================================
+// GATEWAY ENERGY MOCK (returns homeData by gateway index)
+// =========================================================
+window.getGatewayEnergyMock = function (gatewayId) {
+  if (typeof DemoStore === "undefined") return {};
+  var allData = DemoStore.get("homeData");
+  if (!allData) return {};
+  var keys = ["home-a", "home-b", "home-c"];
+  var gwIds = [
+    "WKRD24070202100144F",
+    "WKRD24070202100228G",
+    "WKRD24070202100212P",
+  ];
+  var idx = gwIds.indexOf(gatewayId);
+  if (idx < 0) idx = 0;
+  return allData[keys[idx]] || {};
+};
+
+// =========================================================
+// BA_COMPARE (Before/After data for P3)
+// =========================================================
+var BA_COMPARE = {
+  0: {
+    before: { selfCons: 82, peakKw: 3.2, gridImport: 18.5 },
+    after: { selfCons: 97, peakKw: 1.8, gridImport: 4.2 },
+  },
+  1: {
+    before: { selfCons: 78, peakKw: 3.5, gridImport: 22.1 },
+    after: { selfCons: 95, peakKw: 2.0, gridImport: 6.8 },
+  },
+  2: {
+    before: { selfCons: 85, peakKw: 3.0, gridImport: 16.2 },
+    after: { selfCons: 98, peakKw: 1.6, gridImport: 3.1 },
+  },
+};
 
 // =========================================================
 // GATEWAYS (v5.19: replaces HOMES)
@@ -367,7 +407,7 @@ function initMockData() {
 const GATEWAYS = [
   {
     gatewayId: "WKRD24070202100144F",
-    name: "Casa Silva \u00b7 Home-1",
+    name: "Residência Silva",
     orgId: "ORG_ENERGIA_001",
     orgName: "Solfacil Pilot Corp",
     status: "online",
@@ -383,7 +423,7 @@ const GATEWAYS = [
   },
   {
     gatewayId: "WKRD24070202100228G",
-    name: "Casa Santos \u00b7 Home-2",
+    name: "Residência Santos",
     orgId: "ORG_ENERGIA_001",
     orgName: "Solfacil Pilot Corp",
     status: "online",
@@ -399,7 +439,7 @@ const GATEWAYS = [
   },
   {
     gatewayId: "WKRD24070202100212P",
-    name: "Casa Oliveira \u00b7 Home-3",
+    name: "Residência Oliveira",
     orgId: "ORG_ENERGIA_001",
     orgName: "Solfacil Pilot Corp",
     status: "offline",
@@ -824,7 +864,7 @@ const SCORECARD = {
       value: 91.3,
       unit: "%",
       target: "TBD",
-      status: "pass",
+      status: "na",
     },
     {
       name: "Training Time",
@@ -852,7 +892,7 @@ const SCORECARD = {
 
 const SAVINGS_BY_HOME = [
   {
-    home: "Casa Silva \u00b7 Home-1",
+    home: "Residência Silva",
     total: 145.0,
     alpha: 74.2,
     sc: 85,
@@ -860,7 +900,7 @@ const SAVINGS_BY_HOME = [
     ps: 20,
   },
   {
-    home: "Casa Santos \u00b7 Home-2",
+    home: "Residência Santos",
     total: 118.5,
     alpha: 68.1,
     sc: 65,
@@ -868,7 +908,7 @@ const SAVINGS_BY_HOME = [
     ps: 18.5,
   },
   {
-    home: "Casa Oliveira \u00b7 Home-3",
+    home: "Residência Oliveira",
     total: 167.3,
     alpha: 79.5,
     sc: 95,
@@ -884,7 +924,7 @@ const MOCK_GW_DEVICES = {
   WKRD24070202100144F: {
     gateway: {
       gatewayId: "WKRD24070202100144F",
-      name: "Casa Silva \u00b7 Home-1",
+      name: "Residência Silva",
       status: "online",
     },
     devices: DEVICES.filter(function (d) {
@@ -919,7 +959,7 @@ const MOCK_GW_DEVICES = {
   WKRD24070202100228G: {
     gateway: {
       gatewayId: "WKRD24070202100228G",
-      name: "Casa Santos \u00b7 Home-2",
+      name: "Residência Santos",
       status: "online",
     },
     devices: DEVICES.filter(function (d) {
@@ -954,7 +994,7 @@ const MOCK_GW_DEVICES = {
   WKRD24070202100212P: {
     gateway: {
       gatewayId: "WKRD24070202100212P",
-      name: "Casa Oliveira \u00b7 Home-3",
+      name: "Residência Oliveira",
       status: "offline",
     },
     devices: DEVICES.filter(function (d) {
@@ -1014,7 +1054,7 @@ const MOCK_DEVICE_DETAIL = {
     retailBuyRateKwh: 0.8,
     retailSellRateKwh: 0.25,
     gatewayId: "WKRD24070202100144F",
-    gatewayName: "Casa Silva \u00b7 Home-1",
+    gatewayName: "Residência Silva",
     gatewayStatus: "online",
   },
   state: {

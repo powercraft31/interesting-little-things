@@ -131,7 +131,11 @@ var DataSource = (function () {
             return d.trend;
           });
         },
-        typeof uptimeTrendData !== "undefined" ? uptimeTrendData : [],
+        typeof uptimeTrendData !== "undefined"
+          ? uptimeTrendData
+          : (typeof DemoStore !== "undefined" &&
+              DemoStore.get("uptimeTrend")) ||
+              [],
       );
     },
   };
@@ -228,9 +232,14 @@ var DataSource = (function () {
   var energy = {
     gatewayEnergy: function (gatewayId, date) {
       var qs = date ? "?date=" + date : "";
-      return withFallback(function () {
-        return apiGet("/api/gateways/" + gatewayId + "/energy" + qs);
-      }, {});
+      return withFallback(
+        function () {
+          return apiGet("/api/gateways/" + gatewayId + "/energy" + qs);
+        },
+        typeof getGatewayEnergyMock === "function"
+          ? getGatewayEnergyMock(gatewayId)
+          : {},
+      );
     },
     summary: function (date) {
       var qs = date ? "?date=" + date : "";
@@ -239,6 +248,16 @@ var DataSource = (function () {
           return d.summary;
         });
       }, []);
+    },
+    baCompare: function (gatewayId) {
+      return withFallback(
+        function () {
+          return apiGet("/api/gateways/" + gatewayId + "/ba-compare");
+        },
+        typeof BA_COMPARE !== "undefined"
+          ? BA_COMPARE[gatewayId] || BA_COMPARE[0] || {}
+          : {},
+      );
     },
   };
 
@@ -255,7 +274,11 @@ var DataSource = (function () {
             modeDistribution:
               typeof MODE_DISTRIBUTION !== "undefined"
                 ? MODE_DISTRIBUTION
-                : { self_consumption: 22, peak_valley_arbitrage: 18, peak_shaving: 7 },
+                : {
+                    self_consumption: 22,
+                    peak_valley_arbitrage: 18,
+                    peak_shaving: 7,
+                  },
             tarifaRates:
               typeof TARIFA_RATES !== "undefined"
                 ? TARIFA_RATES

@@ -219,16 +219,23 @@ var VPPPage = {
           key: "type",
           label: t("vpp.col.type"),
           format: function (val) {
+            var labels = {
+              Discharge: t("vpp.discharge"),
+              Charge: t("vpp.charge"),
+              Curtailment: t("vpp.curtailment"),
+              "Load Curtailment": t("vpp.curtailment"),
+            };
             var classes = {
               Discharge: "p5-type-discharge",
               Charge: "p5-type-charge",
               Curtailment: "p5-type-curtail",
+              "Load Curtailment": "p5-type-curtail",
             };
             return (
               '<span class="p5-type-badge ' +
               (classes[val] || "") +
               '">' +
-              val +
+              (labels[val] || val) +
               "</span>"
             );
           },
@@ -270,7 +277,9 @@ var VPPPage = {
                 : v >= 90
                   ? "text-amber"
                   : "text-negative";
-            return '<span class="' + color + '">' + v.toFixed(1) + "%</span>";
+            return (
+              '<span class="' + color + '">' + formatNumber(v, 1) + "%</span>"
+            );
           },
         },
         {

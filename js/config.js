@@ -9,5 +9,5 @@
 // eslint-disable-next-line no-unused-vars
 const CONFIG = {
   BFF_API_URL: "https://152.42.235.155:8443/api",  // combined HTTPS server
-  USE_MOCK: false,  // false = fetch from API; true = use hardcoded mock data
+  USE_MOCK: true,  // false = fetch from API; true = use hardcoded mock data
 };

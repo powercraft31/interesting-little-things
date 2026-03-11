@@ -10,20 +10,7 @@ var EnergyPage = {
 
   _gatewayKeys: [],
 
-  _baCompare: {
-    0: {
-      before: { selfCons: 82, peakKw: 3.2, gridImport: 18.5 },
-      after: { selfCons: 97, peakKw: 1.8, gridImport: 4.2 },
-    },
-    1: {
-      before: { selfCons: 78, peakKw: 3.5, gridImport: 22.1 },
-      after: { selfCons: 95, peakKw: 2.0, gridImport: 6.8 },
-    },
-    2: {
-      before: { selfCons: 85, peakKw: 3.0, gridImport: 16.2 },
-      after: { selfCons: 98, peakKw: 1.6, gridImport: 3.1 },
-    },
-  },
+  _baCompare: {},
 
   _crossGatewaySummary: [],
 
@@ -52,10 +39,20 @@ var EnergyPage = {
         ? self._gateways[0].gatewayId
         : null;
 
-      var energyData = self._currentGateway
-        ? await DataSource.energy.gatewayEnergy(self._currentGateway)
-        : {};
-      self._currentEnergyData = energyData;
+      var secondResults = await Promise.all([
+        self._currentGateway
+          ? DataSource.energy.gatewayEnergy(self._currentGateway)
+          : Promise.resolve({}),
+        DataSource.energy.baCompare(0),
+        DataSource.energy.baCompare(1),
+        DataSource.energy.baCompare(2),
+      ]);
+      self._currentEnergyData = secondResults[0];
+      self._baCompare = {
+        0: secondResults[1],
+        1: secondResults[2],
+        2: secondResults[3],
+      };
     } catch (err) {
       showErrorBoundary("energy-content", err);
       return;
