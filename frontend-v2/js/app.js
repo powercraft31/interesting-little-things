@@ -195,8 +195,9 @@ function showErrorBoundary(containerId, err) {
 // DATE FORMAT UTILITIES (ISO → Brazilian DD/MM format)
 // =========================================================
 function formatISODate(iso) {
+  if (iso == null || iso === "") return "—";
   var d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
+  if (isNaN(d.getTime())) return "—";
   var dd = String(d.getDate()).padStart(2, "0");
   var mm = String(d.getMonth() + 1).padStart(2, "0");
   var yyyy = d.getFullYear();
@@ -204,8 +205,9 @@ function formatISODate(iso) {
 }
 
 function formatISODateTime(iso) {
+  if (iso == null || iso === "") return "—";
   var d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
+  if (isNaN(d.getTime())) return "—";
   var dd = String(d.getDate()).padStart(2, "0");
   var mm = String(d.getMonth() + 1).padStart(2, "0");
   var yyyy = d.getFullYear();
