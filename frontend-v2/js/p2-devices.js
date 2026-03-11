@@ -30,7 +30,7 @@ var DevicesPage = {
 
     if (!self._gateways || self._gateways.length === 0) {
       container.innerHTML =
-        '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-title">No Data</div><div class="empty-state-detail">No gateways found.</div></div>';
+        '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-title">' + t("shared.noData") + '</div><div class="empty-state-detail">' + t("devices.noDevicesUnderGw") + '</div></div>';
       return;
     }
 
@@ -76,9 +76,9 @@ var DevicesPage = {
       "</h2>" +
       '<div class="p2-summary">' +
       gateways.length +
-      " Gateways \u00b7 " +
+      " " + t("fleet.gateways") + " \u00b7 " +
       totalDevices +
-      " Devices</div>" +
+      " " + t("shared.devices") + "</div>" +
       "</div>";
 
     var cards = gateways
@@ -335,7 +335,7 @@ var DevicesPage = {
 
     if (!self._currentDetail || !self._currentDetail.device) {
       layer3.innerHTML =
-        '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-title">No Data</div><div class="empty-state-detail">Device not found.</div><button class="btn btn-secondary" onclick="DevicesPage._closeLayer3()">Back</button></div>';
+        '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-title">' + t("shared.noData") + '</div><div class="empty-state-detail">' + t("devices.deviceNotFound") + '</div><button class="btn btn-secondary" onclick="DevicesPage._closeLayer3()">' + t("shared.back") + '</button></div>';
       return;
     }
 
@@ -372,7 +372,7 @@ var DevicesPage = {
     return (
       '<div class="detail-header">' +
       '<div class="breadcrumb">' +
-      '<a href="#" class="bc-link" id="bc-back">Devices</a>' +
+      '<a href="#" class="bc-link" id="bc-back">' + t("nav.devices") + '</a>' +
       " \u203a <span>" +
       gwName +
       "</span>" +
@@ -434,10 +434,10 @@ var DevicesPage = {
 
     var batSub = "Idle";
     if (state.batteryPower > 0.05)
-      batSub = "SoC " + (state.batterySoc || 0) + "% \u00b7 Charging";
+      batSub = "SoC " + (state.batterySoc || 0) + "% \u00b7 " + t("devices.ef.charging");
     else if (state.batteryPower < -0.05)
-      batSub = "SoC " + (state.batterySoc || 0) + "% \u00b7 Discharging";
-    else batSub = "SoC " + (state.batterySoc || 0) + "% \u00b7 Idle";
+      batSub = "SoC " + (state.batterySoc || 0) + "% \u00b7 " + t("devices.ef.discharging");
+    else batSub = "SoC " + (state.batterySoc || 0) + "% \u00b7 " + t("devices.ef.idle");
 
     var gridClass =
       state.gridPowerKw > 0
@@ -447,10 +447,10 @@ var DevicesPage = {
           : "";
     var gridSub =
       state.gridPowerKw > 0
-        ? "Importing"
+        ? t("devices.ef.importing")
         : state.gridPowerKw < 0
-          ? "Exporting"
-          : "Idle";
+          ? t("devices.ef.exporting")
+          : t("devices.ef.idle");
 
     var showTop = state.pvPower > 0.01;
     var showLeft = Math.abs(state.batteryPower || 0) > 0.01;
@@ -461,7 +461,7 @@ var DevicesPage = {
       '<div class="energy-flow-diamond">' +
       '<div class="ef-pv ef-node"><div class="ef-node-icon">\u2600\ufe0f</div><div class="ef-node-value">' +
       pvVal +
-      '</div><div class="ef-node-label">Solar PV</div></div>' +
+      '</div><div class="ef-node-label">' + t("devices.ef.solarPv") + '</div></div>' +
       '<div class="ef-line-top' +
       (showTop ? "" : " hidden") +
       '"></div>' +
@@ -479,7 +479,7 @@ var DevicesPage = {
       '"></div>' +
       '<div class="ef-load ef-node"><div class="ef-node-icon">\ud83c\udfe0</div><div class="ef-node-value">' +
       loadVal +
-      '</div><div class="ef-node-label">Load</div></div>' +
+      '</div><div class="ef-node-label">' + t("devices.ef.load") + '</div></div>' +
       '<div class="ef-line-bottom' +
       (showBottom ? "" : " hidden") +
       '"></div>' +
@@ -915,7 +915,7 @@ var DevicesPage = {
       }, 3000);
     } catch (err) {
       console.error("[P2] putSchedule error:", err);
-      self._showToast("Failed to submit schedule.", "error");
+      self._showToast(t("devices.loadFailed"), "error");
       if (applyBtn) {
         applyBtn.textContent = t("devices.applyToGateway");
         applyBtn.disabled = false;

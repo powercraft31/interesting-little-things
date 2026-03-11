@@ -31,7 +31,7 @@ const Components = {
   dataTable(opts) {
     const columns = opts.columns || [];
     const rows = opts.rows || [];
-    const emptyText = opts.emptyText || "No data available";
+    const emptyText = opts.emptyText || (typeof t === "function" ? t("shared.noData") : "No data available");
 
     let html = '<div class="data-table-wrapper"><table class="data-table">';
 
