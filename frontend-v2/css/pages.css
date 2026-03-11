@@ -1830,7 +1830,22 @@
 .dev-stats strong { color: var(--text-primary); font-family: var(--font-mono); }
 
 /* ---- Layer 3: Device Detail Page ---- */
-.detail-page { padding: var(--space-lg) 0; }
+.detail-page {
+  padding: var(--space-lg) 0;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-xl);
+}
+.detail-page > .left-col,
+.detail-page > .right-col {
+  min-width: 0; /* prevent grid blowout */
+}
+
+@media (max-width: 1024px) {
+  .detail-page {
+    grid-template-columns: 1fr;
+  }
+}
 
 .detail-breadcrumb {
   font-size: 0.82rem;
