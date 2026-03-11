@@ -198,16 +198,28 @@ var DataSource = (function () {
         },
       );
     },
+    gatewayDetail: function (gatewayId) {
+      return withFallback(
+        function () {
+          return apiGet("/api/gateways/" + gatewayId + "/detail");
+        },
+        function () {
+          return typeof MOCK_GATEWAY_DETAIL !== "undefined"
+            ? MOCK_GATEWAY_DETAIL
+            : {};
+        },
+      );
+    },
     updateDevice: function (assetId, config) {
       if (!USE_LIVE_API) {
         return Promise.resolve({ assetId: assetId, updated: true });
       }
       return apiPut("/api/devices/" + assetId, config);
     },
-    getSchedule: function (assetId) {
+    getSchedule: function (gatewayId) {
       return withFallback(
         function () {
-          return apiGet("/api/devices/" + assetId + "/schedule");
+          return apiGet("/api/gateways/" + gatewayId + "/schedule");
         },
         function () {
           return typeof MOCK_DEVICE_SCHEDULE !== "undefined"
@@ -216,7 +228,7 @@ var DataSource = (function () {
         },
       );
     },
-    putSchedule: function (assetId, slots) {
+    putSchedule: function (gatewayId, slots) {
       if (!USE_LIVE_API) {
         return Promise.resolve({
           commandId: 99,
@@ -224,7 +236,9 @@ var DataSource = (function () {
           message: "Schedule submitted. Waiting for gateway confirmation.",
         });
       }
-      return apiPut("/api/devices/" + assetId + "/schedule", { slots: slots });
+      return apiPut("/api/gateways/" + gatewayId + "/schedule", {
+        slots: slots,
+      });
     },
   };
 

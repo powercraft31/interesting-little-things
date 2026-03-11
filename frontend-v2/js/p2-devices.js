@@ -126,9 +126,13 @@ var DevicesPage = {
       statusClass +
       '"></div>' +
       '<div class="gw-name-block">' +
+      '<a href="#" class="gw-detail-link" data-gw-id="' +
+      gw.gatewayId +
+      '">' +
       '<div class="gw-name-primary">' +
       gw.name +
-      "</div>" +
+      " &#8250;</div>" +
+      "</a>" +
       '<div class="gw-sn">' +
       gw.gatewayId +
       "</div>" +
@@ -144,10 +148,11 @@ var DevicesPage = {
       " " +
       rssi +
       "</span>" +
-      "<span>" +
-      t("devices.firmware") +
-      " " +
-      fw +
+      "<span>CPU " +
+      (health.cpuTemp || "--") +
+      "</span>" +
+      "<span>MEM " +
+      (health.memoryUsage || "--") +
       "</span>" +
       "<span>" +
       t("devices.uptime") +
@@ -177,11 +182,24 @@ var DevicesPage = {
 
   _setupLayer1Events: function () {
     var self = this;
-    document.querySelectorAll(".gw-header").forEach(function (header) {
-      header.addEventListener("click", function () {
-        var card = header.closest(".gw-card");
+
+    // Chevron click → expand/collapse device list
+    document.querySelectorAll(".gw-chevron").forEach(function (chevron) {
+      chevron.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var card = chevron.closest(".gw-card");
         var gwId = card.dataset.gwId;
         self._toggleGateway(gwId);
+      });
+    });
+
+    // Gateway name click → open Layer 3 (Gateway-level)
+    document.querySelectorAll(".gw-detail-link").forEach(function (link) {
+      link.addEventListener("click", function (e) {
+        e.preventDefault();
+        e.stopPropagation();
+        var gwId = link.dataset.gwId;
+        self._openLayer3GW(gwId);
       });
     });
   },
@@ -257,14 +275,14 @@ var DevicesPage = {
 
     var typeIcons = {
       "Inverter + Battery": "\ud83d\udd0b",
-      "INVERTER_BATTERY": "\ud83d\udd0b",
+      INVERTER_BATTERY: "\ud83d\udd0b",
       "Smart Meter": "\ud83d\udcca",
-      "SMART_METER": "\ud83d\udcca",
+      SMART_METER: "\ud83d\udcca",
       AC: "\u2744\ufe0f",
-      "HVAC": "\u2744\ufe0f",
+      HVAC: "\u2744\ufe0f",
       "EV Charger": "\ud83d\udd0c",
-      "EV_CHARGER": "\ud83d\udd0c",
-      "SOLAR_PANEL": "\u2600\ufe0f",
+      EV_CHARGER: "\ud83d\udd0c",
+      SOLAR_PANEL: "\u2600\ufe0f",
     };
     var icon = typeIcons[dev.assetType] || "\ud83d\udd0c";
 
@@ -304,13 +322,7 @@ var DevicesPage = {
   },
 
   _attachDeviceRowListeners: function (container) {
-    var self = this;
-    container.querySelectorAll(".device-row").forEach(function (row) {
-      row.addEventListener("click", function () {
-        var assetId = row.dataset.assetId;
-        self._openLayer3(assetId);
-      });
-    });
+    // Device rows are now info-only — no click → Layer 3
   },
 
   // =========================================================
@@ -369,7 +381,530 @@ var DevicesPage = {
     if (layer3) layer3.style.display = "none";
     this._currentDetail = null;
     this._currentSchedule = null;
+    this._pendingSlots = [];
+    this._currentGatewayId = null;
   },
+
+  // =========================================================
+  // LAYER 3: Gateway-Level Detail (Fix #3)
+  // =========================================================
+
+  _pendingSlots: [],
+  _currentGatewayId: null,
+
+  _openLayer3GW: async function (gatewayId) {
+    var self = this;
+    var layer1 = document.getElementById("layer1");
+    var layer3 = document.getElementById("layer3");
+    if (!layer1 || !layer3) return;
+
+    self._currentGatewayId = gatewayId;
+    layer1.style.display = "none";
+    layer3.style.display = "block";
+    layer3.innerHTML =
+      '<div class="detail-loading"><div class="skeleton" style="height:400px;border-radius:10px"></div></div>';
+
+    try {
+      var detail = await DataSource.devices.gatewayDetail(gatewayId);
+      self._currentDetail = detail;
+      self._currentSchedule = detail.schedule || {
+        syncStatus: "unknown",
+        slots: [],
+      };
+      self._pendingSlots = JSON.parse(
+        JSON.stringify(self._currentSchedule.slots || []),
+      );
+    } catch (err) {
+      layer3.innerHTML =
+        '<div class="error-boundary"><div class="error-icon">&#9888;</div>' +
+        '<div class="error-title">Error</div>' +
+        '<div class="error-detail">' +
+        t("devices.loadFailed") +
+        "</div>" +
+        '<button class="btn btn-secondary" onclick="DevicesPage._closeLayer3()">' +
+        t("shared.back") +
+        "</button></div>";
+      console.error("[P2] gatewayDetail error:", err);
+      return;
+    }
+
+    if (!detail || !detail.gateway) {
+      layer3.innerHTML =
+        '<div class="empty-state"><div class="empty-state-icon">&#9888;</div>' +
+        '<div class="empty-state-title">' +
+        t("shared.noData") +
+        "</div>" +
+        '<button class="btn btn-secondary" onclick="DevicesPage._closeLayer3()">' +
+        t("shared.back") +
+        "</button></div>";
+      return;
+    }
+
+    layer3.innerHTML = self._buildLayer3GW();
+    self._setupLayer3Events();
+  },
+
+  _buildLayer3GW: function () {
+    var detail = this._currentDetail;
+    var gw = detail.gateway;
+    var state = detail.state || {};
+    var extra = detail.telemetryExtra || {};
+    var config = detail.config || {};
+    var devices = detail.devices || [];
+    var schedule = this._currentSchedule || {
+      syncStatus: "unknown",
+      slots: [],
+    };
+
+    var statusTag =
+      gw.status === "online"
+        ? '<span class="tag-online">Online</span>'
+        : '<span class="tag-offline">Offline</span>';
+
+    var devSummary = devices
+      .map(function (d) {
+        var icon = {
+          INVERTER_BATTERY: "\ud83d\udd0b",
+          SMART_METER: "\ud83d\udcca",
+        };
+        return (
+          (icon[d.assetType] || "\ud83d\udd0c") + " " + (d.name || d.assetId)
+        );
+      })
+      .join(" \u00b7 ");
+
+    return (
+      '<div class="detail-header">' +
+      '<div class="breadcrumb">' +
+      '<a href="#" class="bc-link" id="bc-back">' +
+      t("nav.devices") +
+      "</a>" +
+      " \u203a <span>" +
+      gw.name +
+      "</span>" +
+      "</div>" +
+      "<h2>" +
+      gw.name +
+      " " +
+      statusTag +
+      "</h2>" +
+      '<div class="detail-subtitle">' +
+      gw.gatewayId +
+      " \u00b7 " +
+      devSummary +
+      "</div>" +
+      "</div>" +
+      '<div class="detail-page">' +
+      '<div class="left-col">' +
+      this._buildEnergyFlow(state) +
+      this._buildBatteryStatus(state) +
+      this._buildInverterGrid(state, extra) +
+      "</div>" +
+      '<div class="right-col">' +
+      this._buildDeviceConfigGW(devices, config) +
+      this._buildScheduleCardEditable(schedule) +
+      this._buildGatewayHealth(gw.emsHealth) +
+      "</div>" +
+      "</div>"
+    );
+  },
+
+  _buildDeviceConfigGW: function (devices, config) {
+    var deviceChips = devices
+      .map(function (d) {
+        var onlineClass = d.isOnline ? "tag-online" : "tag-offline";
+        return (
+          '<span class="device-chip ' +
+          onlineClass +
+          '">' +
+          (d.name || d.assetId) +
+          "</span>"
+        );
+      })
+      .join("");
+
+    var rows = [
+      {
+        label: "SOC Min (%)",
+        value: config.socMin != null ? config.socMin : "--",
+      },
+      {
+        label: "SOC Max (%)",
+        value: config.socMax != null ? config.socMax : "--",
+      },
+      {
+        label: "Max Charge Rate (kW)",
+        value: config.maxChargeRateKw || "--",
+      },
+      {
+        label: "Max Discharge Rate (kW)",
+        value: config.maxDischargeRateKw || "--",
+      },
+      {
+        label: "Grid Import Limit (kW)",
+        value:
+          config.gridImportLimitKw != null ? config.gridImportLimitKw : "--",
+      },
+    ];
+
+    var body =
+      '<div class="device-chips-row">' +
+      deviceChips +
+      "</div>" +
+      rows
+        .map(function (r) {
+          return (
+            '<div class="tele-row"><span class="tele-label">' +
+            r.label +
+            '</span><span class="tele-value">' +
+            r.value +
+            "</span></div>"
+          );
+        })
+        .join("");
+
+    return Components.sectionCard(t("devices.gatewayDetail"), body);
+  },
+
+  // =========================================================
+  // SCHEDULE EDITOR (Fix #1)
+  // =========================================================
+
+  _buildScheduleCardEditable: function (schedule) {
+    var syncBadgeClass =
+      schedule.syncStatus === "synced"
+        ? "sync-ok"
+        : schedule.syncStatus === "pending"
+          ? "sync-pending"
+          : "sync-unknown";
+    var syncLabel =
+      schedule.syncStatus === "synced"
+        ? "Synced"
+        : schedule.syncStatus === "pending"
+          ? "Pending"
+          : "Unknown";
+    var lastAck = schedule.lastAckAt
+      ? formatISODateTime(schedule.lastAckAt)
+      : "--";
+
+    var body =
+      '<div class="sync-status ' +
+      syncBadgeClass +
+      '">' +
+      '<span class="sync-dot"></span> ' +
+      syncLabel +
+      '<span class="sync-ack">Last ACK: ' +
+      lastAck +
+      "</span>" +
+      "</div>" +
+      '<div class="schedule-bar" id="schedule-bar-preview"></div>' +
+      '<div class="schedule-markers"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span></div>' +
+      '<table class="schedule-table">' +
+      "<thead><tr><th>Start</th><th>End</th><th>Mode</th><th></th></tr></thead>" +
+      '<tbody id="schedule-rows"></tbody>' +
+      "</table>" +
+      '<button class="btn btn-outline btn-sm" id="schedule-add-slot">+ ' +
+      t("devices.addSlot") +
+      "</button>" +
+      '<div class="schedule-apply-row">' +
+      '<button class="btn btn-primary" id="schedule-apply">' +
+      t("devices.applyToGateway") +
+      "</button>" +
+      "</div>";
+
+    return Components.sectionCard(t("devices.dailySchedule"), body);
+  },
+
+  _buildSlotRow: function (slot, index) {
+    var modeOptions = [
+      "self_consumption",
+      "peak_valley_arbitrage",
+      "peak_shaving",
+    ];
+    var modeLabels = {
+      self_consumption: t("devices.selfConsumption"),
+      peak_valley_arbitrage: t("devices.peakValleyArbitrage"),
+      peak_shaving: t("devices.peakShaving"),
+    };
+    var modeColors = {
+      self_consumption: "#22c55e",
+      peak_valley_arbitrage: "#3b82f6",
+      peak_shaving: "#a855f7",
+    };
+
+    var startOptions = "";
+    for (var h = 0; h < 24; h++) {
+      startOptions +=
+        '<option value="' +
+        h +
+        '"' +
+        (slot.startHour === h ? " selected" : "") +
+        ">" +
+        String(h).padStart(2, "0") +
+        ":00</option>";
+    }
+
+    var endOptions = "";
+    for (var h2 = 1; h2 <= 24; h2++) {
+      endOptions +=
+        '<option value="' +
+        h2 +
+        '"' +
+        (slot.endHour === h2 ? " selected" : "") +
+        ">" +
+        String(h2).padStart(2, "0") +
+        ":00</option>";
+    }
+
+    var modeSelect = modeOptions
+      .map(function (m) {
+        return (
+          '<option value="' +
+          m +
+          '"' +
+          (slot.mode === m ? " selected" : "") +
+          ">" +
+          modeLabels[m] +
+          "</option>"
+        );
+      })
+      .join("");
+
+    var color = modeColors[slot.mode] || "#6b7280";
+
+    return (
+      '<tr data-slot-index="' +
+      index +
+      '">' +
+      '<td><select class="slot-start config-input">' +
+      startOptions +
+      "</select></td>" +
+      '<td><select class="slot-end config-input">' +
+      endOptions +
+      "</select></td>" +
+      '<td><span class="schedule-mode-badge" style="background:' +
+      color +
+      '">' +
+      '<select class="slot-mode config-input schedule-mode-select">' +
+      modeSelect +
+      "</select>" +
+      "</span></td>" +
+      '<td><button class="btn-icon btn-delete-slot" title="' +
+      t("devices.deleteSlot") +
+      '">\ud83d\uddd1</button></td>' +
+      "</tr>"
+    );
+  },
+
+  _renderScheduleRows: function () {
+    var self = this;
+    var tbody = document.getElementById("schedule-rows");
+    if (!tbody) return;
+    tbody.innerHTML = self._pendingSlots
+      .map(function (slot, i) {
+        return self._buildSlotRow(slot, i);
+      })
+      .join("");
+    self._renderTimelinePreview();
+  },
+
+  _renderTimelinePreview: function () {
+    var bar = document.getElementById("schedule-bar-preview");
+    if (!bar) return;
+    var modeColors = {
+      self_consumption: "#22c55e",
+      peak_valley_arbitrage: "#3b82f6",
+      peak_shaving: "#a855f7",
+    };
+    bar.innerHTML = this._pendingSlots
+      .map(function (slot) {
+        var widthPct = (((slot.endHour - slot.startHour) / 24) * 100).toFixed(
+          2,
+        );
+        var color = modeColors[slot.mode] || "#6b7280";
+        return (
+          '<div class="schedule-segment" style="width:' +
+          widthPct +
+          "%;background:" +
+          color +
+          '" title="' +
+          String(slot.startHour).padStart(2, "0") +
+          ":00-" +
+          String(slot.endHour).padStart(2, "0") +
+          ":00 " +
+          slot.mode +
+          '"></div>'
+        );
+      })
+      .join("");
+  },
+
+  _attachSlotListeners: function () {
+    var self = this;
+    var tbody = document.getElementById("schedule-rows");
+    if (!tbody) return;
+
+    // Delete buttons
+    tbody.querySelectorAll(".btn-delete-slot").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var row = btn.closest("tr");
+        var idx = parseInt(row.dataset.slotIndex, 10);
+        self._pendingSlots = self._pendingSlots.filter(function (_, i) {
+          return i !== idx;
+        });
+        self._renderScheduleRows();
+        self._attachSlotListeners();
+      });
+    });
+
+    // Select change listeners
+    tbody.querySelectorAll("tr").forEach(function (row) {
+      var idx = parseInt(row.dataset.slotIndex, 10);
+      var startSel = row.querySelector(".slot-start");
+      var endSel = row.querySelector(".slot-end");
+      var modeSel = row.querySelector(".slot-mode");
+
+      if (startSel) {
+        startSel.addEventListener("change", function () {
+          self._pendingSlots = self._pendingSlots.map(function (s, i) {
+            return i === idx
+              ? {
+                  startHour: parseInt(startSel.value, 10),
+                  endHour: s.endHour,
+                  mode: s.mode,
+                }
+              : s;
+          });
+          self._renderTimelinePreview();
+        });
+      }
+      if (endSel) {
+        endSel.addEventListener("change", function () {
+          self._pendingSlots = self._pendingSlots.map(function (s, i) {
+            return i === idx
+              ? {
+                  startHour: s.startHour,
+                  endHour: parseInt(endSel.value, 10),
+                  mode: s.mode,
+                }
+              : s;
+          });
+          self._renderTimelinePreview();
+        });
+      }
+      if (modeSel) {
+        modeSel.addEventListener("change", function () {
+          self._pendingSlots = self._pendingSlots.map(function (s, i) {
+            return i === idx
+              ? {
+                  startHour: s.startHour,
+                  endHour: s.endHour,
+                  mode: modeSel.value,
+                }
+              : s;
+          });
+          self._renderScheduleRows();
+          self._attachSlotListeners();
+        });
+      }
+    });
+  },
+
+  _handleApplyGW: async function () {
+    var self = this;
+    var gwId = self._currentGatewayId;
+    if (!gwId) return;
+
+    // Validation: startHour < endHour, valid range
+    var valid = self._pendingSlots.every(function (s) {
+      return s.startHour < s.endHour && s.startHour >= 0 && s.endHour <= 24;
+    });
+    if (!valid) {
+      self._showToast(t("devices.invalidSchedule"), "warning");
+      return;
+    }
+
+    var applyBtn = document.getElementById("schedule-apply");
+    if (applyBtn) {
+      applyBtn.disabled = true;
+      applyBtn.textContent = "Submitting...";
+    }
+
+    try {
+      await DataSource.devices.putSchedule(gwId, self._pendingSlots);
+
+      if (applyBtn) {
+        applyBtn.textContent = "Submitted \u2713";
+        applyBtn.classList.add("btn-success");
+      }
+      self._showToast(t("devices.scheduleSubmitted"), "success");
+
+      setTimeout(function () {
+        if (applyBtn) {
+          applyBtn.textContent = t("devices.applyToGateway");
+          applyBtn.disabled = false;
+          applyBtn.classList.remove("btn-success");
+        }
+      }, 3000);
+    } catch (err) {
+      console.error("[P2] putSchedule error:", err);
+      self._showToast(t("devices.loadFailed"), "error");
+      if (applyBtn) {
+        applyBtn.textContent = t("devices.applyToGateway");
+        applyBtn.disabled = false;
+      }
+    }
+  },
+
+  // =========================================================
+  // GATEWAY HEALTH (Fix #4)
+  // =========================================================
+
+  _buildGatewayHealth: function (emsHealth) {
+    var h = emsHealth || {};
+
+    var indicators = [
+      {
+        icon: "\ud83d\udce1",
+        label: "WiFi Signal",
+        value: h.wifiSignalStrength || "--",
+      },
+      { icon: "\ud83c\udf21", label: "CPU Temp", value: h.cpuTemp || "--" },
+      { icon: "\ud83d\udcbb", label: "CPU Usage", value: h.cpuUsage || "--" },
+      { icon: "\ud83d\udcbe", label: "Memory", value: h.memoryUsage || "--" },
+      { icon: "\ud83d\udcbf", label: "Disk", value: h.diskUsage || "--" },
+      { icon: "\u23f1", label: "Uptime", value: h.systemRuntime || "--" },
+      { icon: "\ud83c\udf21", label: "EMS Temp", value: h.emsTemp || "--" },
+      { icon: "\ud83d\udcf6", label: "SIM Status", value: h.simStatus || "--" },
+    ];
+
+    var body =
+      '<div class="ems-health-grid">' +
+      indicators
+        .map(function (ind) {
+          return (
+            '<div class="ems-health-item">' +
+            '<span class="ems-icon">' +
+            ind.icon +
+            "</span>" +
+            '<span class="ems-value">' +
+            ind.value +
+            "</span>" +
+            '<span class="ems-label">' +
+            ind.label +
+            "</span>" +
+            "</div>"
+          );
+        })
+        .join("") +
+      "</div>";
+
+    return Components.sectionCard(t("devices.gatewayHealth"), body);
+  },
+
+  // =========================================================
+  // LAYER 3: Device Detail (deprecated — kept for reference)
+  // =========================================================
 
   _buildLayer3: function () {
     var detail = this._currentDetail;
@@ -946,10 +1481,10 @@ var DevicesPage = {
 
   _setupLayer3Events: function () {
     var self = this;
+
+    // Back navigation
     var bcBack = document.getElementById("bc-back");
     var detailBack = document.getElementById("detail-back");
-    var applyBtn = document.getElementById("detail-apply");
-
     if (bcBack) {
       bcBack.addEventListener("click", function (e) {
         e.preventDefault();
@@ -961,11 +1496,45 @@ var DevicesPage = {
         self._closeLayer3();
       });
     }
-    if (applyBtn) {
-      applyBtn.addEventListener("click", function () {
+
+    // Old device-level apply (deprecated path)
+    var oldApplyBtn = document.getElementById("detail-apply");
+    if (oldApplyBtn) {
+      oldApplyBtn.addEventListener("click", function () {
         self._handleApply();
       });
     }
+
+    // --- Schedule editor events (gateway Layer 3) ---
+    self._renderScheduleRows();
+
+    var addBtn = document.getElementById("schedule-add-slot");
+    if (addBtn) {
+      addBtn.addEventListener("click", function () {
+        var lastEnd =
+          self._pendingSlots.length > 0
+            ? self._pendingSlots[self._pendingSlots.length - 1].endHour
+            : 0;
+        if (lastEnd >= 24) lastEnd = 0;
+        var newSlot = {
+          startHour: lastEnd,
+          endHour: Math.min(lastEnd + 6, 24),
+          mode: "self_consumption",
+        };
+        self._pendingSlots = self._pendingSlots.concat([newSlot]);
+        self._renderScheduleRows();
+        self._attachSlotListeners();
+      });
+    }
+
+    var scheduleApplyBtn = document.getElementById("schedule-apply");
+    if (scheduleApplyBtn) {
+      scheduleApplyBtn.addEventListener("click", function () {
+        self._handleApplyGW();
+      });
+    }
+
+    self._attachSlotListeners();
   },
 
   _handleApply: async function () {
