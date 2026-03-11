@@ -2108,6 +2108,11 @@
 [data-theme="light"] .config-row { border-bottom-color: rgba(0,0,0,0.06); }
 [data-theme="light"] .schedule-segment { color: #fff; }
 
+.scorecard-na {
+  color: var(--muted);
+  font-style: italic;
+}
+
 /* ---- Page-Specific Responsive Rules ---- */
 
 /* P2: Gateway cards responsive */

@@ -119,9 +119,13 @@ var PerformancePage = {
                 "</div>",
               "</div>",
               '<div class="p6-metric-result">',
-              '<div class="p6-metric-value">' +
-                formatNumber(m.value, m.unit === "%" ? 1 : 0) +
-                (m.unit ? " " + m.unit : "") +
+              '<div class="p6-metric-value' +
+                (m.value == null ? " scorecard-na" : "") +
+                '">' +
+                (m.value != null
+                  ? formatNumber(m.value, m.unit === "%" ? 1 : 0) +
+                    (m.unit ? " " + m.unit : "")
+                  : "\u2014") +
                 "</div>",
               '<div class="p6-metric-status ' +
                 statusClass +

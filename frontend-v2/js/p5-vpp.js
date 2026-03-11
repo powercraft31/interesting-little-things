@@ -98,9 +98,9 @@ var VPPPage = {
         color: "text-positive",
       }),
       Components.kpiCard({
-        value: cap.aggregateSoc,
+        value: cap.aggregateSoc != null ? cap.aggregateSoc : "\u2014",
         label: t("vpp.aggSoc"),
-        suffix: "%",
+        suffix: cap.aggregateSoc != null ? "%" : "",
       }),
       Components.kpiCard({
         value: formatNumber(cap.maxDischargeKw, 1),
@@ -115,9 +115,11 @@ var VPPPage = {
         color: "text-positive",
       }),
       Components.kpiCard({
-        value: cap.dispatchableDevices,
+        value:
+          cap.dispatchableDevices != null ? cap.dispatchableDevices : "\u2014",
         label: t("vpp.dispatchable"),
-        suffix: " " + t("shared.devices"),
+        suffix:
+          cap.dispatchableDevices != null ? " " + t("shared.devices") : "",
       }),
     ].join("");
 
@@ -253,7 +255,7 @@ var VPPPage = {
           align: "right",
           mono: true,
           format: function (v) {
-            return v + " kW";
+            return v != null ? v + " kW" : "\u2014";
           },
         },
         {
@@ -262,7 +264,7 @@ var VPPPage = {
           align: "right",
           mono: true,
           format: function (v) {
-            return v + " kW";
+            return v != null ? v + " kW" : "\u2014";
           },
         },
         {
@@ -288,7 +290,7 @@ var VPPPage = {
           align: "right",
           mono: true,
           format: function (v, row) {
-            return v + "/" + (v + row.failed);
+            return v != null ? v + "/" + (v + (row.failed || 0)) : "\u2014";
           },
         },
         {

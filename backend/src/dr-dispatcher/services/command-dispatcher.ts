@@ -1,8 +1,17 @@
 import cron from "node-cron";
 import { Pool } from "pg";
 
+import { publishMqtt } from "../../iot-hub/mqtt-client";
+
 export function startCommandDispatcher(pool: Pool): void {
+  // Existing: trade_schedules → dispatch_commands (every minute)
   cron.schedule("* * * * *", () => runCommandDispatcher(pool));
+
+  // New: device_command_logs pending_dispatch → MQTT (every 10 seconds)
+  setInterval(() => runPendingCommandDispatcher(pool), 10_000);
+
+  // Timeout check: dispatched commands with no ACK after 90s
+  setInterval(() => runTimeoutCheck(pool), 30_000);
 }
 
 export async function runCommandDispatcher(pool: Pool): Promise<void> {
@@ -107,5 +116,81 @@ export async function runCommandDispatcher(pool: Pool): Promise<void> {
     console.error("[CommandDispatcher] Error:", err);
   } finally {
     client.release();
+  }
+}
+
+export async function runPendingCommandDispatcher(pool: Pool): Promise<void> {
+  const client = await pool.connect();
+  try {
+    await client.query("BEGIN");
+
+    const pendingResult = await client.query<{
+      id: number;
+      gateway_id: string;
+      asset_id: string;
+      command_type: string;
+      payload: Record<string, unknown>;
+    }>(`
+      SELECT id, gateway_id, asset_id, command_type, payload
+      FROM device_command_logs
+      WHERE status = 'pending_dispatch'
+      ORDER BY created_at ASC
+      LIMIT 50
+      FOR UPDATE SKIP LOCKED
+    `);
+
+    if (pendingResult.rows.length === 0) {
+      await client.query("COMMIT");
+      return;
+    }
+
+    const ids = pendingResult.rows.map((r) => r.id);
+
+    await client.query(
+      `UPDATE device_command_logs
+       SET status = 'dispatched', dispatched_at = NOW()
+       WHERE id = ANY($1)`,
+      [ids],
+    );
+
+    for (const cmd of pendingResult.rows) {
+      const topic = `platform/ems/${cmd.gateway_id}/config/set`;
+      const message = JSON.stringify({
+        commandLogId: cmd.id,
+        assetId: cmd.asset_id,
+        commandType: cmd.command_type,
+        payload: cmd.payload,
+        timestamp: new Date().toISOString(),
+      });
+      await publishMqtt(topic, message);
+    }
+
+    await client.query("COMMIT");
+
+    console.log(
+      `[PendingCommandDispatcher] Dispatched ${pendingResult.rows.length} commands`,
+    );
+  } catch (err) {
+    await client.query("ROLLBACK");
+    console.error("[PendingCommandDispatcher] Error:", err);
+  } finally {
+    client.release();
+  }
+}
+
+async function runTimeoutCheck(pool: Pool): Promise<void> {
+  try {
+    const result = await pool.query(`
+      UPDATE device_command_logs
+      SET status = 'timeout'
+      WHERE status = 'dispatched'
+        AND dispatched_at < NOW() - INTERVAL '90 seconds'
+      RETURNING id
+    `);
+    if (result.rowCount && result.rowCount > 0) {
+      console.log(`[TimeoutCheck] Timed out ${result.rowCount} commands`);
+    }
+  } catch (err) {
+    console.error("[TimeoutCheck] Error:", err);
   }
 }

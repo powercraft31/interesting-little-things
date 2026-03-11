@@ -126,16 +126,16 @@ const FleetPage = {
 
     const cards = [
       Components.kpiCard({
-        value: f.totalDevices,
+        value: f.totalDevices != null ? f.totalDevices : "\u2014",
         label: t("fleet.totalDevices"),
       }),
       Components.kpiCard({
-        value: f.onlineCount,
+        value: f.onlineCount != null ? f.onlineCount : "\u2014",
         label: t("fleet.online"),
         color: "positive",
       }),
       Components.kpiCard({
-        value: f.offlineCount,
+        value: f.offlineCount != null ? f.offlineCount : "\u2014",
         label: t("fleet.offline"),
         color: f.offlineCount > 0 ? "negative" : "",
       }),
@@ -145,11 +145,11 @@ const FleetPage = {
         color: onlineColor,
       }),
       Components.kpiCard({
-        value: f.totalGateways,
+        value: f.totalGateways != null ? f.totalGateways : "\u2014",
         label: t("fleet.gateways"),
       }),
       Components.kpiCard({
-        value: f.totalIntegradores,
+        value: f.totalIntegradores != null ? f.totalIntegradores : "\u2014",
         label: t("fleet.integradores"),
       }),
     ];
@@ -241,7 +241,7 @@ const FleetPage = {
             label: t("fleet.col.duration"),
             align: "right",
             mono: true,
-            format: (val) => val.toFixed(1),
+            format: (val) => (val != null ? val.toFixed(1) : "\u2014"),
           },
           {
             key: "cause",
