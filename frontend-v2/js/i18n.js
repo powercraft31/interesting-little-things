@@ -615,7 +615,7 @@ var I18n = (function () {
       "hems.preview": "Pr\u00e9-visualizar Impacto",
       "hems.apply": "Aplicar Altera\u00e7\u00f5es",
       "hems.applying": "Aplicando...",
-      "hems.tarifa": "Tarifas Tarifa Branca",
+      "hems.tarifa": "Tarifa Branca",
       "hems.disco": "DISCO",
       "hems.peak": "Ponta",
       "hems.intermediate": "Intermedi\u00e1ria",

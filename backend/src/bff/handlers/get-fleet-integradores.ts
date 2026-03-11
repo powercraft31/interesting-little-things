@@ -49,7 +49,7 @@ export async function handler(
     orgId: r.org_id as string,
     name: r.name as string,
     deviceCount: Number(r.device_count),
-    onlineRate: parseFloat(String(r.online_rate ?? 0)),
+    onlineRate: r.online_rate != null ? parseFloat(String(r.online_rate)) : null,
     lastCommission: r.last_commission
       ? new Date(r.last_commission as string).toISOString()
       : null,

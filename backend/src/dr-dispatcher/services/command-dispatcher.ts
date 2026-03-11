@@ -127,13 +127,12 @@ export async function runPendingCommandDispatcher(pool: Pool): Promise<void> {
     const pendingResult = await client.query<{
       id: number;
       gateway_id: string;
-      asset_id: string;
       command_type: string;
-      payload: Record<string, unknown>;
+      payload_json: Record<string, unknown> | null;
     }>(`
-      SELECT id, gateway_id, asset_id, command_type, payload
+      SELECT id, gateway_id, command_type, payload_json
       FROM device_command_logs
-      WHERE status = 'pending_dispatch'
+      WHERE result = 'pending'
       ORDER BY created_at ASC
       LIMIT 50
       FOR UPDATE SKIP LOCKED
@@ -148,7 +147,7 @@ export async function runPendingCommandDispatcher(pool: Pool): Promise<void> {
 
     await client.query(
       `UPDATE device_command_logs
-       SET status = 'dispatched', dispatched_at = NOW()
+       SET result = 'dispatched'
        WHERE id = ANY($1)`,
       [ids],
     );
@@ -157,9 +156,8 @@ export async function runPendingCommandDispatcher(pool: Pool): Promise<void> {
       const topic = `platform/ems/${cmd.gateway_id}/config/set`;
       const message = JSON.stringify({
         commandLogId: cmd.id,
-        assetId: cmd.asset_id,
         commandType: cmd.command_type,
-        payload: cmd.payload,
+        payload: cmd.payload_json,
         timestamp: new Date().toISOString(),
       });
       await publishMqtt(topic, message);
@@ -182,9 +180,9 @@ async function runTimeoutCheck(pool: Pool): Promise<void> {
   try {
     const result = await pool.query(`
       UPDATE device_command_logs
-      SET status = 'timeout'
-      WHERE status = 'dispatched'
-        AND dispatched_at < NOW() - INTERVAL '90 seconds'
+      SET result = 'timeout'
+      WHERE result = 'dispatched'
+        AND created_at < NOW() - INTERVAL '90 seconds'
       RETURNING id
     `);
     if (result.rowCount && result.rowCount > 0) {

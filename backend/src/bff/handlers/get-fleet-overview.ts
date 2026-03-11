@@ -63,14 +63,12 @@ export async function handler(
         rlsOrgId,
       ),
       queryWithOrg(
-        `SELECT COUNT(DISTINCT a.gateway_id)::int AS total_gateways
-       FROM assets a WHERE a.is_active = true AND a.gateway_id IS NOT NULL`,
+        `SELECT COUNT(*)::int AS total_gateways FROM gateways`,
         [],
         rlsOrgId,
       ),
       queryWithOrg(
-        `SELECT COUNT(DISTINCT a.org_id)::int AS total_integradores
-       FROM assets a WHERE a.is_active = true`,
+        `SELECT COUNT(DISTINCT org_id)::int AS total_integradores FROM gateways`,
         [],
         rlsOrgId,
       ),
