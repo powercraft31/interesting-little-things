@@ -272,7 +272,7 @@ var DevicesPage = {
       "</div>" +
       '<div class="dev-id-block">' +
       '<div class="dev-id">' +
-      dev.assetId +
+      (dev.name || dev.assetId) +
       "</div>" +
       '<div class="dev-type">' +
       (dev.brand || "") +
@@ -393,11 +393,11 @@ var DevicesPage = {
       gwName +
       "</span>" +
       " \u203a <span>" +
-      dev.assetId +
+      (dev.name || dev.assetId) +
       "</span>" +
       "</div>" +
       "<h2>" +
-      dev.assetId +
+      (dev.name || dev.assetId) +
       " " +
       statusTag +
       "</h2>" +
