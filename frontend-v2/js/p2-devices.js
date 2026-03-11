@@ -257,9 +257,14 @@ var DevicesPage = {
 
     var typeIcons = {
       "Inverter + Battery": "\ud83d\udd0b",
+      "INVERTER_BATTERY": "\ud83d\udd0b",
       "Smart Meter": "\ud83d\udcca",
+      "SMART_METER": "\ud83d\udcca",
       AC: "\u2744\ufe0f",
+      "HVAC": "\u2744\ufe0f",
       "EV Charger": "\ud83d\udd0c",
+      "EV_CHARGER": "\ud83d\udd0c",
+      "SOLAR_PANEL": "\u2600\ufe0f",
     };
     var icon = typeIcons[dev.assetType] || "\ud83d\udd0c";
 
