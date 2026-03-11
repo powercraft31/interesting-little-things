@@ -344,7 +344,14 @@ function initMockData() {
     var acPower = generateACPowerCurve(idx);
     var evCharge = generateEVChargeCurve(idx);
 
+    // Generate 24h time labels ("00:00" to "23:00") — required by P3 _initMainChart
+    var timeLabels = [];
+    for (var h = 0; h < 24; h++) {
+      timeLabels.push((h < 10 ? "0" : "") + h + ":00");
+    }
+
     homeData[homeId] = {
+      timeLabels: timeLabels,
       pv: pv,
       load: load,
       battery: battery,
