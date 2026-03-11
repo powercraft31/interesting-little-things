@@ -58,15 +58,12 @@ export interface SolfacilListItem {
 /** Gateway row from the gateways table. */
 export interface GatewayRecord {
   readonly gateway_id: string;
-  readonly client_id: string;
   readonly org_id: string;
-  readonly home_id: string | null;
   readonly mqtt_broker_host: string;
   readonly mqtt_broker_port: number;
   readonly mqtt_username: string;
   readonly mqtt_password: string;
-  readonly device_name: string;
-  readonly product_key: string;
+  readonly name: string;
   readonly status: "online" | "offline" | "decommissioned";
   readonly last_seen_at: Date | null;
 }

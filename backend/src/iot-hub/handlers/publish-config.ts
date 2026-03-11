@@ -22,7 +22,6 @@ type MqttPublishFn = (topic: string, message: string) => void;
 export async function publishConfigGet(
   pool: Pool,
   gatewayId: string,
-  clientId: string,
   publish: MqttPublishFn,
 ): Promise<string> {
   const messageId = String(Date.now());
@@ -32,7 +31,7 @@ export async function publishConfigGet(
     DS: 0,
     ackFlag: 0,
     data: { configname: "battery_schedule" },
-    clientId,
+    clientId: gatewayId,
     deviceName: "EMS_N2",
     productKey: "ems",
     messageId,
@@ -42,16 +41,16 @@ export async function publishConfigGet(
   // Log the pending get command
   await pool.query(
     `INSERT INTO device_command_logs
-       (gateway_id, client_id, command_type, config_name, message_id, result)
-     VALUES ($1, $2, 'get', 'battery_schedule', $3, 'pending')`,
-    [gatewayId, clientId, messageId],
+       (gateway_id, command_type, config_name, message_id, result)
+     VALUES ($1, 'get', 'battery_schedule', $2, 'pending')`,
+    [gatewayId, messageId],
   );
 
-  const topic = `platform/ems/${clientId}/config/get`;
+  const topic = `platform/ems/${gatewayId}/config/get`;
   publish(topic, JSON.stringify(message));
 
   console.log(
-    `[PublishConfig] config/get sent to ${clientId}, messageId=${messageId}`,
+    `[PublishConfig] config/get sent to ${gatewayId}, messageId=${messageId}`,
   );
 
   return messageId;
@@ -69,7 +68,7 @@ export async function publishConfigGet(
  * No device_command_logs — response arrives on existing deviceList handler.
  */
 export function publishSubDevicesGet(
-  clientId: string,
+  gatewayId: string,
   publish: MqttPublishFn,
 ): void {
   const messageId = String(Date.now());
@@ -79,25 +78,24 @@ export function publishSubDevicesGet(
     DS: 0,
     ackFlag: 0,
     data: { reason: "periodic_query" },
-    clientId,
+    clientId: gatewayId,
     deviceName: "EMS_N2",
     productKey: "ems",
     messageId,
     timeStamp: now,
   };
 
-  const topic = `platform/ems/${clientId}/subDevices/get`;
+  const topic = `platform/ems/${gatewayId}/subDevices/get`;
   publish(topic, JSON.stringify(message));
 
   console.log(
-    `[PublishConfig] subDevices/get sent to ${clientId}, messageId=${messageId}`,
+    `[PublishConfig] subDevices/get sent to ${gatewayId}, messageId=${messageId}`,
   );
 }
 
 export async function publishConfigSet(
   pool: Pool,
   gatewayId: string,
-  clientId: string,
   schedule: DomainSchedule,
   publish: MqttPublishFn,
 ): Promise<string> {
@@ -105,22 +103,22 @@ export async function publishConfigSet(
   validateSchedule(schedule);
 
   const messageId = String(Date.now());
-  const protocolMessage = buildConfigSetPayload(clientId, schedule, messageId);
+  const protocolMessage = buildConfigSetPayload(gatewayId, schedule, messageId);
 
   // Log the pending set command
   await pool.query(
     `INSERT INTO device_command_logs
-       (gateway_id, client_id, command_type, config_name, message_id,
+       (gateway_id, command_type, config_name, message_id,
         payload_json, result)
-     VALUES ($1, $2, 'set', 'battery_schedule', $3, $4, 'pending')`,
-    [gatewayId, clientId, messageId, JSON.stringify(schedule)],
+     VALUES ($1, 'set', 'battery_schedule', $2, $3, 'pending')`,
+    [gatewayId, messageId, JSON.stringify(schedule)],
   );
 
-  const topic = `platform/ems/${clientId}/config/set`;
+  const topic = `platform/ems/${gatewayId}/config/set`;
   publish(topic, JSON.stringify(protocolMessage));
 
   console.log(
-    `[PublishConfig] config/set sent to ${clientId}, messageId=${messageId}`,
+    `[PublishConfig] config/set sent to ${gatewayId}, messageId=${messageId}`,
   );
 
   return messageId;

@@ -10,15 +10,15 @@ import type { SolfacilMessage } from "../../shared/types/solfacil-protocol";
  */
 export async function handleHeartbeat(
   pool: Pool,
-  _gatewayId: string,
-  clientId: string,
+  gatewayId: string,
+  _clientId: string,
   payload: SolfacilMessage,
 ): Promise<void> {
   const deviceTimestamp = parseInt(payload.timeStamp, 10);
 
   if (!Number.isFinite(deviceTimestamp) || deviceTimestamp <= 0) {
     console.warn(
-      `[HeartbeatHandler] Invalid timeStamp from ${clientId}: ${payload.timeStamp}`,
+      `[HeartbeatHandler] Invalid timeStamp from ${gatewayId}: ${payload.timeStamp}`,
     );
     return;
   }
@@ -28,7 +28,7 @@ export async function handleHeartbeat(
      SET last_seen_at = to_timestamp($1::bigint / 1000.0),
          status = 'online',
          updated_at = NOW()
-     WHERE client_id = $2`,
-    [deviceTimestamp, clientId],
+     WHERE gateway_id = $2`,
+    [deviceTimestamp, gatewayId],
   );
 }

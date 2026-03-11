@@ -34,12 +34,11 @@ export async function handleDeviceList(
     return;
   }
 
-  // Look up gateway's org_id and home_id for asset FK population
+  // Look up gateway's org_id for asset FK population
   const gwResult = await pool.query<{
     org_id: string;
-    home_id: string | null;
   }>(
-    `SELECT org_id, home_id FROM gateways WHERE gateway_id = $1`,
+    `SELECT org_id FROM gateways WHERE gateway_id = $1`,
     [gatewayId],
   );
 
@@ -50,7 +49,7 @@ export async function handleDeviceList(
     return;
   }
 
-  const { org_id: orgId, home_id: homeId } = gwResult.rows[0];
+  const { org_id: orgId } = gwResult.rows[0];
 
   // Filter: only process "major" (一級) sub-devices
   const majorDevices = deviceList.filter((d) => d.nodeType === "major");
@@ -67,9 +66,9 @@ export async function handleDeviceList(
     await pool.query(
       `INSERT INTO assets
          (asset_id, serial_number, name, brand, model, asset_type,
-          gateway_id, home_id, org_id, is_active, commissioned_at)
+          gateway_id, org_id, is_active, commissioned_at, capacity_kwh)
        VALUES (
-         $1, $1, $2, $3, $4, $5, $6, $7, $8, true, NOW()
+         $1, $1, $2, $3, $4, $5, $6, $7, true, NOW(), 0
        )
        ON CONFLICT (asset_id) DO UPDATE SET
          name       = EXCLUDED.name,
@@ -77,7 +76,6 @@ export async function handleDeviceList(
          model      = EXCLUDED.model,
          asset_type = EXCLUDED.asset_type,
          gateway_id = EXCLUDED.gateway_id,
-         home_id    = EXCLUDED.home_id,
          org_id     = EXCLUDED.org_id,
          is_active  = true,
          updated_at = NOW()`,
@@ -88,7 +86,6 @@ export async function handleDeviceList(
         device.deviceBrand,     // model
         assetType,              // asset_type
         gatewayId,              // gateway_id
-        homeId,                 // home_id
         orgId,                  // org_id
       ],
     );

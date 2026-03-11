@@ -448,7 +448,7 @@ export async function runDailyPsSavings(
       p.confidence
     FROM peak_per_asset p
     JOIN assets a ON a.asset_id = p.asset_id
-    JOIN homes h ON h.home_id = a.home_id
+    LEFT JOIN gateways g ON g.gateway_id = a.gateway_id
     LEFT JOIN tariff_schedules ts ON ts.org_id = a.org_id
       AND ts.effective_to IS NULL`,
     [brtWindowStart.toISOString(), brtWindowEnd.toISOString()],
@@ -543,12 +543,12 @@ export async function runMonthlyTrueUp(
     )
     SELECT
       mp.asset_id,
-      GREATEST(0, mp.monthly_peak_kva - COALESCE(h.contracted_demand_kw, 0))
+      GREATEST(0, mp.monthly_peak_kva - COALESCE(g.contracted_demand_kw, 0))
         * COALESCE(ts.demand_charge_rate_per_kva, 0) AS true_ps_savings,
       COALESCE(ds.sum_provisionals, 0) AS sum_daily_provisionals
     FROM monthly_peak mp
     JOIN assets a ON a.asset_id = mp.asset_id
-    JOIN homes h ON h.home_id = a.home_id
+    LEFT JOIN gateways g ON g.gateway_id = a.gateway_id
     LEFT JOIN tariff_schedules ts ON ts.org_id = a.org_id
       AND ts.effective_to IS NULL
     LEFT JOIN daily_sum ds ON ds.asset_id = mp.asset_id`,

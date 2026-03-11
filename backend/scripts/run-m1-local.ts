@@ -7,15 +7,15 @@ import { GatewayConnectionManager } from "../src/iot-hub/services/gateway-connec
 import { handleDeviceList } from "../src/iot-hub/handlers/device-list-handler";
 import { handleTelemetry } from "../src/iot-hub/handlers/telemetry-handler";
 import { handleHeartbeat } from "../src/iot-hub/handlers/heartbeat-handler";
-import { handleCommandReply } from "../src/iot-hub/handlers/command-tracker";
+import { handleGetReply, handleSetReply } from "../src/iot-hub/handlers/command-tracker";
 
 // Local PostgreSQL — service pool (BYPASSRLS)
 const pool = new Pool({
   host: "localhost",
   port: 5432,
   database: "solfacil_vpp",
-  user: "postgres",
-  password: "postgres",
+  user: "solfacil_service",
+  password: "solfacil_service_2026",
 });
 
 // Stats
@@ -46,8 +46,8 @@ async function main() {
   const manager = new GatewayConnectionManager(pool, {
     onDeviceList: wrapHandler("deviceList", handleDeviceList),
     onTelemetry: wrapHandler("telemetry", handleTelemetry),
-    onGetReply: wrapHandler("getReply", handleCommandReply),
-    onSetReply: wrapHandler("setReply", handleCommandReply),
+    onGetReply: wrapHandler("getReply", handleGetReply),
+    onSetReply: wrapHandler("setReply", handleSetReply),
     onHeartbeat: wrapHandler("heartbeat", handleHeartbeat),
   });
 

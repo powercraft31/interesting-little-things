@@ -28,7 +28,7 @@ interface SetReplyData {
 export async function handleGetReply(
   pool: Pool,
   gatewayId: string,
-  clientId: string,
+  _clientId: string,
   payload: SolfacilMessage,
 ): Promise<void> {
   const data = payload.data as GetReplyData;
@@ -39,12 +39,11 @@ export async function handleGetReply(
 
   await pool.query(
     `INSERT INTO device_command_logs
-       (gateway_id, client_id, command_type, config_name, message_id,
+       (gateway_id, command_type, config_name, message_id,
         payload_json, result, device_timestamp)
-     VALUES ($1, $2, 'get_reply', $3, $4, $5, 'success', $6)`,
+     VALUES ($1, 'get_reply', $2, $3, $4, 'success', $5)`,
     [
       gatewayId,
-      clientId,
       configName,
       payload.messageId,
       batterySchedule ? JSON.stringify(batterySchedule) : null,
@@ -63,7 +62,7 @@ export async function handleGetReply(
   }
 
   console.log(
-    `[CommandTracker] get_reply logged for ${clientId}, config=${configName}`,
+    `[CommandTracker] get_reply logged for ${gatewayId}, config=${configName}`,
   );
 }
 
@@ -75,7 +74,7 @@ export async function handleGetReply(
 export async function handleSetReply(
   pool: Pool,
   gatewayId: string,
-  clientId: string,
+  _clientId: string,
   payload: SolfacilMessage,
 ): Promise<void> {
   const data = payload.data as SetReplyData;
@@ -108,12 +107,11 @@ export async function handleSetReply(
     // No pending command found — log as standalone set_reply
     await pool.query(
       `INSERT INTO device_command_logs
-         (gateway_id, client_id, command_type, config_name, message_id,
+         (gateway_id, command_type, config_name, message_id,
           result, error_message, device_timestamp, resolved_at)
-       VALUES ($1, $2, 'set_reply', $3, $4, $5, $6, $7, NOW())`,
+       VALUES ($1, 'set_reply', $2, $3, $4, $5, $6, NOW())`,
       [
         gatewayId,
-        clientId,
         configName,
         payload.messageId,
         result,
@@ -125,11 +123,11 @@ export async function handleSetReply(
 
   if (result === "fail") {
     console.error(
-      `[CommandTracker] set_reply FAIL for ${clientId}: ${errorMessage ?? "no message"}`,
+      `[CommandTracker] set_reply FAIL for ${gatewayId}: ${errorMessage ?? "no message"}`,
     );
   } else {
     console.log(
-      `[CommandTracker] set_reply SUCCESS for ${clientId}, config=${configName}`,
+      `[CommandTracker] set_reply SUCCESS for ${gatewayId}, config=${configName}`,
     );
   }
 }

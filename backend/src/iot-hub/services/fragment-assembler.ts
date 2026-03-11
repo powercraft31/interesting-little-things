@@ -207,7 +207,7 @@ export class FragmentAssembler {
        SET ems_health = $1::jsonb,
            ems_health_at = $2,
            updated_at = NOW()
-       WHERE client_id = $3`,
+       WHERE gateway_id = $3`,
       [healthJson, recordedAt, clientId],
     );
   }

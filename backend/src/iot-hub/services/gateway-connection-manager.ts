@@ -110,10 +110,10 @@ export class GatewayConnectionManager {
   /** Load active gateways from DB. */
   private async loadGateways(): Promise<GatewayRecord[]> {
     const result = await this.pool.query<GatewayRecord>(
-      `SELECT gateway_id, client_id, org_id, home_id,
+      `SELECT gateway_id, org_id, name,
               mqtt_broker_host, mqtt_broker_port,
               mqtt_username, mqtt_password,
-              device_name, product_key, status, last_seen_at
+              status, last_seen_at
        FROM gateways
        WHERE status != 'decommissioned'`,
     );
@@ -129,7 +129,7 @@ export class GatewayConnectionManager {
     const mqtt = require("mqtt");
 
     const brokerUrl = `mqtt://${gw.mqtt_broker_host}:${gw.mqtt_broker_port}`;
-    const mqttClientId = `solfacil-m1-${gw.client_id}-${process.pid}`;
+    const mqttClientId = `solfacil-m1-${gw.gateway_id}-${process.pid}`;
 
     const client = mqtt.connect(brokerUrl, {
       clientId: mqttClientId,
@@ -139,7 +139,7 @@ export class GatewayConnectionManager {
       reconnectPeriod: 5000,
     });
 
-    const cid = gw.client_id;
+    const cid = gw.gateway_id;
     const topics = [
       `device/ems/${cid}/deviceList`,
       `device/ems/${cid}/data`,
@@ -255,7 +255,7 @@ export class GatewayConnectionManager {
       for (const gw of gateways) {
         if (!this.gatewayClients.has(gw.gateway_id)) {
           console.log(
-            `[GatewayConnectionManager] New gateway detected: ${gw.client_id}`,
+            `[GatewayConnectionManager] New gateway detected: ${gw.gateway_id}`,
           );
           await this.connectGateway(gw);
         }
@@ -289,11 +289,11 @@ export class GatewayConnectionManager {
         };
         const publishFn = (topic: string, msg: string) =>
           client.publish(topic, msg);
-        publishSubDevicesGet(gc.clientId, publishFn);
-        await publishConfigGet(this.pool, gc.gatewayId, gc.clientId, publishFn);
+        publishSubDevicesGet(gc.gatewayId, publishFn);
+        await publishConfigGet(this.pool, gc.gatewayId, publishFn);
       } catch (err) {
         console.error(
-          `[GatewayConnectionManager] Hourly poll error for ${gc.clientId}:`,
+          `[GatewayConnectionManager] Hourly poll error for ${gc.gatewayId}:`,
           err,
         );
       }
