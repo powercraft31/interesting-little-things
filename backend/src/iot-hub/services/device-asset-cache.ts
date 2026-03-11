@@ -16,7 +16,15 @@ export class DeviceAssetCache {
     if (Date.now() - this.lastRefresh > this.refreshIntervalMs) {
       await this.refresh();
     }
-    return this.cache.get(deviceSn) ?? null;
+    // Direct match first
+    const direct = this.cache.get(deviceSn);
+    if (direct) return direct;
+    // XuHeng protocol quirk: telemetry batList uses "battery_{deviceSn}"
+    // but deviceList uses "{deviceSn}" without prefix. Strip and retry.
+    if (deviceSn.startsWith("battery_")) {
+      return this.cache.get(deviceSn.slice(8)) ?? null;
+    }
+    return null;
   }
 
   private async refresh(): Promise<void> {
