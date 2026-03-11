@@ -23,6 +23,10 @@ import { handler as deviceDetailHandler } from "../src/bff/handlers/get-device-d
 import { handler as putDeviceHandler } from "../src/bff/handlers/put-device";
 import { handler as deviceScheduleHandler } from "../src/bff/handlers/get-device-schedule";
 import { handler as putDeviceScheduleHandler } from "../src/bff/handlers/put-device-schedule";
+// v5.20: gateway-level detail + schedule
+import { handler as gatewayDetailHandler } from "../src/bff/handlers/get-gateway-detail";
+import { handler as gatewayScheduleHandler } from "../src/bff/handlers/get-gateway-schedule";
+import { handler as putGatewayScheduleHandler } from "../src/bff/handlers/put-gateway-schedule";
 import { handler as tariffsHandler } from "../src/bff/handlers/get-tariffs";
 import { handler as hemsOverviewHandler } from "../src/bff/handlers/get-hems-overview";
 import { handler as hemsDispatchHandler } from "../src/bff/handlers/post-hems-dispatch";
@@ -193,7 +197,28 @@ app.get(
   wrapHandler(gatewayDevicesHandler, "GET", "/api/gateways/:gatewayId/devices"),
 );
 app.get("/api/gateways", wrapHandler(gatewaysHandler, "GET", "/api/gateways"));
-// Device detail & config (v5.19 new)
+// v5.20: gateway-level detail + schedule
+app.get(
+  "/api/gateways/:gatewayId/detail",
+  wrapHandler(gatewayDetailHandler, "GET", "/api/gateways/:gatewayId/detail"),
+);
+app.get(
+  "/api/gateways/:gatewayId/schedule",
+  wrapHandler(
+    gatewayScheduleHandler,
+    "GET",
+    "/api/gateways/:gatewayId/schedule",
+  ),
+);
+app.put(
+  "/api/gateways/:gatewayId/schedule",
+  wrapHandler(
+    putGatewayScheduleHandler,
+    "PUT",
+    "/api/gateways/:gatewayId/schedule",
+  ),
+);
+// Device detail & config (v5.19 new — device schedule routes kept as deprecated)
 app.get(
   "/api/devices/:assetId/schedule",
   wrapHandler(deviceScheduleHandler, "GET", "/api/devices/:assetId/schedule"),
@@ -303,6 +328,9 @@ app.listen(PORT, () => {
   console.log("  GET  /api/gateways/summary          (v5.19)");
   console.log("  GET  /api/gateways/:id/energy       (v5.19)");
   console.log("  GET  /api/gateways/:id/devices      (v5.19)");
+  console.log("  GET  /api/gateways/:id/detail       (v5.20)");
+  console.log("  GET  /api/gateways/:id/schedule     (v5.20)");
+  console.log("  PUT  /api/gateways/:id/schedule     (v5.20)");
   console.log("  GET  /api/devices/:id               (v5.19)");
   console.log("  PUT  /api/devices/:id               (v5.19)");
   console.log("  GET  /api/devices/:id/schedule      (v5.19)");

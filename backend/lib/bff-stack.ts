@@ -37,6 +37,7 @@ export class BffStack extends cdk.Stack {
         allowMethods: [
           apigateway.CorsHttpMethod.GET,
           apigateway.CorsHttpMethod.POST,
+          apigateway.CorsHttpMethod.PUT,
           apigateway.CorsHttpMethod.OPTIONS,
         ],
         allowHeaders: ["Content-Type", "Authorization"],
@@ -71,11 +72,50 @@ export class BffStack extends cdk.Stack {
       stage,
     );
 
+    // v5.20: gateway-level detail + schedule handlers
+    const getGatewayDetail = this.createHandler(
+      "GetGatewayDetail",
+      handlersDir,
+      "get-gateway-detail.handler",
+      stage,
+    );
+    const getGatewaySchedule = this.createHandler(
+      "GetGatewaySchedule",
+      handlersDir,
+      "get-gateway-schedule.handler",
+      stage,
+    );
+    const putGatewaySchedule = this.createHandler(
+      "PutGatewaySchedule",
+      handlersDir,
+      "put-gateway-schedule.handler",
+      stage,
+    );
+
     // ── Route Bindings ─────────────────────────────────────────────
     this.addRoute(httpApi, "GET", "/dashboard", getDashboard);
     this.addRoute(httpApi, "GET", "/assets", getAssets);
     this.addRoute(httpApi, "GET", "/trades", getTrades);
     this.addRoute(httpApi, "GET", "/revenue-trend", getRevenueTrend);
+    // v5.20: gateway-level detail + schedule
+    this.addRoute(
+      httpApi,
+      "GET",
+      "/api/gateways/{gatewayId}/detail",
+      getGatewayDetail,
+    );
+    this.addRoute(
+      httpApi,
+      "GET",
+      "/api/gateways/{gatewayId}/schedule",
+      getGatewaySchedule,
+    );
+    this.addRoute(
+      httpApi,
+      "PUT",
+      "/api/gateways/{gatewayId}/schedule",
+      putGatewaySchedule,
+    );
 
     // ── Outputs ────────────────────────────────────────────────────
     this.apiUrl = new cdk.CfnOutput(this, "BffApiUrl", {
@@ -117,10 +157,12 @@ export class BffStack extends cdk.Stack {
     routePath: string,
     handler: nodejs.NodejsFunction,
   ): void {
-    const httpMethod =
-      method === "POST"
-        ? apigateway.HttpMethod.POST
-        : apigateway.HttpMethod.GET;
+    const methodMap: Record<string, apigateway.HttpMethod> = {
+      GET: apigateway.HttpMethod.GET,
+      POST: apigateway.HttpMethod.POST,
+      PUT: apigateway.HttpMethod.PUT,
+    };
+    const httpMethod = methodMap[method] ?? apigateway.HttpMethod.GET;
 
     api.addRoutes({
       path: routePath,
