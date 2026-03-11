@@ -30,7 +30,11 @@ var DevicesPage = {
 
     if (!self._gateways || self._gateways.length === 0) {
       container.innerHTML =
-        '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-title">' + t("shared.noData") + '</div><div class="empty-state-detail">' + t("devices.noDevicesUnderGw") + '</div></div>';
+        '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-title">' +
+        t("shared.noData") +
+        '</div><div class="empty-state-detail">' +
+        t("devices.noDevicesUnderGw") +
+        "</div></div>";
       return;
     }
 
@@ -76,9 +80,13 @@ var DevicesPage = {
       "</h2>" +
       '<div class="p2-summary">' +
       gateways.length +
-      " " + t("fleet.gateways") + " \u00b7 " +
+      " " +
+      t("fleet.gateways") +
+      " \u00b7 " +
       totalDevices +
-      " " + t("shared.devices") + "</div>" +
+      " " +
+      t("shared.devices") +
+      "</div>" +
       "</div>";
 
     var cards = gateways
@@ -335,7 +343,13 @@ var DevicesPage = {
 
     if (!self._currentDetail || !self._currentDetail.device) {
       layer3.innerHTML =
-        '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-title">' + t("shared.noData") + '</div><div class="empty-state-detail">' + t("devices.deviceNotFound") + '</div><button class="btn btn-secondary" onclick="DevicesPage._closeLayer3()">' + t("shared.back") + '</button></div>';
+        '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-title">' +
+        t("shared.noData") +
+        '</div><div class="empty-state-detail">' +
+        t("devices.deviceNotFound") +
+        '</div><button class="btn btn-secondary" onclick="DevicesPage._closeLayer3()">' +
+        t("shared.back") +
+        "</button></div>";
       return;
     }
 
@@ -372,7 +386,9 @@ var DevicesPage = {
     return (
       '<div class="detail-header">' +
       '<div class="breadcrumb">' +
-      '<a href="#" class="bc-link" id="bc-back">' + t("nav.devices") + '</a>' +
+      '<a href="#" class="bc-link" id="bc-back">' +
+      t("nav.devices") +
+      "</a>" +
       " \u203a <span>" +
       gwName +
       "</span>" +
@@ -418,26 +434,36 @@ var DevicesPage = {
   // ---- Energy Flow Diamond ----
   _buildEnergyFlow: function (state) {
     var pvVal =
-      state.pvPower != null ? formatNumber(state.pvPower, 1) + " kW" : "0 kW";
+      state.pvPower != null ? formatNumber(state.pvPower, 1) + " kW" : "\u2014";
     var batVal =
       state.batteryPower != null
         ? formatNumber(Math.abs(state.batteryPower), 1) + " kW"
-        : "0 kW";
+        : "\u2014";
     var loadVal =
       state.loadPower != null
         ? formatNumber(state.loadPower, 1) + " kW"
-        : "0 kW";
+        : "\u2014";
     var gridVal =
       state.gridPowerKw != null
         ? formatNumber(Math.abs(state.gridPowerKw), 1) + " kW"
-        : "0 kW";
+        : "\u2014";
 
     var batSub = "Idle";
     if (state.batteryPower > 0.05)
-      batSub = "SoC " + (state.batterySoc || 0) + "% \u00b7 " + t("devices.ef.charging");
+      batSub =
+        "SoC " +
+        (state.batterySoc || 0) +
+        "% \u00b7 " +
+        t("devices.ef.charging");
     else if (state.batteryPower < -0.05)
-      batSub = "SoC " + (state.batterySoc || 0) + "% \u00b7 " + t("devices.ef.discharging");
-    else batSub = "SoC " + (state.batterySoc || 0) + "% \u00b7 " + t("devices.ef.idle");
+      batSub =
+        "SoC " +
+        (state.batterySoc || 0) +
+        "% \u00b7 " +
+        t("devices.ef.discharging");
+    else
+      batSub =
+        "SoC " + (state.batterySoc || 0) + "% \u00b7 " + t("devices.ef.idle");
 
     var gridClass =
       state.gridPowerKw > 0
@@ -457,32 +483,90 @@ var DevicesPage = {
     var showRight = (state.loadPower || 0) > 0.01;
     var showBottom = Math.abs(state.gridPowerKw || 0) > 0.01;
 
+    // Build SVG overlay with directional arrows
+    var svgLines = [];
+
+    var markerDefs =
+      "<defs>" +
+      '<marker id="arrow-pv" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">' +
+      '<path d="M0,0 L8,3 L0,6 Z" class="ef-arrow-positive"/></marker>' +
+      '<marker id="arrow-bat" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">' +
+      '<path d="M0,0 L8,3 L0,6 Z" class="ef-arrow-neutral"/></marker>' +
+      '<marker id="arrow-load" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">' +
+      '<path d="M0,0 L8,3 L0,6 Z" class="ef-arrow-text"/></marker>' +
+      '<marker id="arrow-grid" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">' +
+      '<path d="M0,0 L8,3 L0,6 Z" class="ef-arrow-accent"/></marker>' +
+      "</defs>";
+
+    // PV line: always PV→Hub (solar generates into hub)
+    if (showTop) {
+      svgLines.push(
+        '<line x1="140" y1="56" x2="140" y2="120" class="ef-line-pv" marker-end="url(#arrow-pv)"/>',
+      );
+    }
+
+    // Battery line: direction depends on charge/discharge
+    if (showLeft) {
+      if (state.batteryPower > 0.05) {
+        // Charging: Hub→Battery
+        svgLines.push(
+          '<line x1="120" y1="140" x2="56" y2="140" class="ef-line-bat" marker-end="url(#arrow-bat)"/>',
+        );
+      } else {
+        // Discharging: Battery→Hub
+        svgLines.push(
+          '<line x1="56" y1="140" x2="120" y2="140" class="ef-line-bat" marker-end="url(#arrow-bat)"/>',
+        );
+      }
+    }
+
+    // Load line: always Hub→Load (hub feeds load)
+    if (showRight) {
+      svgLines.push(
+        '<line x1="160" y1="140" x2="224" y2="140" class="ef-line-load" marker-end="url(#arrow-load)"/>',
+      );
+    }
+
+    // Grid line: direction depends on import/export
+    if (showBottom) {
+      if (state.gridPowerKw > 0) {
+        // Importing: Grid→Hub
+        svgLines.push(
+          '<line x1="140" y1="224" x2="140" y2="160" class="ef-line-grid" marker-end="url(#arrow-grid)"/>',
+        );
+      } else {
+        // Exporting: Hub→Grid
+        svgLines.push(
+          '<line x1="140" y1="160" x2="140" y2="224" class="ef-line-grid" marker-end="url(#arrow-grid)"/>',
+        );
+      }
+    }
+
+    var svgOverlay =
+      '<svg class="ef-svg-overlay" viewBox="0 0 280 280" xmlns="http://www.w3.org/2000/svg">' +
+      markerDefs +
+      svgLines.join("") +
+      "</svg>";
+
     var body =
       '<div class="energy-flow-diamond">' +
+      svgOverlay +
       '<div class="ef-pv ef-node"><div class="ef-node-icon">\u2600\ufe0f</div><div class="ef-node-value">' +
       pvVal +
-      '</div><div class="ef-node-label">' + t("devices.ef.solarPv") + '</div></div>' +
-      '<div class="ef-line-top' +
-      (showTop ? "" : " hidden") +
-      '"></div>' +
+      '</div><div class="ef-node-label">' +
+      t("devices.ef.solarPv") +
+      "</div></div>" +
       '<div class="ef-battery ef-node"><div class="ef-node-icon">\ud83d\udd0b</div><div class="ef-node-value">' +
       batVal +
       '</div><div class="ef-node-sub">' +
       batSub +
       "</div></div>" +
-      '<div class="ef-line-left' +
-      (showLeft ? "" : " hidden") +
-      '"></div>' +
       '<div class="ef-center"><div class="ef-center-hub"></div></div>' +
-      '<div class="ef-line-right' +
-      (showRight ? "" : " hidden") +
-      '"></div>' +
       '<div class="ef-load ef-node"><div class="ef-node-icon">\ud83c\udfe0</div><div class="ef-node-value">' +
       loadVal +
-      '</div><div class="ef-node-label">' + t("devices.ef.load") + '</div></div>' +
-      '<div class="ef-line-bottom' +
-      (showBottom ? "" : " hidden") +
-      '"></div>' +
+      '</div><div class="ef-node-label">' +
+      t("devices.ef.load") +
+      "</div></div>" +
       '<div class="ef-grid ef-node ' +
       gridClass +
       '"><div class="ef-node-icon">\u26a1</div><div class="ef-node-value">' +

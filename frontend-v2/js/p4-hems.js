@@ -337,11 +337,24 @@ var HEMSPage = {
 
   // ---- T4.4: ACK Status Panel (D3: simplified — no ackList table) ----
   _buildAckStatusCard: function () {
-    var dispatch = (this._overview && this._overview.lastDispatch) ? this._overview.lastDispatch : {};
+    var dispatch =
+      this._overview && this._overview.lastDispatch
+        ? this._overview.lastDispatch
+        : null;
 
-    var toLabel = this._modeKeys[dispatch.toMode]
-      ? t(this._modeKeys[dispatch.toMode].titleKey)
-      : dispatch.toMode;
+    if (!dispatch) {
+      return Components.sectionCard(
+        t("hems.ackStatus"),
+        '<div class="empty-state-detail">' +
+          t("hems.noRecentDispatch") +
+          "</div>",
+      );
+    }
+
+    var toLabel =
+      dispatch.toMode && this._modeKeys[dispatch.toMode]
+        ? t(this._modeKeys[dispatch.toMode].titleKey)
+        : dispatch.toMode || "—";
 
     var summary = [
       '<div class="p4-dispatch-summary">',
@@ -349,7 +362,7 @@ var HEMSPage = {
       '<span class="p4-dispatch-time">' +
         t("hems.lastChange") +
         " " +
-        formatISODateTime(dispatch.timestamp) +
+        (dispatch.timestamp ? formatISODateTime(dispatch.timestamp) : "—") +
         "</span>",
       '<span class="p4-dispatch-detail">' +
         t("hems.targetMode") +
@@ -359,15 +372,15 @@ var HEMSPage = {
       '<span class="p4-dispatch-detail">' +
         t("hems.affected") +
         " " +
-        dispatch.affectedDevices +
+        (dispatch.affectedDevices != null ? dispatch.affectedDevices : "—") +
         " " +
         t("shared.devices") +
         "</span>",
       '<span class="p4-dispatch-detail">' +
         t("hems.successRate") +
         " " +
-        dispatch.successRate +
-        "%</span>",
+        (dispatch.successRate != null ? dispatch.successRate + "%" : "—") +
+        "</span>",
       "</div>",
       "</div>",
     ].join("");

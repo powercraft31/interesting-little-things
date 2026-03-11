@@ -43,16 +43,9 @@ var EnergyPage = {
         self._currentGateway
           ? DataSource.energy.gatewayEnergy(self._currentGateway)
           : Promise.resolve({}),
-        DataSource.energy.baCompare(0).catch(function() { return {}; }),
-        DataSource.energy.baCompare(1).catch(function() { return {}; }),
-        DataSource.energy.baCompare(2).catch(function() { return {}; }),
       ]);
       self._currentEnergyData = secondResults[0];
-      self._baCompare = {
-        0: secondResults[1],
-        1: secondResults[2],
-        2: secondResults[3],
-      };
+      self._baCompare = {};
     } catch (err) {
       showErrorBoundary("energy-content", err);
       return;
@@ -180,33 +173,13 @@ var EnergyPage = {
   },
 
   _buildBeforeAfterCard: function () {
-    var gateways = this._gateways || [];
-    var gwIdx = gateways.findIndex(function (gw) {
-      return gw.gatewayId === EnergyPage._currentGateway;
-    });
-    if (gwIdx < 0) gwIdx = 0;
-    var ba = this._baCompare[gwIdx] || this._baCompare[0];
-
-    var html =
-      '<div class="p3-ba-header">' +
-      '<div class="p3-ba-date"><label>' +
-      t("energy.ba.beforeOpt") +
-      '</label><input type="date" value="2026-03-02" disabled></div>' +
-      '<div class="p3-ba-arrow">\u2192</div>' +
-      '<div class="p3-ba-date"><label>' +
-      t("energy.ba.afterOpt") +
-      '</label><input type="date" value="2026-03-04" disabled></div>' +
-      "</div>" +
-      '<div class="p3-ba-cards" id="p3-ba-cards">' +
-      this._buildBACards(ba) +
-      "</div>";
-
-    return Components.sectionCard(t("energy.beforeAfter"), html);
+    // Gemini Decision #1: baCompare returns null — no baseline model yet
+    return "";
   },
 
   _buildBACards: function (ba) {
     if (!ba || !ba.before || !ba.after) {
-      return '<div class="empty-state-detail">' + t("shared.noData") + '</div>';
+      return '<div class="empty-state-detail">' + t("shared.noData") + "</div>";
     }
     var cards = [
       {
@@ -357,16 +330,6 @@ var EnergyPage = {
       self._initActiveDeviceChart();
     } catch (err) {
       console.error("[Energy] Gateway switch failed:", err);
-    }
-    var gateways = self._gateways || [];
-    var gwIdx = gateways.findIndex(function (gw) {
-      return gw.gatewayId === gatewayId;
-    });
-    if (gwIdx < 0) gwIdx = 0;
-    var ba = self._baCompare[gwIdx];
-    var cardsEl = document.getElementById("p3-ba-cards");
-    if (cardsEl && ba) {
-      cardsEl.innerHTML = self._buildBACards(ba);
     }
   },
 

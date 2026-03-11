@@ -1890,15 +1890,16 @@
   z-index: 2;
 }
 .ef-node-icon { font-size: 1.5rem; }
-.ef-node-label { font-size: 0.7rem; color: var(--text-muted); margin-top: 2px; }
-.ef-node-value { font-family: var(--font-mono); font-size: 0.85rem; font-weight: 600; color: var(--text-primary); }
+.ef-node-label { font-size: 0.7rem; color: var(--muted); margin-top: 2px; }
+.ef-node-value { font-family: var(--font-data); font-size: 0.85rem; font-weight: 600; color: var(--text); }
+.ef-node-sub { font-size: 0.65rem; color: var(--muted); margin-top: 1px; }
 
-.ef-pv    { grid-column: 3; grid-row: 1; }
-.ef-bat   { grid-column: 1; grid-row: 3; }
-.ef-load  { grid-column: 5; grid-row: 3; }
-.ef-grid  { grid-column: 3; grid-row: 5; }
+.ef-pv       { grid-column: 3; grid-row: 1; }
+.ef-battery  { grid-column: 1; grid-row: 3; }
+.ef-load     { grid-column: 5; grid-row: 3; }
+.ef-grid     { grid-column: 3; grid-row: 5; }
 
-.ef-center-hub {
+.ef-center {
   grid-column: 3;
   grid-row: 3;
   display: flex;
@@ -1906,7 +1907,7 @@
   justify-content: center;
   z-index: 1;
 }
-.ef-center-hub-dot {
+.ef-center-hub {
   width: 16px;
   height: 16px;
   border-radius: 50%;
@@ -1914,19 +1915,36 @@
   box-shadow: 0 0 12px rgba(59,130,246,0.4);
 }
 
-/* Flow lines */
-.ef-line {
+/* SVG overlay for flow lines */
+.ef-svg-overlay {
   position: absolute;
-  height: 2px;
-  background: var(--accent);
-  opacity: 0;
-  transition: opacity 0.3s;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  z-index: 1;
+  pointer-events: none;
 }
-.ef-line.active { opacity: 0.7; }
-.ef-line-pv   { top: 25%;  left: 50%; width: 0; transform: rotate(90deg); transform-origin: top left; height: 2px; width: 56px; top: 56px; left: calc(50% - 1px); }
-.ef-line-bat  { top: 50%;  left: 18%; width: 72px; }
-.ef-line-load { top: 50%;  right: 18%; left: auto; width: 72px; }
-.ef-line-grid { bottom: 25%; left: 50%; width: 0; transform: rotate(90deg); transform-origin: bottom left; height: 2px; width: 56px; bottom: 56px; left: calc(50% - 1px); }
+
+.ef-svg-overlay line {
+  stroke-width: 2;
+  stroke-linecap: round;
+}
+
+/* Line colors by flow type */
+.ef-line-pv    { stroke: var(--positive); }
+.ef-line-bat   { stroke: var(--neutral); }
+.ef-line-load  { stroke: var(--text); opacity: 0.6; }
+.ef-line-grid  { stroke: var(--accent); }
+
+/* Hidden when no flow */
+.ef-line-hidden { display: none; }
+
+/* Arrow markers */
+.ef-arrow-positive { fill: var(--positive); }
+.ef-arrow-neutral  { fill: var(--neutral); }
+.ef-arrow-text     { fill: var(--text); opacity: 0.6; }
+.ef-arrow-accent   { fill: var(--accent); }
 
 /* ---- Telemetry Rows ---- */
 .tele-card { margin-bottom: var(--space-md); }
@@ -2089,3 +2107,51 @@
 [data-theme="light"] .tele-row { border-bottom-color: rgba(0,0,0,0.06); }
 [data-theme="light"] .config-row { border-bottom-color: rgba(0,0,0,0.06); }
 [data-theme="light"] .schedule-segment { color: #fff; }
+
+/* ---- Page-Specific Responsive Rules ---- */
+
+/* P2: Gateway cards responsive */
+@media (max-width: 1439px) {
+  .gw-meta {
+    flex-wrap: wrap;
+  }
+}
+
+@media (max-width: 1023px) {
+  .gw-meta span {
+    font-size: 0.7rem;
+  }
+  .detail-page {
+    grid-template-columns: 1fr;
+  }
+  .energy-flow-diamond {
+    width: 240px;
+    height: 240px;
+  }
+}
+
+/* P3: Chart responsive */
+@media (max-width: 1439px) {
+  .p3-main-chart {
+    min-height: 250px;
+  }
+}
+
+/* P4: Mode cards responsive */
+@media (max-width: 1439px) {
+  .p4-mode-cards {
+    grid-template-columns: 1fr 1fr 1fr;
+  }
+}
+
+@media (max-width: 1023px) {
+  .p4-mode-cards {
+    grid-template-columns: 1fr;
+  }
+  .p4-filter-row {
+    flex-direction: column;
+  }
+  .p4-filter-row select {
+    width: 100%;
+  }
+}
