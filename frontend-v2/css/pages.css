@@ -1941,7 +1941,7 @@
 .ef-node-value { font-family: var(--font-data); font-size: 0.85rem; font-weight: 600; color: var(--text); }
 .ef-node-sub { font-size: 0.65rem; color: var(--muted); margin-top: 1px; }
 
-.ef-pv       { grid-column: 3; grid-row: 1; }
+.ef-pv       { grid-column: 3; grid-row: 1; transform: translateY(-30px); }
 .ef-battery  { grid-column: 1; grid-row: 3; }
 .ef-load     { grid-column: 5; grid-row: 3; }
 .ef-grid     { grid-column: 3; grid-row: 5; }
@@ -1955,11 +1955,7 @@
   z-index: 1;
 }
 .ef-center-hub {
-  width: 16px;
-  height: 16px;
-  border-radius: 50%;
-  background: var(--accent);
-  box-shadow: 0 0 12px rgba(59,130,246,0.4);
+  display: none;
 }
 
 /* SVG overlay for flow lines */

@@ -1223,7 +1223,7 @@ var DevicesPage = {
     // PV line: always PV→Hub (solar generates into hub)
     if (showTop) {
       svgLines.push(
-        '<line x1="140" y1="56" x2="140" y2="120" class="ef-line-pv" marker-end="url(#arrow-pv)"/>',
+        '<line x1="140" y1="76" x2="140" y2="108" class="ef-line-pv" marker-end="url(#arrow-pv)"/>',
       );
     }
 
