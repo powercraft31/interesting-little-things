@@ -1,0 +1,68 @@
+version: '3.8'
+
+services:
+  solfacil-db:
+    image: postgres:15-alpine
+    container_name: solfacil-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres_admin_2026
+      POSTGRES_DB: solfacil_vpp
+    volumes:
+      - solfacil_pgdata:/var/lib/postgresql/data
+      - ./db-init:/docker-entrypoint-initdb.d:ro
+    ports:
+      - "127.0.0.1:5433:5432"
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d solfacil_vpp"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+    networks:
+      - solfacil
+
+  solfacil-bff:
+    image: node:20-alpine
+    container_name: solfacil-bff
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+      - ./frontend-v2:/app/frontend-v2
+    ports:
+      - "3100:3000"
+    environment:
+      NODE_ENV: production
+      APP_DATABASE_URL: postgresql://solfacil_app:solfacil_vpp_2026@solfacil-db:5432/solfacil_vpp
+      SERVICE_DATABASE_URL: postgresql://solfacil_service:solfacil_service_2026@solfacil-db:5432/solfacil_vpp
+    depends_on:
+      solfacil-db:
+        condition: service_healthy
+    command: sh -c "npm install --include=dev && npx tsc -p tsconfig.build.json && node dist/scripts/local-server.js"
+    networks:
+      - solfacil
+
+  solfacil-m1:
+    image: node:20-alpine
+    container_name: solfacil-m1
+    restart: unless-stopped
+    working_dir: /app
+    volumes:
+      - ./backend:/app
+    environment:
+      NODE_ENV: production
+      SERVICE_DATABASE_URL: postgresql://solfacil_service:solfacil_service_2026@127.0.0.1:5433/solfacil_vpp
+    depends_on:
+      solfacil-db:
+        condition: service_healthy
+    command: sh -c "npm install --include=dev && npx tsc -p tsconfig.build.json && node dist/scripts/run-m1-local.js"
+    network_mode: host
+
+volumes:
+  solfacil_pgdata:
+    driver: local
+
+networks:
+  solfacil:
+    driver: bridge
