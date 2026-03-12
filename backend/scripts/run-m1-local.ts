@@ -12,6 +12,7 @@ import {
   handleSetReply,
 } from "../src/iot-hub/handlers/command-tracker";
 import { CommandPublisher } from "../src/iot-hub/services/command-publisher";
+import { BackfillRequester } from "../src/iot-hub/services/backfill-requester";
 
 // Local PostgreSQL — service pool (BYPASSRLS)
 const pool = new Pool({
@@ -66,6 +67,10 @@ async function main() {
   publisher.start();
   console.log("[M1 Local] CommandPublisher started (10s poll)");
 
+  const backfillRequester = new BackfillRequester(pool, manager);
+  backfillRequester.start();
+  console.log("[M1 Local] BackfillRequester started (10s poll)");
+
   console.log("[M1 Local] Running. Press Ctrl+C to stop.");
 
   // Print stats every 30s
@@ -76,6 +81,7 @@ async function main() {
   // Graceful shutdown
   process.on("SIGINT", () => {
     console.log("\n[M1 Local] Shutting down...");
+    backfillRequester.stop();
     publisher.stop();
     manager.stop();
     pool.end().then(() => process.exit(0));
