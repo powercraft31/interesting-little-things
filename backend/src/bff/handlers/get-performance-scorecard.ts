@@ -295,14 +295,14 @@ export async function handler(
     {
       name: "Training Time",
       value: null,
-      unit: "hrs",
+      unit: "h",
       target: 4,
       status: "warn",
     },
     {
       name: "Manual Interventions",
       value: manualInterventions,
-      unit: "/week",
+      unit: "/semana",
       target: 2,
       status:
         manualInterventions <= 2

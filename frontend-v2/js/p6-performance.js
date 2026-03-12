@@ -115,7 +115,9 @@ var PerformancePage = {
               '<div class="p6-metric-target">' +
                 t("perf.target") +
                 " " +
-                m.target +
+                (typeof m.target === "number"
+                  ? String(m.target).replace(".", ",") + (m.unit === "%" ? "%" : m.unit ? " " + m.unit : "")
+                  : m.target) +
                 "</div>",
               "</div>",
               '<div class="p6-metric-result">',
