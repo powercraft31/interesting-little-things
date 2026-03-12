@@ -5,6 +5,36 @@
    Layer 3 — Device detail (energy flow + telemetry + config + schedule)
    ============================================ */
 
+function parseChineseRuntime(str) {
+  if (!str) return "--";
+  var d = str.match(/(\d+)天/);
+  var h = str.match(/(\d+)小时/);
+  var m = str.match(/(\d+)分钟/);
+  var parts = [];
+  if (d) parts.push(d[1] + "d");
+  if (h) parts.push(h[1] + "h");
+  if (m) parts.push(m[1] + "min");
+  return parts.length > 0 ? parts.join(" ") : str;
+}
+
+function parseSignalStrength(str) {
+  if (!str) return "--";
+  var match = str.match(/([\d.-]+)\s*dBm/i);
+  return match ? match[1] + " dBm" : str;
+}
+
+function parseFirmwareStatus(str) {
+  if (!str) return "--";
+  var map = {
+    未插入: "N/A",
+    已插入: "OK",
+    打开: "On",
+    关闭: "Off",
+    无信号: "No signal",
+  };
+  return map[str] || str;
+}
+
 var DevicesPage = {
   _gateways: null,
   _expandedGw: null,
@@ -40,6 +70,13 @@ var DevicesPage = {
 
     container.innerHTML = self._buildLayer1();
     self._setupLayer1Events();
+
+    // Restore Layer 3 if it was open before language switch
+    if (self._currentGatewayId) {
+      setTimeout(function () {
+        self._openLayer3GW(self._currentGatewayId);
+      }, 100);
+    }
   },
 
   onRoleChange: function () {
@@ -109,12 +146,14 @@ var DevicesPage = {
     var statusClass = gw.status === "online" ? "online" : "offline";
     var isExpanded = this._expandedGw === gw.gatewayId;
     var health = gw.emsHealth || {};
-    var wifiRaw =
-      health.wifi_signal_strength || health.wifiSignalStrength || "--";
-    var rssi = wifiRaw !== "--" ? wifiRaw.replace(/\s*\(.*\)/, "") : "--";
+    var rssi = parseSignalStrength(
+      health.wifi_signal_strength || health.wifiSignalStrength || "",
+    );
     var cpuTemp = health.CPU_temp || health.cpuTemp || "--";
     var memUsage = health.memory_usage || health.memoryUsage || "--";
-    var uptime = health.system_runtime || health.systemRuntime || "--";
+    var uptime = parseChineseRuntime(
+      health.system_runtime || health.systemRuntime || "",
+    );
     var lastSeen = gw.lastSeenAt ? formatISODateTime(gw.lastSeenAt) : "--";
 
     return (
@@ -266,12 +305,6 @@ var DevicesPage = {
 
   _buildDeviceRow: function (dev) {
     var st = dev.state || {};
-    var socText = st.batterySoc != null ? st.batterySoc + "%" : "--";
-    var powerText =
-      st.pvPower != null ? formatNumber(st.pvPower, 1) + " kW" : "--";
-    var sohText = st.batSoh != null ? st.batSoh + "%" : "--";
-    var tempText =
-      st.batteryTemperature != null ? st.batteryTemperature + "\u00b0C" : "--";
 
     var typeIcons = {
       "Inverter + Battery": "\ud83d\udd0b",
@@ -285,6 +318,38 @@ var DevicesPage = {
       SOLAR_PANEL: "\u2600\ufe0f",
     };
     var icon = typeIcons[dev.assetType] || "\ud83d\udd0c";
+
+    var statsHtml = "";
+    if (dev.assetType === "INVERTER_BATTERY") {
+      var socText = st.batterySoc != null ? st.batterySoc + "%" : "--";
+      var bp = st.batteryPower != null ? st.batteryPower : 0;
+      var batStatus =
+        bp > 0.05
+          ? t("devices.ef.charging")
+          : bp < -0.05
+            ? t("devices.ef.discharging")
+            : t("devices.ef.idle");
+      var batPowerText = Math.abs(bp).toFixed(1) + " kW";
+      var pvText =
+        st.pvPower != null ? formatNumber(st.pvPower, 1) + " kW" : "--";
+      statsHtml =
+        '<span class="dev-stat">SoC ' +
+        socText +
+        "</span>" +
+        '<span class="dev-stat">' +
+        batStatus +
+        "</span>" +
+        '<span class="dev-stat">Bat ' +
+        batPowerText +
+        "</span>" +
+        '<span class="dev-stat">PV ' +
+        pvText +
+        "</span>";
+    } else if (dev.assetType === "SMART_METER") {
+      var gridText =
+        st.gridPowerKw != null ? formatNumber(st.gridPowerKw, 1) + " kW" : "--";
+      statsHtml = '<span class="dev-stat">Grid ' + gridText + "</span>";
+    }
 
     return (
       '<div class="device-row" data-asset-id="' +
@@ -304,18 +369,7 @@ var DevicesPage = {
       "</div>" +
       "</div>" +
       '<div class="dev-stats">' +
-      '<span class="dev-stat">SoC ' +
-      socText +
-      "</span>" +
-      '<span class="dev-stat">PV ' +
-      powerText +
-      "</span>" +
-      '<span class="dev-stat">SoH ' +
-      sohText +
-      "</span>" +
-      '<span class="dev-stat">Temp ' +
-      tempText +
-      "</span>" +
+      statsHtml +
       "</div>" +
       "</div>"
     );
@@ -513,40 +567,51 @@ var DevicesPage = {
 
   _buildDeviceConfigGW: function (devices, config) {
     var self = this;
-    // Default to first INVERTER_BATTERY if no selection
-    if (!self._selectedConfigDevice) {
-      var firstInverter = devices.filter(function (d) {
-        return d.assetType === "INVERTER_BATTERY";
-      })[0];
-      self._selectedConfigDevice = firstInverter
-        ? firstInverter.assetId
-        : (devices[0] && devices[0].assetId) || null;
+    var inverters = devices.filter(function (d) {
+      return d.assetType === "INVERTER_BATTERY";
+    });
+
+    if (inverters.length === 0) {
+      return Components.sectionCard(
+        t("devices.gatewayDetail"),
+        '<div class="config-empty">' +
+          t("devices.noConfigurableDevices") +
+          "</div>",
+      );
+    }
+
+    // Default to first inverter if no selection or selection not in inverters
+    if (
+      !self._selectedConfigDevice ||
+      !inverters.some(function (d) {
+        return d.assetId === self._selectedConfigDevice;
+      })
+    ) {
+      self._selectedConfigDevice = inverters[0].assetId;
     }
     var selectedId = self._selectedConfigDevice;
-    var selectedDev = devices.filter(function (d) {
-      return d.assetId === selectedId;
-    })[0];
-    var isInverter =
-      selectedDev && selectedDev.assetType === "INVERTER_BATTERY";
 
-    var deviceChips = devices
-      .map(function (d) {
-        var onlineClass = d.isOnline ? "tag-online" : "tag-offline";
-        var activeClass = d.assetId === selectedId ? " active" : "";
-        return (
-          '<span class="device-chip ' +
-          onlineClass +
-          activeClass +
-          '" data-asset-id="' +
-          d.assetId +
-          '" data-asset-type="' +
-          d.assetType +
-          '">' +
-          (d.name || d.assetId) +
-          "</span>"
-        );
-      })
-      .join("");
+    var deviceChips = "";
+    if (inverters.length > 1) {
+      deviceChips = inverters
+        .map(function (d) {
+          var onlineClass = d.isOnline ? "tag-online" : "tag-offline";
+          var activeClass = d.assetId === selectedId ? " active" : "";
+          return (
+            '<span class="device-chip ' +
+            onlineClass +
+            activeClass +
+            '" data-asset-id="' +
+            d.assetId +
+            '" data-asset-type="' +
+            d.assetType +
+            '">' +
+            (d.name || d.assetId) +
+            "</span>"
+          );
+        })
+        .join("");
+    }
 
     var configFields = [
       { key: "socMin", label: t("devices.socMin"), value: config.socMin },
@@ -568,43 +633,27 @@ var DevicesPage = {
       },
     ];
 
-    var fieldsHtml;
-    if (isInverter) {
-      fieldsHtml =
-        configFields
-          .map(function (f) {
-            var val = f.value != null ? f.value : "";
-            return (
-              '<div class="config-row"><span class="config-label">' +
-              f.label +
-              '</span><div class="config-field">' +
-              '<input type="number" class="config-input" data-cfg-key="' +
-              f.key +
-              '" step="0.1" value="' +
-              val +
-              '">' +
-              "</div></div>"
-            );
-          })
-          .join("") +
-        '<div class="schedule-apply-row">' +
-        '<button class="btn btn-primary" id="config-apply">' +
-        t("devices.applyConfig") +
-        "</button></div>";
-    } else {
-      fieldsHtml = configFields
+    var fieldsHtml =
+      configFields
         .map(function (f) {
-          var val = f.value != null ? f.value : "--";
+          var val = f.value != null ? f.value : "";
           return (
-            '<div class="tele-row"><span class="tele-label">' +
+            '<div class="config-row"><span class="config-label">' +
             f.label +
-            '</span><span class="tele-value">' +
+            '</span><div class="config-field">' +
+            '<input type="number" class="config-input" data-cfg-key="' +
+            f.key +
+            '" step="0.1" value="' +
             val +
-            "</span></div>"
+            '">' +
+            "</div></div>"
           );
         })
-        .join("");
-    }
+        .join("") +
+      '<div class="schedule-apply-row">' +
+      '<button class="btn btn-primary" id="config-apply">' +
+      t("devices.applyConfig") +
+      "</button></div>";
 
     var body =
       '<div class="device-chips-row">' +
@@ -966,48 +1015,48 @@ var DevicesPage = {
   _buildGatewayHealth: function (emsHealth) {
     var h = emsHealth || {};
 
-    var wifiRaw = h.wifiSignalStrength || h.wifi_signal_strength || "--";
-    var wifiVal = wifiRaw !== "--" ? wifiRaw.replace(/\s*\(.*\)/, "") : "--";
     var indicators = [
       {
         icon: "\ud83d\udce1",
-        label: t("devices.wifi"),
-        value: wifiVal,
+        label: t("devices.health.wifi"),
+        value: parseSignalStrength(
+          h.wifi_signal_strength || h.wifiSignalStrength || "",
+        ),
       },
       {
         icon: "\ud83c\udf21",
-        label: "CPU Temp",
+        label: t("devices.health.cpuTemp"),
         value: h.cpuTemp || h.CPU_temp || "--",
       },
       {
         icon: "\ud83d\udcbb",
-        label: "CPU Usage",
+        label: t("devices.health.cpuUsage"),
         value: h.cpuUsage || h.CPU_usage || "--",
       },
       {
         icon: "\ud83d\udcbe",
-        label: "Memory",
+        label: t("devices.health.memory"),
         value: h.memoryUsage || h.memory_usage || "--",
       },
       {
         icon: "\ud83d\udcbf",
-        label: "Disk",
+        label: t("devices.health.disk"),
         value: h.diskUsage || h.disk_usage || "--",
       },
       {
         icon: "\u23f1",
-        label: t("devices.uptime"),
-        value: h.systemRuntime || h.system_runtime || "--",
+        label: t("devices.health.uptime"),
+        value: parseChineseRuntime(h.system_runtime || h.systemRuntime || ""),
       },
       {
         icon: "\ud83c\udf21",
-        label: "EMS Temp",
+        label: t("devices.health.emsTemp"),
         value: h.emsTemp || h.ems_temp || "--",
       },
       {
         icon: "\ud83d\udcf6",
-        label: "SIM",
-        value: h.simStatus || h.SIM_status || "--",
+        label: t("devices.health.sim"),
+        value: parseFirmwareStatus(h.SIM_status || h.simStatus || ""),
       },
     ];
 
