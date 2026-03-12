@@ -162,15 +162,32 @@ export async function runPendingCommandDispatcher(pool: Pool): Promise<void> {
 
 async function runTimeoutCheck(pool: Pool): Promise<void> {
   try {
-    const result = await pool.query(`
+    // Timeout 1: dispatched commands (90s from created_at — no gateway response)
+    const dispatched = await pool.query(`
       UPDATE device_command_logs
-      SET result = 'timeout'
-      WHERE result IN ('dispatched', 'accepted')
+      SET result = 'timeout', resolved_at = NOW(), error_message = 'gateway_no_response'
+      WHERE result = 'dispatched' AND command_type = 'set'
         AND created_at < NOW() - INTERVAL '90 seconds'
       RETURNING id
     `);
-    if (result.rowCount && result.rowCount > 0) {
-      console.log(`[TimeoutCheck] Timed out ${result.rowCount} commands`);
+    if (dispatched.rowCount && dispatched.rowCount > 0) {
+      console.log(
+        `[TimeoutCheck] Timed out ${dispatched.rowCount} dispatched commands (no gateway response)`,
+      );
+    }
+
+    // Timeout 2: accepted commands (20s from accepted time in device_timestamp)
+    const accepted = await pool.query(`
+      UPDATE device_command_logs
+      SET result = 'timeout', resolved_at = NOW(), error_message = 'device_write_timeout'
+      WHERE result = 'accepted' AND command_type = 'set'
+        AND device_timestamp < NOW() - INTERVAL '20 seconds'
+      RETURNING id
+    `);
+    if (accepted.rowCount && accepted.rowCount > 0) {
+      console.log(
+        `[TimeoutCheck] Timed out ${accepted.rowCount} accepted commands (device write timeout)`,
+      );
     }
   } catch (err) {
     console.error("[TimeoutCheck] Error:", err);

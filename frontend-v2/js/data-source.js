@@ -73,7 +73,11 @@ var DataSource = (function () {
       body: JSON.stringify(body),
     })
       .then(function (res) {
-        if (!res.ok) throw new Error("API " + res.status);
+        if (!res.ok) {
+          var err = new Error("API " + res.status);
+          err.status = res.status;
+          throw err;
+        }
         return res.json();
       })
       .then(function (envelope) {

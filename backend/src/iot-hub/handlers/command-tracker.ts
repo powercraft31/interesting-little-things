@@ -89,20 +89,21 @@ export async function handleSetReply(
 
   if (result === "accepted") {
     // Phase 1: gateway accepted the command, writing to device
+    // Use NOW() for device_timestamp to track when accepted was received (for 20s timeout)
     updateResult = await pool.query(
       `UPDATE device_command_logs
        SET result = 'accepted',
-           device_timestamp = $1
+           device_timestamp = NOW()
        WHERE id = (
          SELECT id FROM device_command_logs
-         WHERE gateway_id = $2
-           AND config_name = $3
+         WHERE gateway_id = $1
+           AND config_name = $2
            AND command_type = 'set'
            AND result = 'dispatched'
          ORDER BY created_at DESC
          LIMIT 1
        )`,
-      [deviceTimestamp, gatewayId, configName],
+      [gatewayId, configName],
     );
   } else {
     // Phase 2 (or single-phase for v1.5 gateways): terminal result

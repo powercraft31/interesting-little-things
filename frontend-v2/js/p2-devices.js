@@ -124,6 +124,23 @@ var DevicesPage = {
     if (!self._currentGatewayId || self._currentGatewayId !== data.gatewayId)
       return;
 
+    // Command status events: re-enable Apply button on terminal results
+    if (data.type === "command_status") {
+      var terminalResults = ["success", "fail", "timeout"];
+      if (terminalResults.indexOf(data.result) >= 0) {
+        var applyBtn = document.getElementById("schedule-apply");
+        if (applyBtn) {
+          applyBtn.textContent = t("devices.applyToGateway");
+          applyBtn.disabled = false;
+        }
+        var infoEl = document.getElementById("schedule-inflight-info");
+        if (infoEl) infoEl.style.display = "none";
+        // Refresh schedule card to show updated status
+        self._refreshScheduleCard(data.gatewayId);
+      }
+      return;
+    }
+
     if (self._sseDebounceTimer) clearTimeout(self._sseDebounceTimer);
     self._sseDebounceTimer = setTimeout(function () {
       self._sseDebounceTimer = null;
@@ -323,6 +340,18 @@ var DevicesPage = {
       );
     } catch (err) {
       console.warn("[P2] refreshHealth error:", err);
+    }
+  },
+
+  _refreshScheduleCard: async function (gatewayId) {
+    var self = this;
+    try {
+      var schedule = await DataSource.devices.getSchedule(gatewayId);
+      if (schedule) {
+        self._currentSchedule = schedule;
+      }
+    } catch (err) {
+      console.warn("[P2] refreshSchedule error:", err);
     }
   },
 
@@ -984,9 +1013,16 @@ var DevicesPage = {
       "</span>" +
       "</div>" +
       '<div class="schedule-apply-row">' +
-      '<button class="btn btn-primary" id="schedule-apply">' +
-      t("devices.applyToGateway") +
+      '<button class="btn btn-primary" id="schedule-apply"' +
+      (schedule.syncStatus === "pending" ? " disabled" : "") +
+      ">" +
+      (schedule.syncStatus === "pending"
+        ? "Aguardando..."
+        : t("devices.applyToGateway")) +
       "</button>" +
+      '<div class="schedule-inflight-info" id="schedule-inflight-info"' +
+      (schedule.syncStatus === "pending" ? "" : ' style="display:none"') +
+      ">Configura\u00e7\u00e3o em andamento...</div>" +
       "</div>";
 
     return Components.sectionCard(t("devices.schedule.title"), body);
@@ -1380,22 +1416,21 @@ var DevicesPage = {
     try {
       await DataSource.devices.putSchedule(gwId, self._pendingConfig);
 
+      // Keep button disabled — waiting for gateway confirmation via SSE
       if (applyBtn) {
-        applyBtn.textContent = "Submitted \u2713";
-        applyBtn.classList.add("btn-success");
+        applyBtn.textContent = "Aguardando...";
+        applyBtn.disabled = true;
       }
+      var infoEl = document.getElementById("schedule-inflight-info");
+      if (infoEl) infoEl.style.display = "block";
       self._showToast(t("devices.scheduleSubmitted"), "success");
-
-      setTimeout(function () {
-        if (applyBtn) {
-          applyBtn.textContent = t("devices.applyToGateway");
-          applyBtn.disabled = false;
-          applyBtn.classList.remove("btn-success");
-        }
-      }, 3000);
     } catch (err) {
       console.error("[P2] putSchedule error:", err);
-      self._showToast(t("devices.loadFailed"), "error");
+      if (err.status === 409) {
+        self._showToast("J\u00e1 existe um comando em andamento", "warning");
+      } else {
+        self._showToast(t("devices.loadFailed"), "error");
+      }
       if (applyBtn) {
         applyBtn.textContent = t("devices.applyToGateway");
         applyBtn.disabled = false;

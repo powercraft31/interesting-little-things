@@ -80,15 +80,21 @@ export async function handler(
       maxChargeCurrent: body.maxChargeCurrent,
       maxDischargeCurrent: body.maxDischargeCurrent,
       gridImportLimitKw: body.gridImportLimitKw,
-      slots: body.slots.map((s): DomainSlot => ({
-        mode: mapPurposeToMode(s.purpose),
-        action: s.purpose === "tariff" ? (s.direction as "charge" | "discharge" | undefined) : undefined,
-        allowExport: s.purpose === "tariff" && s.direction === "discharge"
-          ? s.exportPolicy === "allow"
-          : undefined,
-        startMinute: s.startMinute,
-        endMinute: s.endMinute,
-      })),
+      slots: body.slots.map(
+        (s): DomainSlot => ({
+          mode: mapPurposeToMode(s.purpose),
+          action:
+            s.purpose === "tariff"
+              ? (s.direction as "charge" | "discharge" | undefined)
+              : undefined,
+          allowExport:
+            s.purpose === "tariff" && s.direction === "discharge"
+              ? s.exportPolicy === "allow"
+              : undefined,
+          startMinute: s.startMinute,
+          endMinute: s.endMinute,
+        }),
+      ),
     };
   } catch (err: unknown) {
     const msg = err instanceof Error ? err.message : "Invalid request body";
@@ -112,6 +118,31 @@ export async function handler(
 
   if (gwResult.rows.length === 0) {
     return apiError(404, "Gateway not found");
+  }
+
+  // Guard: reject if there's already an active command for this gateway
+  // Use service pool (orgId=null) for cross-org visibility
+  const activeCheck = await queryWithOrg(
+    `SELECT id, result FROM device_command_logs
+     WHERE gateway_id = $1 AND command_type = 'set' AND config_name = 'battery_schedule'
+       AND result IN ('pending', 'dispatched', 'accepted')
+     ORDER BY created_at DESC LIMIT 1`,
+    [gatewayId],
+    null,
+  );
+
+  if (activeCheck.rows.length > 0) {
+    const active = activeCheck.rows[0];
+    return {
+      statusCode: 409,
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        success: false,
+        data: null,
+        error: `Command already in progress (id=${active.id}, status=${active.result}). Wait for completion.`,
+        timestamp: new Date().toISOString(),
+      }),
+    };
   }
 
   // Insert command log with full DomainSchedule as payload_json
@@ -140,9 +171,13 @@ export async function handler(
 
 function mapPurposeToMode(purpose: string): DomainSlot["mode"] {
   switch (purpose) {
-    case "self_consumption": return "self_consumption";
-    case "peak_shaving": return "peak_shaving";
-    case "tariff": return "peak_valley_arbitrage";
-    default: throw new Error(`Unknown purpose: ${purpose}`);
+    case "self_consumption":
+      return "self_consumption";
+    case "peak_shaving":
+      return "peak_shaving";
+    case "tariff":
+      return "peak_valley_arbitrage";
+    default:
+      throw new Error(`Unknown purpose: ${purpose}`);
   }
 }
