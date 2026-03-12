@@ -165,7 +165,7 @@ async function runTimeoutCheck(pool: Pool): Promise<void> {
     const result = await pool.query(`
       UPDATE device_command_logs
       SET result = 'timeout'
-      WHERE result = 'dispatched'
+      WHERE result IN ('dispatched', 'accepted')
         AND created_at < NOW() - INTERVAL '90 seconds'
       RETURNING id
     `);

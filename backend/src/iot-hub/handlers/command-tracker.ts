@@ -18,7 +18,7 @@ interface GetReplyData {
 
 interface SetReplyData {
   readonly configname?: string;
-  readonly result?: string; // "success" | "fail"
+  readonly result?: string; // "accepted" | "success" | "fail"
   readonly message?: string;
 }
 
@@ -84,26 +84,56 @@ export async function handleSetReply(
 
   const deviceTimestamp = parseDeviceTimestamp(payload.timeStamp);
 
-  // Resolve the latest pending 'set' command for this gateway + config
-  const updateResult = await pool.query(
-    `UPDATE device_command_logs
-     SET result = $1,
-         error_message = $2,
-         device_timestamp = $3,
-         resolved_at = NOW()
-     WHERE id = (
-       SELECT id FROM device_command_logs
-       WHERE gateway_id = $4
-         AND config_name = $5
-         AND command_type = 'set'
-         AND result = 'dispatched'
-       ORDER BY created_at DESC
-       LIMIT 1
-     )`,
-    [result, errorMessage, deviceTimestamp, gatewayId, configName],
-  );
+  // Two-phase set_reply: accepted (phase 1) → success/fail (phase 2)
+  let updateResult;
 
-  if (updateResult.rowCount === 0) {
+  if (result === "accepted") {
+    // Phase 1: gateway accepted the command, writing to device
+    updateResult = await pool.query(
+      `UPDATE device_command_logs
+       SET result = 'accepted',
+           device_timestamp = $1
+       WHERE id = (
+         SELECT id FROM device_command_logs
+         WHERE gateway_id = $2
+           AND config_name = $3
+           AND command_type = 'set'
+           AND result = 'dispatched'
+         ORDER BY created_at DESC
+         LIMIT 1
+       )`,
+      [deviceTimestamp, gatewayId, configName],
+    );
+  } else {
+    // Phase 2 (or single-phase for v1.5 gateways): terminal result
+    updateResult = await pool.query(
+      `UPDATE device_command_logs
+       SET result = $1,
+           error_message = $2,
+           device_timestamp = $3,
+           resolved_at = NOW()
+       WHERE id = (
+         SELECT id FROM device_command_logs
+         WHERE gateway_id = $4
+           AND config_name = $5
+           AND command_type = 'set'
+           AND result IN ('dispatched', 'accepted')
+         ORDER BY created_at DESC
+         LIMIT 1
+       )`,
+      [result, errorMessage, deviceTimestamp, gatewayId, configName],
+    );
+  }
+
+  if (updateResult.rowCount && updateResult.rowCount > 0) {
+    // Notify SSE listeners of status change
+    const notifyPayload = JSON.stringify({
+      gatewayId,
+      configName,
+      result,
+    });
+    await pool.query(`SELECT pg_notify('command_status', $1)`, [notifyPayload]);
+  } else {
     // No pending command found — log as standalone set_reply
     await pool.query(
       `INSERT INTO device_command_logs
@@ -121,13 +151,13 @@ export async function handleSetReply(
     );
   }
 
-  if (result === "fail") {
-    console.error(
-      `[CommandTracker] set_reply FAIL for ${gatewayId}: ${errorMessage ?? "no message"}`,
+  if (result === "accepted") {
+    console.log(
+      `[CommandTracker] set_reply ACCEPTED (phase 1) for ${gatewayId}`,
     );
   } else {
     console.log(
-      `[CommandTracker] set_reply SUCCESS for ${gatewayId}, config=${configName}`,
+      `[CommandTracker] set_reply ${result.toUpperCase()} for ${gatewayId}`,
     );
   }
 }

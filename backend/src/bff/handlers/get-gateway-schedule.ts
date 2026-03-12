@@ -111,8 +111,10 @@ export async function handler(
     // Use the DomainSchedule we stored in payload_json at PUT time
     const row = setSuccessResult.rows[0] as Record<string, unknown>;
     const domain = row.payload_json as {
-      socMinLimit: number; socMaxLimit: number;
-      maxChargeCurrent: number; maxDischargeCurrent: number;
+      socMinLimit: number;
+      socMaxLimit: number;
+      maxChargeCurrent: number;
+      maxDischargeCurrent: number;
       gridImportLimitKw: number;
       slots: DomainSlot[];
     };
@@ -149,13 +151,16 @@ export async function handler(
     const setRow = setResult.rows[0] as Record<string, unknown>;
     const result = setRow.result as string;
 
-    syncStatus = result === "success"
-      ? "synced"
-      : (result === "pending" || result === "dispatched")
-        ? "pending"
-        : result === "failed" || result === "timeout"
-          ? "failed"
-          : "unknown";
+    syncStatus =
+      result === "success"
+        ? "synced"
+        : result === "pending" ||
+            result === "dispatched" ||
+            result === "accepted"
+          ? "pending"
+          : result === "failed" || result === "timeout"
+            ? "failed"
+            : "unknown";
 
     lastAckAt = setRow.resolved_at
       ? new Date(setRow.resolved_at as string).toISOString()
@@ -184,10 +189,18 @@ function domainSlotToResponse(slot: DomainSlot): {
   exportPolicy?: string;
 } {
   if (slot.mode === "self_consumption") {
-    return { startMinute: slot.startMinute, endMinute: slot.endMinute, purpose: "self_consumption" };
+    return {
+      startMinute: slot.startMinute,
+      endMinute: slot.endMinute,
+      purpose: "self_consumption",
+    };
   }
   if (slot.mode === "peak_shaving") {
-    return { startMinute: slot.startMinute, endMinute: slot.endMinute, purpose: "peak_shaving" };
+    return {
+      startMinute: slot.startMinute,
+      endMinute: slot.endMinute,
+      purpose: "peak_shaving",
+    };
   }
   // peak_valley_arbitrage → tariff
   const result: {
