@@ -435,7 +435,7 @@ var DevicesPage = {
     if (layer3) layer3.style.display = "none";
     this._currentDetail = null;
     this._currentSchedule = null;
-    this._pendingSlots = [];
+    this._pendingConfig = null;
     this._currentGatewayId = null;
   },
 
@@ -443,7 +443,7 @@ var DevicesPage = {
   // LAYER 3: Gateway-Level Detail (Fix #3)
   // =========================================================
 
-  _pendingSlots: [],
+  _pendingConfig: null,
   _currentGatewayId: null,
 
   _openLayer3GW: async function (gatewayId) {
@@ -461,13 +461,44 @@ var DevicesPage = {
     try {
       var detail = await DataSource.devices.gatewayDetail(gatewayId);
       self._currentDetail = detail;
-      self._currentSchedule = detail.schedule || {
-        syncStatus: "unknown",
-        slots: [],
+
+      // Fetch schedule from dedicated endpoint (v5.21)
+      var schedData = null;
+      try {
+        schedData = await DataSource.devices.getSchedule(gatewayId);
+      } catch (schedErr) {
+        console.warn("[P2] getSchedule error, using defaults:", schedErr);
+      }
+
+      self._currentSchedule = {
+        syncStatus: (schedData && schedData.syncStatus) || "unknown",
+        lastAckAt: (schedData && schedData.lastAckAt) || null,
+        batterySchedule:
+          schedData && schedData.batterySchedule
+            ? schedData.batterySchedule
+            : null,
       };
-      self._pendingSlots = JSON.parse(
-        JSON.stringify(self._currentSchedule.slots || []),
-      );
+
+      var bs = self._currentSchedule.batterySchedule;
+      self._pendingConfig = {
+        socMinLimit: bs && bs.socMinLimit != null ? bs.socMinLimit : 10,
+        socMaxLimit: bs && bs.socMaxLimit != null ? bs.socMaxLimit : 95,
+        maxChargeCurrent:
+          bs && bs.maxChargeCurrent != null ? bs.maxChargeCurrent : 100,
+        maxDischargeCurrent:
+          bs && bs.maxDischargeCurrent != null ? bs.maxDischargeCurrent : 100,
+        gridImportLimitKw:
+          bs && bs.gridImportLimitKw != null ? bs.gridImportLimitKw : 3000,
+        slots: (bs && bs.slots ? bs.slots : []).map(function (s) {
+          return {
+            startMinute: s.startMinute,
+            endMinute: s.endMinute,
+            purpose: s.purpose,
+            direction: s.direction || null,
+            exportPolicy: s.exportPolicy || null,
+          };
+        }),
+      };
     } catch (err) {
       layer3.innerHTML =
         '<div class="error-boundary"><div class="error-icon">&#9888;</div>' +
@@ -555,17 +586,18 @@ var DevicesPage = {
       this._buildInverterGrid(state, extra) +
       "</div>" +
       '<div class="right-col">' +
-      this._buildDeviceConfigGW(devices, config) +
-      this._buildScheduleCardEditable(schedule) +
+      this._buildBatteryScheduleCard(devices) +
       this._buildGatewayHealth(gw.emsHealth) +
       "</div>" +
       "</div>"
     );
   },
 
-  _selectedConfigDevice: null,
+  // =========================================================
+  // BATTERY SCHEDULE CARD (v5.21 — merged Config + Schedule)
+  // =========================================================
 
-  _buildDeviceConfigGW: function (devices, config) {
+  _buildBatteryScheduleCard: function (devices) {
     var self = this;
     var inverters = devices.filter(function (d) {
       return d.assetType === "INVERTER_BATTERY";
@@ -573,121 +605,108 @@ var DevicesPage = {
 
     if (inverters.length === 0) {
       return Components.sectionCard(
-        t("devices.gatewayDetail"),
+        t("devices.schedule.title"),
         '<div class="config-empty">' +
           t("devices.noConfigurableDevices") +
           "</div>",
       );
     }
 
-    // Default to first inverter if no selection or selection not in inverters
-    if (
-      !self._selectedConfigDevice ||
-      !inverters.some(function (d) {
-        return d.assetId === self._selectedConfigDevice;
-      })
-    ) {
-      self._selectedConfigDevice = inverters[0].assetId;
-    }
-    var selectedId = self._selectedConfigDevice;
+    var cfg = self._pendingConfig || {};
+    var schedule = self._currentSchedule || {};
 
-    var deviceChips = "";
-    if (inverters.length > 1) {
-      deviceChips = inverters
-        .map(function (d) {
-          var onlineClass = d.isOnline ? "tag-online" : "tag-offline";
-          var activeClass = d.assetId === selectedId ? " active" : "";
-          return (
-            '<span class="device-chip ' +
-            onlineClass +
-            activeClass +
-            '" data-asset-id="' +
-            d.assetId +
-            '" data-asset-type="' +
-            d.assetType +
-            '">' +
-            (d.name || d.assetId) +
-            "</span>"
-          );
-        })
-        .join("");
-    }
-
-    var configFields = [
-      { key: "socMin", label: t("devices.socMin"), value: config.socMin },
-      { key: "socMax", label: t("devices.socMax"), value: config.socMax },
-      {
-        key: "maxChargeRateKw",
-        label: t("devices.maxChargeRateKw"),
-        value: config.maxChargeRateKw,
-      },
-      {
-        key: "maxDischargeRateKw",
-        label: t("devices.maxDischargeRateKw"),
-        value: config.maxDischargeRateKw,
-      },
-      {
-        key: "gridImportLimitKw",
-        label: t("devices.gridImportLimitKw"),
-        value: config.gridImportLimitKw,
-      },
-    ];
-
-    var fieldsHtml =
-      configFields
-        .map(function (f) {
-          var val = f.value != null ? f.value : "";
-          return (
-            '<div class="config-row"><span class="config-label">' +
-            f.label +
-            '</span><div class="config-field">' +
-            '<input type="number" class="config-input" data-cfg-key="' +
-            f.key +
-            '" step="0.1" value="' +
-            val +
-            '">' +
-            "</div></div>"
-          );
-        })
-        .join("") +
-      '<div class="schedule-apply-row">' +
-      '<button class="btn btn-primary" id="config-apply">' +
-      t("devices.applyConfig") +
-      "</button></div>";
-
-    var body =
-      '<div class="device-chips-row">' +
-      deviceChips +
-      "</div>" +
-      '<div id="config-fields-container">' +
-      fieldsHtml +
-      "</div>";
-
-    return Components.sectionCard(t("devices.gatewayDetail"), body);
-  },
-
-  // =========================================================
-  // SCHEDULE EDITOR (Fix #1)
-  // =========================================================
-
-  _buildScheduleCardEditable: function (schedule) {
+    // Sync status
     var syncBadgeClass =
       schedule.syncStatus === "synced"
         ? "sync-ok"
         : schedule.syncStatus === "pending"
           ? "sync-pending"
-          : "sync-unknown";
+          : schedule.syncStatus === "failed"
+            ? "sync-failed"
+            : "sync-unknown";
     var syncLabel =
       schedule.syncStatus === "synced"
         ? "Synced"
         : schedule.syncStatus === "pending"
           ? "Pending"
-          : t("devices.unknown");
+          : schedule.syncStatus === "failed"
+            ? "Failed"
+            : t("devices.unknown");
     var lastAck = schedule.lastAckAt
       ? formatISODateTime(schedule.lastAckAt)
       : "--";
 
+    // Parameters section
+    var configFields = [
+      {
+        key: "socMinLimit",
+        label: t("devices.schedule.socMin"),
+        value: cfg.socMinLimit,
+      },
+      {
+        key: "socMaxLimit",
+        label: t("devices.schedule.socMax"),
+        value: cfg.socMaxLimit,
+      },
+      {
+        key: "maxChargeCurrent",
+        label: t("devices.schedule.maxCharge"),
+        value: cfg.maxChargeCurrent,
+      },
+      {
+        key: "maxDischargeCurrent",
+        label: t("devices.schedule.maxDischarge"),
+        value: cfg.maxDischargeCurrent,
+      },
+      {
+        key: "gridImportLimitKw",
+        label: t("devices.schedule.gridImportLimit"),
+        value: cfg.gridImportLimitKw,
+      },
+    ];
+
+    var paramsHtml = configFields
+      .map(function (f) {
+        var val = f.value != null ? f.value : "";
+        return (
+          '<div class="config-row"><span class="config-label">' +
+          f.label +
+          '</span><div class="config-field">' +
+          '<input type="number" class="config-input" data-cfg-key="' +
+          f.key +
+          '" step="1" value="' +
+          val +
+          '">' +
+          "</div></div>"
+        );
+      })
+      .join("");
+
     var body =
+      '<div class="config-params-section">' +
+      paramsHtml +
+      "</div>" +
+      '<div class="schedule-section">' +
+      '<div class="schedule-bar" id="schedule-bar-preview"></div>' +
+      '<div class="schedule-markers"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span></div>' +
+      '<table class="schedule-table">' +
+      "<thead><tr><th>" +
+      t("devices.schedStart") +
+      "</th><th>" +
+      t("devices.schedEnd") +
+      "</th><th>" +
+      t("devices.schedMode") +
+      "</th><th>" +
+      t("devices.schedule.direction") +
+      "</th><th>" +
+      t("devices.schedule.exportPolicy") +
+      "</th><th></th></tr></thead>" +
+      '<tbody id="schedule-rows"></tbody>' +
+      "</table>" +
+      '<button class="btn btn-outline btn-sm" id="schedule-add-slot">' +
+      t("devices.addSlot") +
+      "</button>" +
+      "</div>" +
       '<div class="sync-status ' +
       syncBadgeClass +
       '">' +
@@ -699,86 +718,119 @@ var DevicesPage = {
       lastAck +
       "</span>" +
       "</div>" +
-      '<div class="schedule-bar" id="schedule-bar-preview"></div>' +
-      '<div class="schedule-markers"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span></div>' +
-      '<table class="schedule-table">' +
-      "<thead><tr><th>" +
-      t("devices.schedStart") +
-      "</th><th>" +
-      t("devices.schedEnd") +
-      "</th><th>" +
-      t("devices.schedMode") +
-      "</th><th></th></tr></thead>" +
-      '<tbody id="schedule-rows"></tbody>' +
-      "</table>" +
-      '<button class="btn btn-outline btn-sm" id="schedule-add-slot">' +
-      t("devices.addSlot") +
-      "</button>" +
       '<div class="schedule-apply-row">' +
       '<button class="btn btn-primary" id="schedule-apply">' +
       t("devices.applyToGateway") +
       "</button>" +
       "</div>";
 
-    return Components.sectionCard(t("devices.dailySchedule"), body);
+    return Components.sectionCard(t("devices.schedule.title"), body);
   },
 
   _buildSlotRow: function (slot, index) {
-    var modeOptions = [
-      "self_consumption",
-      "peak_valley_arbitrage",
-      "peak_shaving",
-    ];
-    var modeLabels = {
+    var purposeOptions = ["self_consumption", "peak_shaving", "tariff"];
+    var purposeLabels = {
       self_consumption: t("devices.selfConsumption"),
-      peak_valley_arbitrage: t("devices.peakValleyArbitrage"),
       peak_shaving: t("devices.peakShaving"),
+      tariff: t("devices.schedule.tariff"),
     };
-    var modeColors = {
+    var purposeColors = {
       self_consumption: "#22c55e",
-      peak_valley_arbitrage: "#3b82f6",
       peak_shaving: "#a855f7",
+      tariff_charge: "#3b82f6",
+      tariff_discharge: "#f97316",
     };
 
+    // Start time: 00:00 to 23:00 (0..1380 step 60)
     var startOptions = "";
-    for (var h = 0; h < 24; h++) {
+    for (var m = 0; m <= 1380; m += 60) {
+      var hh = String(Math.floor(m / 60)).padStart(2, "0");
       startOptions +=
         '<option value="' +
-        h +
+        m +
         '"' +
-        (slot.startHour === h ? " selected" : "") +
+        (slot.startMinute === m ? " selected" : "") +
         ">" +
-        String(h).padStart(2, "0") +
+        hh +
         ":00</option>";
     }
 
+    // End time: 01:00 to 24:00 (60..1440 step 60)
     var endOptions = "";
-    for (var h2 = 1; h2 <= 24; h2++) {
+    for (var m2 = 60; m2 <= 1440; m2 += 60) {
+      var hh2 = String(Math.floor(m2 / 60)).padStart(2, "0");
       endOptions +=
         '<option value="' +
-        h2 +
+        m2 +
         '"' +
-        (slot.endHour === h2 ? " selected" : "") +
+        (slot.endMinute === m2 ? " selected" : "") +
         ">" +
-        String(h2).padStart(2, "0") +
+        hh2 +
         ":00</option>";
     }
 
-    var modeSelect = modeOptions
-      .map(function (m) {
+    // Purpose selector
+    var purposeSelect = purposeOptions
+      .map(function (p) {
         return (
           '<option value="' +
-          m +
+          p +
           '"' +
-          (slot.mode === m ? " selected" : "") +
+          (slot.purpose === p ? " selected" : "") +
           ">" +
-          modeLabels[m] +
+          purposeLabels[p] +
           "</option>"
         );
       })
       .join("");
 
-    var color = modeColors[slot.mode] || "#6b7280";
+    var colorKey =
+      slot.purpose === "tariff"
+        ? slot.direction === "discharge"
+          ? "tariff_discharge"
+          : "tariff_charge"
+        : slot.purpose;
+    var color = purposeColors[colorKey] || "#6b7280";
+
+    // Direction dropdown (only for tariff)
+    var dirHtml = "";
+    if (slot.purpose === "tariff") {
+      dirHtml =
+        '<select class="slot-direction config-input">' +
+        '<option value="charge"' +
+        (slot.direction === "charge" ? " selected" : "") +
+        ">" +
+        t("devices.schedule.charge") +
+        "</option>" +
+        '<option value="discharge"' +
+        (slot.direction === "discharge" ? " selected" : "") +
+        ">" +
+        t("devices.schedule.discharge") +
+        "</option>" +
+        "</select>";
+    } else {
+      dirHtml = '<span class="slot-na">--</span>';
+    }
+
+    // Export policy dropdown (only for tariff + discharge)
+    var exportHtml = "";
+    if (slot.purpose === "tariff" && slot.direction === "discharge") {
+      exportHtml =
+        '<select class="slot-export config-input">' +
+        '<option value="allow"' +
+        (slot.exportPolicy === "allow" ? " selected" : "") +
+        ">" +
+        t("devices.schedule.allow") +
+        "</option>" +
+        '<option value="forbid"' +
+        (slot.exportPolicy !== "allow" ? " selected" : "") +
+        ">" +
+        t("devices.schedule.forbid") +
+        "</option>" +
+        "</select>";
+    } else {
+      exportHtml = '<span class="slot-na">--</span>';
+    }
 
     return (
       '<tr data-slot-index="' +
@@ -793,10 +845,16 @@ var DevicesPage = {
       '<td><span class="schedule-mode-badge" style="background:' +
       color +
       '">' +
-      '<select class="slot-mode config-input schedule-mode-select">' +
-      modeSelect +
+      '<select class="slot-purpose config-input schedule-mode-select">' +
+      purposeSelect +
       "</select>" +
       "</span></td>" +
+      "<td>" +
+      dirHtml +
+      "</td>" +
+      "<td>" +
+      exportHtml +
+      "</td>" +
       '<td><button class="btn-icon btn-delete-slot" title="' +
       t("devices.deleteSlot") +
       '">\ud83d\uddd1</button></td>' +
@@ -807,8 +865,8 @@ var DevicesPage = {
   _renderScheduleRows: function () {
     var self = this;
     var tbody = document.getElementById("schedule-rows");
-    if (!tbody) return;
-    tbody.innerHTML = self._pendingSlots
+    if (!tbody || !self._pendingConfig) return;
+    tbody.innerHTML = self._pendingConfig.slots
       .map(function (slot, i) {
         return self._buildSlotRow(slot, i);
       })
@@ -818,29 +876,39 @@ var DevicesPage = {
 
   _renderTimelinePreview: function () {
     var bar = document.getElementById("schedule-bar-preview");
-    if (!bar) return;
-    var modeColors = {
+    if (!bar || !this._pendingConfig) return;
+    var purposeColors = {
       self_consumption: "#22c55e",
-      peak_valley_arbitrage: "#3b82f6",
       peak_shaving: "#a855f7",
+      tariff_charge: "#3b82f6",
+      tariff_discharge: "#f97316",
     };
-    bar.innerHTML = this._pendingSlots
+    bar.innerHTML = this._pendingConfig.slots
       .map(function (slot) {
-        var widthPct = (((slot.endHour - slot.startHour) / 24) * 100).toFixed(
-          2,
-        );
-        var color = modeColors[slot.mode] || "#6b7280";
+        var widthPct = (
+          ((slot.endMinute - slot.startMinute) / 1440) *
+          100
+        ).toFixed(2);
+        var colorKey =
+          slot.purpose === "tariff"
+            ? slot.direction === "discharge"
+              ? "tariff_discharge"
+              : "tariff_charge"
+            : slot.purpose;
+        var color = purposeColors[colorKey] || "#6b7280";
+        var startH = String(Math.floor(slot.startMinute / 60)).padStart(2, "0");
+        var endH = String(Math.floor(slot.endMinute / 60)).padStart(2, "0");
         return (
           '<div class="schedule-segment" style="width:' +
           widthPct +
           "%;background:" +
           color +
           '" title="' +
-          String(slot.startHour).padStart(2, "0") +
+          startH +
           ":00-" +
-          String(slot.endHour).padStart(2, "0") +
+          endH +
           ":00 " +
-          slot.mode +
+          slot.purpose +
           '"></div>'
         );
       })
@@ -850,84 +918,114 @@ var DevicesPage = {
   _attachSlotListeners: function () {
     var self = this;
     var tbody = document.getElementById("schedule-rows");
-    if (!tbody) return;
+    if (!tbody || !self._pendingConfig) return;
 
     // Delete buttons
     tbody.querySelectorAll(".btn-delete-slot").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var row = btn.closest("tr");
         var idx = parseInt(row.dataset.slotIndex, 10);
-        self._pendingSlots = self._pendingSlots.filter(function (_, i) {
-          return i !== idx;
+        self._pendingConfig = Object.assign({}, self._pendingConfig, {
+          slots: self._pendingConfig.slots.filter(function (_, i) {
+            return i !== idx;
+          }),
         });
         self._renderScheduleRows();
         self._attachSlotListeners();
       });
     });
 
-    // Select change listeners
+    // Per-row change listeners
     tbody.querySelectorAll("tr").forEach(function (row) {
       var idx = parseInt(row.dataset.slotIndex, 10);
       var startSel = row.querySelector(".slot-start");
       var endSel = row.querySelector(".slot-end");
-      var modeSel = row.querySelector(".slot-mode");
+      var purposeSel = row.querySelector(".slot-purpose");
+      var dirSel = row.querySelector(".slot-direction");
+      var exportSel = row.querySelector(".slot-export");
+
+      function updateSlot(updater) {
+        self._pendingConfig = Object.assign({}, self._pendingConfig, {
+          slots: self._pendingConfig.slots.map(function (s, i) {
+            return i === idx ? updater(s) : s;
+          }),
+        });
+      }
 
       if (startSel) {
         startSel.addEventListener("change", function () {
-          self._pendingSlots = self._pendingSlots.map(function (s, i) {
-            return i === idx
-              ? {
-                  startHour: parseInt(startSel.value, 10),
-                  endHour: s.endHour,
-                  mode: s.mode,
-                }
-              : s;
+          updateSlot(function (s) {
+            return Object.assign({}, s, {
+              startMinute: parseInt(startSel.value, 10),
+            });
           });
           self._renderTimelinePreview();
         });
       }
       if (endSel) {
         endSel.addEventListener("change", function () {
-          self._pendingSlots = self._pendingSlots.map(function (s, i) {
-            return i === idx
-              ? {
-                  startHour: s.startHour,
-                  endHour: parseInt(endSel.value, 10),
-                  mode: s.mode,
-                }
-              : s;
+          updateSlot(function (s) {
+            return Object.assign({}, s, {
+              endMinute: parseInt(endSel.value, 10),
+            });
           });
           self._renderTimelinePreview();
         });
       }
-      if (modeSel) {
-        modeSel.addEventListener("change", function () {
-          self._pendingSlots = self._pendingSlots.map(function (s, i) {
-            return i === idx
-              ? {
-                  startHour: s.startHour,
-                  endHour: s.endHour,
-                  mode: modeSel.value,
-                }
-              : s;
+      if (purposeSel) {
+        purposeSel.addEventListener("change", function () {
+          var newPurpose = purposeSel.value;
+          updateSlot(function (s) {
+            var updated = {
+              startMinute: s.startMinute,
+              endMinute: s.endMinute,
+              purpose: newPurpose,
+              direction: null,
+              exportPolicy: null,
+            };
+            if (newPurpose === "tariff") {
+              updated.direction = "charge";
+            }
+            return updated;
           });
           self._renderScheduleRows();
           self._attachSlotListeners();
         });
       }
+      if (dirSel) {
+        dirSel.addEventListener("change", function () {
+          updateSlot(function (s) {
+            return Object.assign({}, s, {
+              direction: dirSel.value,
+              exportPolicy: dirSel.value === "discharge" ? "forbid" : null,
+            });
+          });
+          self._renderScheduleRows();
+          self._attachSlotListeners();
+        });
+      }
+      if (exportSel) {
+        exportSel.addEventListener("change", function () {
+          updateSlot(function (s) {
+            return Object.assign({}, s, { exportPolicy: exportSel.value });
+          });
+        });
+      }
     });
   },
 
-  _handleApplyGW: async function () {
+  _handleApplySchedule: async function () {
     var self = this;
     var gwId = self._currentGatewayId;
-    if (!gwId) return;
+    if (!gwId || !self._pendingConfig) return;
 
-    // Validation: startHour < endHour, valid range
-    var valid = self._pendingSlots.every(function (s) {
-      return s.startHour < s.endHour && s.startHour >= 0 && s.endHour <= 24;
-    });
-    if (!valid) {
+    // Client-side validation
+    var cfg = self._pendingConfig;
+    if (cfg.socMinLimit >= cfg.socMaxLimit) {
+      self._showToast("SOC Min must be < SOC Max", "warning");
+      return;
+    }
+    if (!cfg.slots || cfg.slots.length === 0) {
       self._showToast(t("devices.invalidSchedule"), "warning");
       return;
     }
@@ -939,7 +1037,7 @@ var DevicesPage = {
     }
 
     try {
-      await DataSource.devices.putSchedule(gwId, self._pendingSlots);
+      await DataSource.devices.putSchedule(gwId, self._pendingConfig);
 
       if (applyBtn) {
         applyBtn.textContent = "Submitted \u2713";
@@ -959,50 +1057,6 @@ var DevicesPage = {
       self._showToast(t("devices.loadFailed"), "error");
       if (applyBtn) {
         applyBtn.textContent = t("devices.applyToGateway");
-        applyBtn.disabled = false;
-      }
-    }
-  },
-
-  _handleConfigApply: async function () {
-    var self = this;
-    var assetId = self._selectedConfigDevice;
-    if (!assetId) return;
-
-    var inputs = document.querySelectorAll(
-      "#config-fields-container .config-input",
-    );
-    var configPayload = {};
-    inputs.forEach(function (input) {
-      var key = input.dataset.cfgKey;
-      if (key) {
-        configPayload[key] = parseFloat(input.value) || 0;
-      }
-    });
-
-    var applyBtn = document.getElementById("config-apply");
-    if (applyBtn) {
-      applyBtn.disabled = true;
-      applyBtn.textContent = "...";
-    }
-
-    try {
-      await DataSource.devices.putDevice(assetId, configPayload);
-      self._showToast(t("devices.configApplied"), "success");
-      if (applyBtn) {
-        applyBtn.textContent = "\u2713";
-        applyBtn.classList.add("btn-success");
-        setTimeout(function () {
-          applyBtn.textContent = t("devices.applyConfig");
-          applyBtn.disabled = false;
-          applyBtn.classList.remove("btn-success");
-        }, 3000);
-      }
-    } catch (err) {
-      console.error("[P2] putDevice error:", err);
-      self._showToast(t("devices.configFailed"), "error");
-      if (applyBtn) {
-        applyBtn.textContent = t("devices.applyConfig");
         applyBtn.disabled = false;
       }
     }
@@ -1695,23 +1749,39 @@ var DevicesPage = {
       });
     }
 
-    // --- Schedule editor events (gateway Layer 3) ---
+    // --- Battery schedule editor events (v5.21 merged card) ---
     self._renderScheduleRows();
+
+    // Config parameter inputs — update _pendingConfig on change
+    document
+      .querySelectorAll(".config-params-section .config-input")
+      .forEach(function (input) {
+        input.addEventListener("change", function () {
+          var key = input.dataset.cfgKey;
+          if (key && self._pendingConfig) {
+            self._pendingConfig = Object.assign({}, self._pendingConfig);
+            self._pendingConfig[key] = parseInt(input.value, 10) || 0;
+          }
+        });
+      });
 
     var addBtn = document.getElementById("schedule-add-slot");
     if (addBtn) {
       addBtn.addEventListener("click", function () {
-        var lastEnd =
-          self._pendingSlots.length > 0
-            ? self._pendingSlots[self._pendingSlots.length - 1].endHour
-            : 0;
-        if (lastEnd >= 24) lastEnd = 0;
+        if (!self._pendingConfig) return;
+        var slots = self._pendingConfig.slots;
+        var lastEnd = slots.length > 0 ? slots[slots.length - 1].endMinute : 0;
+        if (lastEnd >= 1440) lastEnd = 0;
         var newSlot = {
-          startHour: lastEnd,
-          endHour: Math.min(lastEnd + 6, 24),
-          mode: "self_consumption",
+          startMinute: lastEnd,
+          endMinute: Math.min(lastEnd + 360, 1440),
+          purpose: "self_consumption",
+          direction: null,
+          exportPolicy: null,
         };
-        self._pendingSlots = self._pendingSlots.concat([newSlot]);
+        self._pendingConfig = Object.assign({}, self._pendingConfig, {
+          slots: slots.concat([newSlot]),
+        });
         self._renderScheduleRows();
         self._attachSlotListeners();
       });
@@ -1720,35 +1790,7 @@ var DevicesPage = {
     var scheduleApplyBtn = document.getElementById("schedule-apply");
     if (scheduleApplyBtn) {
       scheduleApplyBtn.addEventListener("click", function () {
-        self._handleApplyGW();
-      });
-    }
-
-    // --- Device chip tab clicks (config card) ---
-    document
-      .querySelectorAll(".device-chip[data-asset-id]")
-      .forEach(function (chip) {
-        chip.addEventListener("click", function () {
-          self._selectedConfigDevice = chip.dataset.assetId;
-          var detail = self._currentDetail;
-          var devices = detail.devices || [];
-          var config = detail.config || {};
-          var container = document.getElementById("config-fields-container");
-          if (!container) return;
-          // Re-render config card content
-          var layer3 = document.getElementById("layer3");
-          if (layer3) {
-            layer3.innerHTML = self._buildLayer3GW();
-            self._setupLayer3Events();
-          }
-        });
-      });
-
-    // --- Config apply button ---
-    var configApplyBtn = document.getElementById("config-apply");
-    if (configApplyBtn) {
-      configApplyBtn.addEventListener("click", function () {
-        self._handleConfigApply();
+        self._handleApplySchedule();
       });
     }
 

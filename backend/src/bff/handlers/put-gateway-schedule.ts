@@ -10,18 +10,30 @@ import {
   apiError,
 } from "../middleware/auth";
 import { queryWithOrg } from "../../shared/db";
+import {
+  validateSchedule,
+  type DomainSchedule,
+  type DomainSlot,
+} from "../../iot-hub/handlers/schedule-translator";
 
-interface ScheduleSlot {
-  startHour: number;
-  endHour: number;
-  mode: string;
+interface RequestBody {
+  socMinLimit: number;
+  socMaxLimit: number;
+  maxChargeCurrent: number;
+  maxDischargeCurrent: number;
+  gridImportLimitKw: number;
+  slots: Array<{
+    startMinute: number;
+    endMinute: number;
+    purpose: string;
+    direction?: string;
+    exportPolicy?: string;
+  }>;
 }
-
-const VALID_MODES = ["self_consumption", "peak_valley_arbitrage", "peak_shaving"];
 
 /**
  * PUT /api/gateways/:gatewayId/schedule
- * Submit a schedule — writes to device_command_logs with 'pending' result.
+ * Accept full DomainSchedule body, validate, store as pending command.
  * Returns 202 Accepted.
  */
 export async function handler(
@@ -48,46 +60,47 @@ export async function handler(
     return apiError(400, "gatewayId is required");
   }
 
-  let body: { slots?: ScheduleSlot[] };
+  let body: RequestBody;
   try {
     body = JSON.parse(event.body ?? "{}");
   } catch {
     return apiError(400, "Invalid JSON body");
   }
 
-  const slots = body.slots;
-  if (!Array.isArray(slots) || slots.length === 0) {
+  if (!body.slots || !Array.isArray(body.slots) || body.slots.length === 0) {
     return apiError(400, "slots array is required and must not be empty");
   }
 
-  // Validate each slot
-  for (const slot of slots) {
-    if (!Number.isInteger(slot.startHour) || !Number.isInteger(slot.endHour)) {
-      return apiError(400, "startHour and endHour must be integers");
-    }
-    if (slot.startHour < 0 || slot.startHour > 24 || slot.endHour < 0 || slot.endHour > 24) {
-      return apiError(400, "startHour and endHour must be between 0 and 24");
-    }
-    if (slot.startHour >= slot.endHour) {
-      return apiError(400, "startHour must be less than endHour");
-    }
-    if (!VALID_MODES.includes(slot.mode)) {
-      return apiError(400, `Invalid mode: ${slot.mode}. Must be one of: ${VALID_MODES.join(", ")}`);
-    }
+  // Map frontend purpose → domain mode
+  let schedule: DomainSchedule;
+  try {
+    schedule = {
+      socMinLimit: body.socMinLimit,
+      socMaxLimit: body.socMaxLimit,
+      maxChargeCurrent: body.maxChargeCurrent,
+      maxDischargeCurrent: body.maxDischargeCurrent,
+      gridImportLimitKw: body.gridImportLimitKw,
+      slots: body.slots.map((s): DomainSlot => ({
+        mode: mapPurposeToMode(s.purpose),
+        action: s.purpose === "tariff" ? (s.direction as "charge" | "discharge" | undefined) : undefined,
+        allowExport: s.purpose === "tariff" && s.direction === "discharge"
+          ? s.exportPolicy === "allow"
+          : undefined,
+        startMinute: s.startMinute,
+        endMinute: s.endMinute,
+      })),
+    };
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Invalid request body";
+    return apiError(400, msg);
   }
 
-  // Validate full 0-24 coverage with no gaps/overlaps
-  const sorted = [...slots].sort((a, b) => a.startHour - b.startHour);
-  if (sorted[0].startHour !== 0) {
-    return apiError(400, "Schedule must start at hour 0");
-  }
-  if (sorted[sorted.length - 1].endHour !== 24) {
-    return apiError(400, "Schedule must end at hour 24");
-  }
-  for (let i = 1; i < sorted.length; i++) {
-    if (sorted[i].startHour !== sorted[i - 1].endHour) {
-      return apiError(400, "Schedule slots must be contiguous with no gaps or overlaps");
-    }
+  // Validate using schedule-translator's validateSchedule
+  try {
+    validateSchedule(schedule);
+  } catch (err: unknown) {
+    const msg = err instanceof Error ? err.message : "Validation error";
+    return apiError(400, msg);
   }
 
   // Validate gateway exists
@@ -101,12 +114,12 @@ export async function handler(
     return apiError(404, "Gateway not found");
   }
 
-  // Insert command log with 'pending' result
+  // Insert command log with full DomainSchedule as payload_json
   const insertResult = await queryWithOrg(
     `INSERT INTO device_command_logs (gateway_id, command_type, config_name, payload_json, result)
      VALUES ($1, 'set', 'battery_schedule', $2, 'pending')
      RETURNING id`,
-    [gatewayId, JSON.stringify({ slots })],
+    [gatewayId, JSON.stringify(schedule)],
     rlsOrgId,
   );
 
@@ -123,4 +136,13 @@ export async function handler(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(responseBody),
   };
+}
+
+function mapPurposeToMode(purpose: string): DomainSlot["mode"] {
+  switch (purpose) {
+    case "self_consumption": return "self_consumption";
+    case "peak_shaving": return "peak_shaving";
+    case "tariff": return "peak_valley_arbitrage";
+    default: throw new Error(`Unknown purpose: ${purpose}`);
+  }
 }

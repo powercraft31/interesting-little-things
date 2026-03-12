@@ -238,6 +238,21 @@ var I18n = (function () {
       "devices.commHistory.col.devices": "Devices",
       "devices.commHistory.col.firstTelemetry": "First Telemetry",
 
+      // ---- P2: Battery Schedule (v5.21) ----
+      "devices.schedule.title": "Battery Schedule Configuration",
+      "devices.schedule.socMin": "SOC Min (%)",
+      "devices.schedule.socMax": "SOC Max (%)",
+      "devices.schedule.maxCharge": "Max Charge Current (A)",
+      "devices.schedule.maxDischarge": "Max Discharge Current (A)",
+      "devices.schedule.gridImportLimit": "Grid Import Limit (kW)",
+      "devices.schedule.tariff": "Tariff",
+      "devices.schedule.direction": "Direction",
+      "devices.schedule.charge": "Charge",
+      "devices.schedule.discharge": "Discharge",
+      "devices.schedule.exportPolicy": "Export Policy",
+      "devices.schedule.allow": "Allow",
+      "devices.schedule.forbid": "Forbid",
+
       // ---- P3: Energy ----
       "energy.gatewayLabel": "Gateway",
       "energy.crossGateway": "Cross-Gateway Summary",
@@ -649,6 +664,21 @@ var I18n = (function () {
       "devices.commHistory.col.duration": "Dura\u00e7\u00e3o",
       "devices.commHistory.col.devices": "Dispositivos",
       "devices.commHistory.col.firstTelemetry": "Primeira Telemetria",
+
+      // ---- P2: Battery Schedule (v5.21) ----
+      "devices.schedule.title": "Configura\u00e7\u00e3o do Agendamento",
+      "devices.schedule.socMin": "SOC M\u00edn. (%)",
+      "devices.schedule.socMax": "SOC M\u00e1x. (%)",
+      "devices.schedule.maxCharge": "Corrente M\u00e1x. Carga (A)",
+      "devices.schedule.maxDischarge": "Corrente M\u00e1x. Descarga (A)",
+      "devices.schedule.gridImportLimit": "Limite Import. Rede (kW)",
+      "devices.schedule.tariff": "Tarifa",
+      "devices.schedule.direction": "Dire\u00e7\u00e3o",
+      "devices.schedule.charge": "Carga",
+      "devices.schedule.discharge": "Descarga",
+      "devices.schedule.exportPolicy": "Pol\u00edtica Exporta\u00e7\u00e3o",
+      "devices.schedule.allow": "Permitir",
+      "devices.schedule.forbid": "Proibir",
 
       // ---- P3: Energy ----
       "energy.gatewayLabel": "Gateway",
@@ -1068,6 +1098,23 @@ var I18n = (function () {
       "devices.commHistory.col.duration": "\u6301\u7eed\u65f6\u95f4",
       "devices.commHistory.col.devices": "\u8bbe\u5907",
       "devices.commHistory.col.firstTelemetry": "\u9996\u6b21\u9065\u6d4b",
+
+      // ---- P2: Battery Schedule (v5.21) ----
+      "devices.schedule.title": "\u96fb\u6c60\u6392\u7a0b\u8a2d\u5b9a",
+      "devices.schedule.socMin": "SOC \u4e0b\u9650 (%)",
+      "devices.schedule.socMax": "SOC \u4e0a\u9650 (%)",
+      "devices.schedule.maxCharge": "\u6700\u5927\u5145\u96fb\u96fb\u6d41 (A)",
+      "devices.schedule.maxDischarge":
+        "\u6700\u5927\u653e\u96fb\u96fb\u6d41 (A)",
+      "devices.schedule.gridImportLimit":
+        "\u96fb\u7db2\u8cfc\u96fb\u4e0a\u9650 (kW)",
+      "devices.schedule.tariff": "\u96fb\u50f9\u7a97\u53e3",
+      "devices.schedule.direction": "\u65b9\u5411",
+      "devices.schedule.charge": "\u5145\u96fb",
+      "devices.schedule.discharge": "\u653e\u96fb",
+      "devices.schedule.exportPolicy": "\u8ce3\u96fb\u7b56\u7565",
+      "devices.schedule.allow": "\u5141\u8a31",
+      "devices.schedule.forbid": "\u7981\u6b62",
 
       // ---- P3: Energy ----
       "energy.gatewayLabel": "\u7db2\u95dc",

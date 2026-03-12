@@ -234,17 +234,15 @@ var DataSource = (function () {
         },
       );
     },
-    putSchedule: function (gatewayId, slots) {
+    putSchedule: function (gatewayId, config) {
       if (!USE_LIVE_API) {
         return Promise.resolve({
           commandId: 99,
-          status: "pending_dispatch",
+          status: "pending",
           message: "Schedule submitted. Waiting for gateway confirmation.",
         });
       }
-      return apiPut("/api/gateways/" + gatewayId + "/schedule", {
-        slots: slots,
-      });
+      return apiPut("/api/gateways/" + gatewayId + "/schedule", config);
     },
   };
 

@@ -2183,6 +2183,38 @@
   color: var(--accent);
 }
 
+/* ---- v5.21: Battery Schedule Card (merged) ---- */
+.config-params-section {
+  margin-bottom: var(--space-md);
+  padding-bottom: var(--space-md);
+  border-bottom: 1px solid var(--border);
+}
+
+.schedule-section {
+  margin-bottom: var(--space-sm);
+}
+
+.slot-na {
+  color: var(--text-muted);
+  font-size: 0.82rem;
+}
+
+.slot-direction,
+.slot-export {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 4px 8px;
+  font-size: 0.82rem;
+  font-family: var(--font-ui);
+}
+
+.sync-status.sync-failed {
+  background: var(--negative-bg);
+  color: var(--negative);
+}
+
 /* ---- Fix #4: EMS Health Grid ---- */
 .ems-health-grid {
   display: grid;

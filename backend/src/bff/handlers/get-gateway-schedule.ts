@@ -10,10 +10,15 @@ import {
   apiError,
 } from "../middleware/auth";
 import { queryWithOrg } from "../../shared/db";
+import {
+  parseGetReply,
+  type ProtocolSchedule,
+  type DomainSlot,
+} from "../../iot-hub/handlers/schedule-translator";
 
 /**
  * GET /api/gateways/:gatewayId/schedule
- * Read latest schedule from device_command_logs by gateway_id directly.
+ * Returns full battery schedule config from latest get_reply + sync status from latest set.
  */
 export async function handler(
   event: APIGatewayProxyEventV2,
@@ -44,8 +49,23 @@ export async function handler(
     return apiError(400, "gatewayId is required");
   }
 
-  const { rows } = await queryWithOrg(
-    `SELECT id, payload_json, result, resolved_at, created_at
+  // Query 1: Latest get_reply for ground truth battery_schedule
+  const getReplyResult = await queryWithOrg(
+    `SELECT payload_json
+     FROM device_command_logs
+     WHERE gateway_id = $1
+       AND command_type = 'get_reply'
+       AND config_name = 'battery_schedule'
+       AND payload_json IS NOT NULL
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [gatewayId],
+    rlsOrgId,
+  );
+
+  // Query 2: Latest set command for sync status
+  const setResult = await queryWithOrg(
+    `SELECT result, resolved_at, created_at
      FROM device_command_logs
      WHERE gateway_id = $1
        AND command_type = 'set'
@@ -56,38 +76,64 @@ export async function handler(
     rlsOrgId,
   );
 
-  if (rows.length === 0) {
-    const body = ok({
-      syncStatus: "unknown",
-      lastAckAt: null,
-      slots: [],
-    });
-    return {
-      statusCode: 200,
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(body),
-    };
+  // Parse get_reply into domain format
+  let batterySchedule: {
+    socMinLimit: number | null;
+    socMaxLimit: number | null;
+    maxChargeCurrent: number | null;
+    maxDischargeCurrent: number | null;
+    gridImportLimitKw: number | null;
+    slots: Array<{
+      startMinute: number;
+      endMinute: number;
+      purpose: string;
+      direction?: string;
+      exportPolicy?: string;
+    }>;
+  } | null = null;
+
+  if (getReplyResult.rows.length > 0) {
+    const row = getReplyResult.rows[0] as Record<string, unknown>;
+    const protocolData = row.payload_json as ProtocolSchedule | null;
+    const domain = parseGetReply(protocolData);
+
+    if (domain) {
+      batterySchedule = {
+        socMinLimit: domain.socMinLimit,
+        socMaxLimit: domain.socMaxLimit,
+        maxChargeCurrent: domain.maxChargeCurrent,
+        maxDischargeCurrent: domain.maxDischargeCurrent,
+        gridImportLimitKw: domain.gridImportLimitKw,
+        slots: domain.slots.map(domainSlotToResponse),
+      };
+    }
   }
 
-  const row = rows[0] as Record<string, unknown>;
-  const result = row.result as string;
-  const payload = row.payload_json as Record<string, unknown> | null;
-  const slots = payload?.slots ?? [];
+  // Determine sync status from latest set command
+  let syncStatus = "unknown";
+  let lastAckAt: string | null = null;
 
-  const syncStatus = result === "success"
-    ? "synced"
-    : (result === "pending" || result === "pending_dispatch")
-      ? "pending"
-      : "unknown";
+  if (setResult.rows.length > 0) {
+    const setRow = setResult.rows[0] as Record<string, unknown>;
+    const result = setRow.result as string;
 
-  const lastAckAt = row.resolved_at
-    ? new Date(row.resolved_at as string).toISOString()
-    : null;
+    syncStatus = result === "success"
+      ? "synced"
+      : (result === "pending" || result === "dispatched")
+        ? "pending"
+        : result === "failed" || result === "timeout"
+          ? "failed"
+          : "unknown";
+
+    lastAckAt = setRow.resolved_at
+      ? new Date(setRow.resolved_at as string).toISOString()
+      : null;
+  }
 
   const body = ok({
+    batterySchedule,
     syncStatus,
     lastAckAt,
-    slots,
   });
 
   return {
@@ -95,4 +141,37 @@ export async function handler(
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   };
+}
+
+/** Map domain slot to frontend response format (purpose-based naming). */
+function domainSlotToResponse(slot: DomainSlot): {
+  startMinute: number;
+  endMinute: number;
+  purpose: string;
+  direction?: string;
+  exportPolicy?: string;
+} {
+  if (slot.mode === "self_consumption") {
+    return { startMinute: slot.startMinute, endMinute: slot.endMinute, purpose: "self_consumption" };
+  }
+  if (slot.mode === "peak_shaving") {
+    return { startMinute: slot.startMinute, endMinute: slot.endMinute, purpose: "peak_shaving" };
+  }
+  // peak_valley_arbitrage → tariff
+  const result: {
+    startMinute: number;
+    endMinute: number;
+    purpose: string;
+    direction?: string;
+    exportPolicy?: string;
+  } = {
+    startMinute: slot.startMinute,
+    endMinute: slot.endMinute,
+    purpose: "tariff",
+    direction: slot.action ?? "charge",
+  };
+  if (slot.action === "discharge") {
+    result.exportPolicy = slot.allowExport ? "allow" : "forbid";
+  }
+  return result;
 }
