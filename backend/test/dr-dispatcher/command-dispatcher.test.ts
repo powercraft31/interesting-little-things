@@ -77,10 +77,10 @@ describe("command-dispatcher (M3)", () => {
     `);
     const psTradeId = psResult.rows[0].id;
 
-    // Ensure home has contracted_demand_kw
+    // Ensure gateway has contracted_demand_kw (v5.20: moved from homes to gateways)
     await pool.query(
-      `UPDATE homes SET contracted_demand_kw = 50.0
-       WHERE home_id = (SELECT home_id FROM assets WHERE asset_id = 'ASSET_SP_001')`,
+      `UPDATE gateways SET contracted_demand_kw = 50.0
+       WHERE gateway_id = (SELECT gateway_id FROM assets WHERE asset_id = 'ASSET_SP_001')`,
     );
 
     await runCommandDispatcher(pool);
@@ -116,10 +116,10 @@ describe("command-dispatcher (M3)", () => {
        WHERE org_id = 'ORG_ENERGIA_001' AND effective_to IS NULL`,
     );
 
-    // Ensure home has contracted_demand_kw
+    // Ensure gateway has contracted_demand_kw (v5.20: moved from homes to gateways)
     await pool.query(
-      `UPDATE homes SET contracted_demand_kw = 60.0
-       WHERE home_id = (SELECT home_id FROM assets WHERE asset_id = 'ASSET_SP_001')`,
+      `UPDATE gateways SET contracted_demand_kw = 60.0
+       WHERE gateway_id = (SELECT gateway_id FROM assets WHERE asset_id = 'ASSET_SP_001')`,
     );
 
     const psResult = await pool.query<{ id: number }>(`

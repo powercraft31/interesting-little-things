@@ -12,8 +12,11 @@ function createMockPool() {
   const queryFn = jest.fn(async (sql: string, params?: unknown[]) => {
     queries.push({ sql, params: params ?? [] });
 
-    // set_reply UPDATE matching
-    if (sql.includes("UPDATE device_command_logs") && sql.includes("result = 'pending'")) {
+    // set_reply UPDATE matching (v5.22: two-phase — dispatched/accepted, not pending)
+    if (
+      sql.includes("UPDATE device_command_logs") &&
+      sql.includes("command_type = 'set'")
+    ) {
       return queryResults.get("update_pending") ?? { rows: [], rowCount: 1 };
     }
 
@@ -78,6 +81,15 @@ const SET_REPLY_FAIL: SolfacilMessage = {
   },
 };
 
+const SET_REPLY_ACCEPTED: SolfacilMessage = {
+  ...SET_REPLY_SUCCESS,
+  data: {
+    configname: "battery_schedule",
+    result: "accepted",
+    message: "",
+  },
+};
+
 // ─── Tests ──────────────────────────────────────────────────────────────────
 describe("CommandTracker", () => {
   describe("handleGetReply", () => {
@@ -98,10 +110,10 @@ describe("CommandTracker", () => {
 
       const q = insertQueries[0];
       expect(q.sql).toContain("'get_reply'");
+      // v5.22: no client_id column — params are (gateway_id, config_name, message_id, payload_json, device_timestamp)
       expect(q.params[0]).toBe("gw-001"); // gateway_id
-      expect(q.params[1]).toBe("WKRD24070202100144F"); // client_id
-      expect(q.params[2]).toBe("battery_schedule"); // config_name
-      expect(q.params[3]).toBe("376915278899"); // message_id
+      expect(q.params[1]).toBe("battery_schedule"); // config_name
+      expect(q.params[2]).toBe("376915278899"); // message_id
     });
 
     it("stores battery_schedule as payload_json", async () => {
@@ -118,8 +130,8 @@ describe("CommandTracker", () => {
         q.sql.includes("INSERT INTO device_command_logs"),
       );
       expect(insertQ).toBeDefined();
-      // payload_json should be stringified battery_schedule
-      const payloadJson = insertQ!.params[4] as string;
+      // payload_json is $4 → params[3]
+      const payloadJson = insertQ!.params[3] as string;
       expect(payloadJson).toBeTruthy();
       const parsed = JSON.parse(payloadJson);
       expect(parsed.soc_min_limit).toBe("10");
@@ -139,7 +151,8 @@ describe("CommandTracker", () => {
       const insertQ = pool.queries.find((q) =>
         q.sql.includes("INSERT INTO device_command_logs"),
       );
-      const deviceTs = insertQ!.params[5] as Date;
+      // device_timestamp is $5 → params[4]
+      const deviceTs = insertQ!.params[4] as Date;
       expect(deviceTs).toBeInstanceOf(Date);
       expect(deviceTs.getTime()).toBe(1773023237691);
     });
@@ -162,7 +175,7 @@ describe("CommandTracker", () => {
   });
 
   describe("handleSetReply", () => {
-    it("resolves pending set command on success", async () => {
+    it("resolves pending set command on success (terminal phase)", async () => {
       const pool = createMockPool();
 
       await handleSetReply(
@@ -173,9 +186,11 @@ describe("CommandTracker", () => {
       );
 
       const updateQ = pool.queries.find((q) =>
-        q.sql.includes("UPDATE device_command_logs"),
+        q.sql.includes("UPDATE device_command_logs") &&
+        q.sql.includes("resolved_at = NOW()"),
       );
       expect(updateQ).toBeDefined();
+      // Terminal phase params: (result, error_message, device_timestamp, gateway_id, config_name)
       expect(updateQ!.params[0]).toBe("success"); // result
       expect(updateQ!.params[3]).toBe("gw-001"); // gateway_id
       expect(updateQ!.params[4]).toBe("battery_schedule"); // config_name
@@ -192,14 +207,15 @@ describe("CommandTracker", () => {
       );
 
       const updateQ = pool.queries.find((q) =>
-        q.sql.includes("UPDATE device_command_logs"),
+        q.sql.includes("UPDATE device_command_logs") &&
+        q.sql.includes("resolved_at = NOW()"),
       );
       expect(updateQ).toBeDefined();
       expect(updateQ!.params[0]).toBe("fail"); // result
       expect(updateQ!.params[1]).toBe("Invalid slot coverage"); // error_message
     });
 
-    it("sets resolved_at = NOW() on reply", async () => {
+    it("sets resolved_at = NOW() on terminal reply", async () => {
       const pool = createMockPool();
 
       await handleSetReply(
@@ -210,12 +226,13 @@ describe("CommandTracker", () => {
       );
 
       const updateQ = pool.queries.find((q) =>
-        q.sql.includes("UPDATE device_command_logs"),
+        q.sql.includes("UPDATE device_command_logs") &&
+        q.sql.includes("command_type = 'set'"),
       );
       expect(updateQ!.sql).toContain("resolved_at = NOW()");
     });
 
-    it("finds latest pending command by gateway_id + config_name", async () => {
+    it("finds latest dispatched/accepted command by gateway_id + config_name", async () => {
       const pool = createMockPool();
 
       await handleSetReply(
@@ -226,10 +243,12 @@ describe("CommandTracker", () => {
       );
 
       const updateQ = pool.queries.find((q) =>
-        q.sql.includes("UPDATE device_command_logs"),
+        q.sql.includes("UPDATE device_command_logs") &&
+        q.sql.includes("command_type = 'set'"),
       );
       expect(updateQ!.sql).toContain("command_type = 'set'");
-      expect(updateQ!.sql).toContain("result = 'pending'");
+      // v5.22: two-phase — matches dispatched OR accepted
+      expect(updateQ!.sql).toContain("result IN ('dispatched', 'accepted')");
       expect(updateQ!.sql).toContain("ORDER BY created_at DESC");
       expect(updateQ!.sql).toContain("LIMIT 1");
     });
@@ -265,11 +284,53 @@ describe("CommandTracker", () => {
       );
 
       const updateQ = pool.queries.find((q) =>
-        q.sql.includes("UPDATE device_command_logs"),
+        q.sql.includes("UPDATE device_command_logs") &&
+        q.sql.includes("command_type = 'set'"),
       );
+      // Terminal phase: device_timestamp is $3 → params[2]
       const deviceTs = updateQ!.params[2] as Date;
       expect(deviceTs).toBeInstanceOf(Date);
       expect(deviceTs.getTime()).toBe(1773024455623);
+    });
+
+    // v5.22: two-phase set_reply
+    it("handles accepted (phase 1) — updates dispatched → accepted", async () => {
+      const pool = createMockPool();
+
+      await handleSetReply(
+        pool as unknown as import("pg").Pool,
+        "gw-001",
+        "CID",
+        SET_REPLY_ACCEPTED,
+      );
+
+      const updateQ = pool.queries.find((q) =>
+        q.sql.includes("UPDATE device_command_logs") &&
+        q.sql.includes("result = 'accepted'"),
+      );
+      expect(updateQ).toBeDefined();
+      // Phase 1 WHERE: result = 'dispatched' (not 'accepted' or 'pending')
+      expect(updateQ!.sql).toContain("result = 'dispatched'");
+      expect(updateQ!.sql).not.toContain("resolved_at");
+    });
+
+    it("emits pg_notify on successful command resolution", async () => {
+      const pool = createMockPool();
+
+      await handleSetReply(
+        pool as unknown as import("pg").Pool,
+        "gw-001",
+        "CID",
+        SET_REPLY_SUCCESS,
+      );
+
+      const notifyQ = pool.queries.find((q) =>
+        q.sql.includes("pg_notify('command_status'"),
+      );
+      expect(notifyQ).toBeDefined();
+      const payload = JSON.parse(notifyQ!.params[0] as string);
+      expect(payload.gatewayId).toBe("gw-001");
+      expect(payload.result).toBe("success");
     });
   });
 });

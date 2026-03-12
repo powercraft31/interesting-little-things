@@ -76,15 +76,12 @@ function createNoopHandlers(): TopicHandlers {
 
 const GATEWAY_FIXTURE = {
   gateway_id: "gw-001",
-  client_id: "WKRD24070202100144F",
   org_id: "org-solfacil",
-  home_id: "home-1",
+  name: "Gateway 1",
   mqtt_broker_host: "18.141.63.142",
   mqtt_broker_port: 1883,
   mqtt_username: "xuheng",
   mqtt_password: "xuheng8888!",
-  device_name: "EMS_N2",
-  product_key: "ems",
   status: "online",
   last_seen_at: null,
 };
@@ -125,7 +122,7 @@ describe("GatewayConnectionManager", () => {
     mgr.stop();
   });
 
-  it("subscribes to 5 topics per gateway", async () => {
+  it("subscribes to 6 topics per gateway (v5.22: added data/missed)", async () => {
     const pool = createMockPool([GATEWAY_FIXTURE]);
     const handlers = createNoopHandlers();
     const mgr = new GatewayConnectionManager(pool, handlers);
@@ -136,19 +133,20 @@ describe("GatewayConnectionManager", () => {
 
     expect(mockSubscribe).toHaveBeenCalledWith(
       expect.arrayContaining([
-        "device/ems/WKRD24070202100144F/deviceList",
-        "device/ems/WKRD24070202100144F/data",
-        "device/ems/WKRD24070202100144F/config/get_reply",
-        "device/ems/WKRD24070202100144F/config/set_reply",
-        "device/ems/WKRD24070202100144F/status",
+        "device/ems/gw-001/deviceList",
+        "device/ems/gw-001/data",
+        "device/ems/gw-001/config/get_reply",
+        "device/ems/gw-001/config/set_reply",
+        "device/ems/gw-001/status",
+        "device/ems/gw-001/data/missed",
       ]),
       { qos: 1 },
       expect.any(Function),
     );
 
-    // Verify exactly 5 topics
+    // Verify exactly 6 topics
     const subscribedTopics = mockSubscribe.mock.calls[0][0];
-    expect(subscribedTopics).toHaveLength(5);
+    expect(subscribedTopics).toHaveLength(6);
 
     mgr.stop();
   });
@@ -240,12 +238,12 @@ describe("GatewayConnectionManager", () => {
     const gw2 = {
       ...GATEWAY_FIXTURE,
       gateway_id: "gw-002",
-      client_id: "WKRD24070202100228G",
+      name: "Gateway 2",
     };
     const gw3 = {
       ...GATEWAY_FIXTURE,
       gateway_id: "gw-003",
-      client_id: "WKRD24070202100212P",
+      name: "Gateway 3",
     };
     const pool = createMockPool([GATEWAY_FIXTURE, gw2, gw3]);
     const handlers = createNoopHandlers();
@@ -271,7 +269,7 @@ describe("GatewayConnectionManager", () => {
     await jest.advanceTimersByTimeAsync(10);
 
     expect(mockSubDevicesGet).toHaveBeenCalledWith(
-      "WKRD24070202100144F",
+      "gw-001",
       expect.any(Function),
     );
 
@@ -282,7 +280,7 @@ describe("GatewayConnectionManager", () => {
     const gw2 = {
       ...GATEWAY_FIXTURE,
       gateway_id: "gw-002",
-      client_id: "WKRD24070202100228G",
+      name: "Gateway 2",
     };
     const pool = createMockPool([GATEWAY_FIXTURE, gw2]);
     const handlers = createNoopHandlers();
