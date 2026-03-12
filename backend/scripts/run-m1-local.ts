@@ -7,7 +7,11 @@ import { GatewayConnectionManager } from "../src/iot-hub/services/gateway-connec
 import { handleDeviceList } from "../src/iot-hub/handlers/device-list-handler";
 import { handleTelemetry } from "../src/iot-hub/handlers/telemetry-handler";
 import { handleHeartbeat } from "../src/iot-hub/handlers/heartbeat-handler";
-import { handleGetReply, handleSetReply } from "../src/iot-hub/handlers/command-tracker";
+import {
+  handleGetReply,
+  handleSetReply,
+} from "../src/iot-hub/handlers/command-tracker";
+import { CommandPublisher } from "../src/iot-hub/services/command-publisher";
 
 // Local PostgreSQL — service pool (BYPASSRLS)
 const pool = new Pool({
@@ -31,7 +35,12 @@ async function main() {
 
   // Wrap handlers with logging
   const wrapHandler = (name: string, fn: Function) => {
-    return async (pool: Pool, gatewayId: string, clientId: string, payload: any) => {
+    return async (
+      pool: Pool,
+      gatewayId: string,
+      clientId: string,
+      payload: any,
+    ) => {
       msgCount++;
       stats[name] = (stats[name] || 0) + 1;
       console.log(`[M1 Local] #${msgCount} ${name} from ${clientId}`);
@@ -52,6 +61,11 @@ async function main() {
   });
 
   await manager.start();
+
+  const publisher = new CommandPublisher(pool, manager);
+  publisher.start();
+  console.log("[M1 Local] CommandPublisher started (10s poll)");
+
   console.log("[M1 Local] Running. Press Ctrl+C to stop.");
 
   // Print stats every 30s
@@ -62,6 +76,7 @@ async function main() {
   // Graceful shutdown
   process.on("SIGINT", () => {
     console.log("\n[M1 Local] Shutting down...");
+    publisher.stop();
     manager.stop();
     pool.end().then(() => process.exit(0));
   });

@@ -1,8 +1,6 @@
 import cron from "node-cron";
 import { Pool } from "pg";
 
-import { publishMqtt } from "../../iot-hub/mqtt-client";
-
 export function startCommandDispatcher(pool: Pool): void {
   // Existing: trade_schedules → dispatch_commands (every minute)
   cron.schedule("* * * * *", () => runCommandDispatcher(pool));
@@ -126,11 +124,8 @@ export async function runPendingCommandDispatcher(pool: Pool): Promise<void> {
 
     const pendingResult = await client.query<{
       id: number;
-      gateway_id: string;
-      command_type: string;
-      payload_json: Record<string, unknown> | null;
     }>(`
-      SELECT id, gateway_id, command_type, payload_json
+      SELECT id
       FROM device_command_logs
       WHERE result = 'pending'
       ORDER BY created_at ASC
@@ -151,17 +146,6 @@ export async function runPendingCommandDispatcher(pool: Pool): Promise<void> {
        WHERE id = ANY($1)`,
       [ids],
     );
-
-    for (const cmd of pendingResult.rows) {
-      const topic = `platform/ems/${cmd.gateway_id}/config/set`;
-      const message = JSON.stringify({
-        commandLogId: cmd.id,
-        commandType: cmd.command_type,
-        payload: cmd.payload_json,
-        timestamp: new Date().toISOString(),
-      });
-      await publishMqtt(topic, message);
-    }
 
     await client.query("COMMIT");
 

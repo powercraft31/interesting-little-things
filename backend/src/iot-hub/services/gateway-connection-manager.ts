@@ -309,4 +309,25 @@ export class GatewayConnectionManager {
   hasGateway(gatewayId: string): boolean {
     return this.gatewayClients.has(gatewayId);
   }
+
+  /** Publish a message to a specific gateway's MQTT broker. Returns true if sent. */
+  publishToGateway(gatewayId: string, topic: string, message: string): boolean {
+    const gc = this.gatewayClients.get(gatewayId);
+    if (!gc) return false;
+    const client = gc.mqttClient as {
+      connected?: boolean;
+      publish: (t: string, m: string) => void;
+    };
+    if (!client.connected) return false;
+    client.publish(topic, message);
+    return true;
+  }
+
+  /** Check if a specific gateway has an active MQTT connection. */
+  isGatewayConnected(gatewayId: string): boolean {
+    const gc = this.gatewayClients.get(gatewayId);
+    if (!gc) return false;
+    const client = gc.mqttClient as { connected?: boolean };
+    return client.connected === true;
+  }
 }

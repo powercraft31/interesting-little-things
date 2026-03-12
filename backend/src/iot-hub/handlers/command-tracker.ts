@@ -96,7 +96,7 @@ export async function handleSetReply(
        WHERE gateway_id = $4
          AND config_name = $5
          AND command_type = 'set'
-         AND result = 'pending'
+         AND result = 'dispatched'
        ORDER BY created_at DESC
        LIMIT 1
      )`,
