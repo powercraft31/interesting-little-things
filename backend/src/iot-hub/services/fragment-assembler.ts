@@ -183,6 +183,9 @@ export class FragmentAssembler {
     // Step 1: Write ems_health to gateways (always, even without core)
     if (acc.ems) {
       await this.writeEmsHealth(clientId, acc.ems, acc.recordedAt);
+      await this.pool.query("SELECT pg_notify('gateway_health', $1)", [
+        clientId,
+      ]);
     }
 
     // Step 2: If core is present, build full telemetry and write
@@ -321,6 +324,9 @@ export class FragmentAssembler {
 
     buffer.enqueue(assetId, parsed);
     await this.updateDeviceState(assetId, parsed);
+    await this.pool.query("SELECT pg_notify('telemetry_update', $1)", [
+      clientId,
+    ]);
   }
 
   private buildTelemetryExtra(

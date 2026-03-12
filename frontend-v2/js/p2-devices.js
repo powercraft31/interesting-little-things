@@ -39,6 +39,8 @@ var DevicesPage = {
   _gateways: null,
   _expandedGw: null,
   _currentDetail: null,
+  _sseSource: null,
+  _sseDebounceTimer: null,
 
   // =========================================================
   // INIT / LIFECYCLE
@@ -77,12 +79,76 @@ var DevicesPage = {
         self._openLayer3GW(self._currentGatewayId);
       }, 100);
     }
+
+    // v5.21: Connect SSE for real-time push
+    self._connectSSE();
   },
 
   onRoleChange: function () {
     this._expandedGw = null;
     this._currentDetail = null;
     this.init();
+  },
+
+  // =========================================================
+  // SSE REAL-TIME PUSH (v5.21)
+  // =========================================================
+
+  _connectSSE: function () {
+    var self = this;
+    if (self._sseSource) {
+      self._sseSource.close();
+      self._sseSource = null;
+    }
+
+    var base = DataSource.API_BASE;
+    self._sseSource = new EventSource(base + "/api/events");
+
+    self._sseSource.onmessage = function (event) {
+      try {
+        var data = JSON.parse(event.data);
+        self._handleSSEEvent(data);
+      } catch (e) {
+        console.warn("[SSE] Parse error:", e);
+      }
+    };
+
+    self._sseSource.onerror = function () {
+      console.warn("[SSE] Connection error, will auto-reconnect");
+    };
+  },
+
+  _handleSSEEvent: function (data) {
+    var self = this;
+    if (!data || !data.gatewayId) return;
+
+    // Debounce: coalesce rapid notifications into a single refresh
+    if (self._sseDebounceTimer) clearTimeout(self._sseDebounceTimer);
+    self._sseDebounceTimer = setTimeout(function () {
+      self._sseDebounceTimer = null;
+
+      // If viewing Layer 3 and gatewayId matches → refresh detail
+      if (self._currentGatewayId && self._currentGatewayId === data.gatewayId) {
+        self._openLayer3GW(self._currentGatewayId);
+        return;
+      }
+
+      // If viewing Layer 1 (gateway list) → refresh the list
+      if (!self._currentGatewayId) {
+        self.init();
+      }
+    }, 2000);
+  },
+
+  _cleanupSSE: function () {
+    if (this._sseDebounceTimer) {
+      clearTimeout(this._sseDebounceTimer);
+      this._sseDebounceTimer = null;
+    }
+    if (this._sseSource) {
+      this._sseSource.close();
+      this._sseSource = null;
+    }
   },
 
   // =========================================================

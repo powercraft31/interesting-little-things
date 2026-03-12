@@ -31,4 +31,6 @@ export async function handleHeartbeat(
      WHERE gateway_id = $2`,
     [deviceTimestamp, gatewayId],
   );
+
+  await pool.query("SELECT pg_notify('gateway_health', $1)", [gatewayId]);
 }

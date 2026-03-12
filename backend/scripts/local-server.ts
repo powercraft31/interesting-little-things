@@ -47,6 +47,7 @@ import { createAckHandler } from "../src/dr-dispatcher/handlers/collect-response
 import { startBillingJob } from "../src/market-billing/services/daily-billing-job";
 import { startTelemetryAggregator } from "../src/iot-hub/services/telemetry-aggregator";
 import { startTelemetry5MinAggregator } from "../src/iot-hub/services/telemetry-5min-aggregator";
+import { createSseHandler } from "../src/bff/handlers/sse-events";
 
 type LambdaHandler = (
   event: APIGatewayProxyEventV2,
@@ -282,6 +283,10 @@ app.post("/webhooks/weather", handleWeatherWebhook);
 // ── Shared DB pool (v5.11: dual pool — service pool for cron/internal) ────
 const servicePool = getServicePool();
 
+// ── v5.21 SSE endpoint — raw express handler, not Lambda wrapper ──────────
+app.get("/api/events", createSseHandler(servicePool));
+// ────────────────────────────────────────────────────────────────────────
+
 // ── v5.8 Telemetry Feedback Loop ─────────────────────────────────────────
 app.post("/api/telemetry/mock", createTelemetryWebhookHandler(servicePool));
 // ────────────────────────────────────────────────────────────────────────
@@ -346,6 +351,7 @@ app.listen(PORT, () => {
   console.log("  POST /webhooks/ccee-pld");
   console.log("  POST /webhooks/weather");
   console.log("  POST /api/telemetry/mock");
+  console.log("  GET  /api/events (SSE)              (v5.21)");
   console.log("  POST /api/dispatch/ack");
   console.log("");
   console.log("Auth: pass Authorization header as raw JSON, e.g.:");
