@@ -322,7 +322,9 @@ console.log(
 // Resolve frontend-v2 relative to compiled dist/scripts/local-server.js → ../../frontend-v2
 const FRONTEND_DIR = path.resolve(__dirname, "../../frontend-v2");
 app.use(express.static(FRONTEND_DIR));
+app.use("/frontend-v2", express.static(FRONTEND_DIR));
 app.get("/", (_req, res) => res.sendFile(path.join(FRONTEND_DIR, "index.html")));
+app.get("/frontend-v2/", (_req, res) => res.sendFile(path.join(FRONTEND_DIR, "index.html")));
 // ────────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
