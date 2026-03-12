@@ -1,4 +1,5 @@
 import express from "express";
+import path from "path";
 import cors from "cors";
 import type {
   APIGatewayProxyEventV2,
@@ -315,6 +316,13 @@ startTelemetry5MinAggregator(servicePool);
 console.log(
   "[v5.15] 5-min aggregator started: telemetry_history → asset_5min_metrics",
 );
+// ────────────────────────────────────────────────────────────────────────
+
+// ── Static frontend serving ──────────────────────────────────────────────
+// Resolve frontend-v2 relative to compiled dist/scripts/local-server.js → ../../frontend-v2
+const FRONTEND_DIR = path.resolve(__dirname, "../../frontend-v2");
+app.use(express.static(FRONTEND_DIR));
+app.get("/", (_req, res) => res.sendFile(path.join(FRONTEND_DIR, "index.html")));
 // ────────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
