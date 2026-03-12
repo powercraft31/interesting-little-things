@@ -109,12 +109,12 @@ var DevicesPage = {
     var statusClass = gw.status === "online" ? "online" : "offline";
     var isExpanded = this._expandedGw === gw.gatewayId;
     var health = gw.emsHealth || {};
-    var rssi = health.wifiRssi != null ? health.wifiRssi + " dBm" : "--";
-    var fw = health.firmwareVersion || "--";
-    var uptime =
-      health.uptimeSeconds != null
-        ? Math.round(health.uptimeSeconds / 3600) + "h"
-        : "--";
+    var wifiRaw =
+      health.wifi_signal_strength || health.wifiSignalStrength || "--";
+    var rssi = wifiRaw !== "--" ? wifiRaw.replace(/\s*\(.*\)/, "") : "--";
+    var cpuTemp = health.CPU_temp || health.cpuTemp || "--";
+    var memUsage = health.memory_usage || health.memoryUsage || "--";
+    var uptime = health.system_runtime || health.systemRuntime || "--";
     var lastSeen = gw.lastSeenAt ? formatISODateTime(gw.lastSeenAt) : "--";
 
     return (
@@ -149,10 +149,10 @@ var DevicesPage = {
       rssi +
       "</span>" +
       "<span>CPU " +
-      (health.cpuTemp || "--") +
+      cpuTemp +
       "</span>" +
       "<span>MEM " +
-      (health.memoryUsage || "--") +
+      memUsage +
       "</span>" +
       "<span>" +
       t("devices.uptime") +
@@ -458,8 +458,8 @@ var DevicesPage = {
 
     var statusTag =
       gw.status === "online"
-        ? '<span class="tag-online">Online</span>'
-        : '<span class="tag-offline">Offline</span>';
+        ? '<span class="tag-online">' + t("devices.online") + "</span>"
+        : '<span class="tag-offline">' + t("devices.offline") + "</span>";
 
     var devSummary = devices
       .map(function (d) {
@@ -509,13 +509,38 @@ var DevicesPage = {
     );
   },
 
+  _selectedConfigDevice: null,
+
   _buildDeviceConfigGW: function (devices, config) {
+    var self = this;
+    // Default to first INVERTER_BATTERY if no selection
+    if (!self._selectedConfigDevice) {
+      var firstInverter = devices.filter(function (d) {
+        return d.assetType === "INVERTER_BATTERY";
+      })[0];
+      self._selectedConfigDevice = firstInverter
+        ? firstInverter.assetId
+        : (devices[0] && devices[0].assetId) || null;
+    }
+    var selectedId = self._selectedConfigDevice;
+    var selectedDev = devices.filter(function (d) {
+      return d.assetId === selectedId;
+    })[0];
+    var isInverter =
+      selectedDev && selectedDev.assetType === "INVERTER_BATTERY";
+
     var deviceChips = devices
       .map(function (d) {
         var onlineClass = d.isOnline ? "tag-online" : "tag-offline";
+        var activeClass = d.assetId === selectedId ? " active" : "";
         return (
           '<span class="device-chip ' +
           onlineClass +
+          activeClass +
+          '" data-asset-id="' +
+          d.assetId +
+          '" data-asset-type="' +
+          d.assetType +
           '">' +
           (d.name || d.assetId) +
           "</span>"
@@ -523,45 +548,71 @@ var DevicesPage = {
       })
       .join("");
 
-    var rows = [
+    var configFields = [
+      { key: "socMin", label: t("devices.socMin"), value: config.socMin },
+      { key: "socMax", label: t("devices.socMax"), value: config.socMax },
       {
-        label: "SOC Min (%)",
-        value: config.socMin != null ? config.socMin : "--",
+        key: "maxChargeRateKw",
+        label: t("devices.maxChargeRateKw"),
+        value: config.maxChargeRateKw,
       },
       {
-        label: "SOC Max (%)",
-        value: config.socMax != null ? config.socMax : "--",
+        key: "maxDischargeRateKw",
+        label: t("devices.maxDischargeRateKw"),
+        value: config.maxDischargeRateKw,
       },
       {
-        label: "Max Charge Rate (kW)",
-        value: config.maxChargeRateKw || "--",
-      },
-      {
-        label: "Max Discharge Rate (kW)",
-        value: config.maxDischargeRateKw || "--",
-      },
-      {
-        label: "Grid Import Limit (kW)",
-        value:
-          config.gridImportLimitKw != null ? config.gridImportLimitKw : "--",
+        key: "gridImportLimitKw",
+        label: t("devices.gridImportLimitKw"),
+        value: config.gridImportLimitKw,
       },
     ];
+
+    var fieldsHtml;
+    if (isInverter) {
+      fieldsHtml =
+        configFields
+          .map(function (f) {
+            var val = f.value != null ? f.value : "";
+            return (
+              '<div class="config-row"><span class="config-label">' +
+              f.label +
+              '</span><div class="config-field">' +
+              '<input type="number" class="config-input" data-cfg-key="' +
+              f.key +
+              '" step="0.1" value="' +
+              val +
+              '">' +
+              "</div></div>"
+            );
+          })
+          .join("") +
+        '<div class="schedule-apply-row">' +
+        '<button class="btn btn-primary" id="config-apply">' +
+        t("devices.applyConfig") +
+        "</button></div>";
+    } else {
+      fieldsHtml = configFields
+        .map(function (f) {
+          var val = f.value != null ? f.value : "--";
+          return (
+            '<div class="tele-row"><span class="tele-label">' +
+            f.label +
+            '</span><span class="tele-value">' +
+            val +
+            "</span></div>"
+          );
+        })
+        .join("");
+    }
 
     var body =
       '<div class="device-chips-row">' +
       deviceChips +
       "</div>" +
-      rows
-        .map(function (r) {
-          return (
-            '<div class="tele-row"><span class="tele-label">' +
-            r.label +
-            '</span><span class="tele-value">' +
-            r.value +
-            "</span></div>"
-          );
-        })
-        .join("");
+      '<div id="config-fields-container">' +
+      fieldsHtml +
+      "</div>";
 
     return Components.sectionCard(t("devices.gatewayDetail"), body);
   },
@@ -582,7 +633,7 @@ var DevicesPage = {
         ? "Synced"
         : schedule.syncStatus === "pending"
           ? "Pending"
-          : "Unknown";
+          : t("devices.unknown");
     var lastAck = schedule.lastAckAt
       ? formatISODateTime(schedule.lastAckAt)
       : "--";
@@ -593,17 +644,25 @@ var DevicesPage = {
       '">' +
       '<span class="sync-dot"></span> ' +
       syncLabel +
-      '<span class="sync-ack">Last ACK: ' +
+      '<span class="sync-ack">' +
+      t("devices.syncedLastAck") +
+      ": " +
       lastAck +
       "</span>" +
       "</div>" +
       '<div class="schedule-bar" id="schedule-bar-preview"></div>' +
       '<div class="schedule-markers"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span></div>' +
       '<table class="schedule-table">' +
-      "<thead><tr><th>Start</th><th>End</th><th>Mode</th><th></th></tr></thead>" +
+      "<thead><tr><th>" +
+      t("devices.schedStart") +
+      "</th><th>" +
+      t("devices.schedEnd") +
+      "</th><th>" +
+      t("devices.schedMode") +
+      "</th><th></th></tr></thead>" +
       '<tbody id="schedule-rows"></tbody>' +
       "</table>" +
-      '<button class="btn btn-outline btn-sm" id="schedule-add-slot">+ ' +
+      '<button class="btn btn-outline btn-sm" id="schedule-add-slot">' +
       t("devices.addSlot") +
       "</button>" +
       '<div class="schedule-apply-row">' +
@@ -856,6 +915,50 @@ var DevicesPage = {
     }
   },
 
+  _handleConfigApply: async function () {
+    var self = this;
+    var assetId = self._selectedConfigDevice;
+    if (!assetId) return;
+
+    var inputs = document.querySelectorAll(
+      "#config-fields-container .config-input",
+    );
+    var configPayload = {};
+    inputs.forEach(function (input) {
+      var key = input.dataset.cfgKey;
+      if (key) {
+        configPayload[key] = parseFloat(input.value) || 0;
+      }
+    });
+
+    var applyBtn = document.getElementById("config-apply");
+    if (applyBtn) {
+      applyBtn.disabled = true;
+      applyBtn.textContent = "...";
+    }
+
+    try {
+      await DataSource.devices.putDevice(assetId, configPayload);
+      self._showToast(t("devices.configApplied"), "success");
+      if (applyBtn) {
+        applyBtn.textContent = "\u2713";
+        applyBtn.classList.add("btn-success");
+        setTimeout(function () {
+          applyBtn.textContent = t("devices.applyConfig");
+          applyBtn.disabled = false;
+          applyBtn.classList.remove("btn-success");
+        }, 3000);
+      }
+    } catch (err) {
+      console.error("[P2] putDevice error:", err);
+      self._showToast(t("devices.configFailed"), "error");
+      if (applyBtn) {
+        applyBtn.textContent = t("devices.applyConfig");
+        applyBtn.disabled = false;
+      }
+    }
+  },
+
   // =========================================================
   // GATEWAY HEALTH (Fix #4)
   // =========================================================
@@ -863,19 +966,49 @@ var DevicesPage = {
   _buildGatewayHealth: function (emsHealth) {
     var h = emsHealth || {};
 
+    var wifiRaw = h.wifiSignalStrength || h.wifi_signal_strength || "--";
+    var wifiVal = wifiRaw !== "--" ? wifiRaw.replace(/\s*\(.*\)/, "") : "--";
     var indicators = [
       {
         icon: "\ud83d\udce1",
-        label: "WiFi Signal",
-        value: h.wifiSignalStrength || "--",
+        label: t("devices.wifi"),
+        value: wifiVal,
       },
-      { icon: "\ud83c\udf21", label: "CPU Temp", value: h.cpuTemp || "--" },
-      { icon: "\ud83d\udcbb", label: "CPU Usage", value: h.cpuUsage || "--" },
-      { icon: "\ud83d\udcbe", label: "Memory", value: h.memoryUsage || "--" },
-      { icon: "\ud83d\udcbf", label: "Disk", value: h.diskUsage || "--" },
-      { icon: "\u23f1", label: "Uptime", value: h.systemRuntime || "--" },
-      { icon: "\ud83c\udf21", label: "EMS Temp", value: h.emsTemp || "--" },
-      { icon: "\ud83d\udcf6", label: "SIM Status", value: h.simStatus || "--" },
+      {
+        icon: "\ud83c\udf21",
+        label: "CPU Temp",
+        value: h.cpuTemp || h.CPU_temp || "--",
+      },
+      {
+        icon: "\ud83d\udcbb",
+        label: "CPU Usage",
+        value: h.cpuUsage || h.CPU_usage || "--",
+      },
+      {
+        icon: "\ud83d\udcbe",
+        label: "Memory",
+        value: h.memoryUsage || h.memory_usage || "--",
+      },
+      {
+        icon: "\ud83d\udcbf",
+        label: "Disk",
+        value: h.diskUsage || h.disk_usage || "--",
+      },
+      {
+        icon: "\u23f1",
+        label: t("devices.uptime"),
+        value: h.systemRuntime || h.system_runtime || "--",
+      },
+      {
+        icon: "\ud83c\udf21",
+        label: "EMS Temp",
+        value: h.emsTemp || h.ems_temp || "--",
+      },
+      {
+        icon: "\ud83d\udcf6",
+        label: "SIM",
+        value: h.simStatus || h.SIM_status || "--",
+      },
     ];
 
     var body =
@@ -918,8 +1051,8 @@ var DevicesPage = {
     };
 
     var statusTag = state.isOnline
-      ? '<span class="tag-online">Online</span>'
-      : '<span class="tag-offline">Offline</span>';
+      ? '<span class="tag-online">' + t("devices.online") + "</span>"
+      : '<span class="tag-offline">' + t("devices.offline") + "</span>";
 
     var gwName = dev.gatewayName || dev.gatewayId || "--";
 
@@ -1123,48 +1256,48 @@ var DevicesPage = {
   _buildBatteryStatus: function (state) {
     var rows = [
       {
-        label: "State of Charge",
+        label: t("devices.soc"),
         value: state.batterySoc != null ? state.batterySoc + "%" : "--",
       },
       {
-        label: "State of Health",
+        label: t("devices.soh"),
         value: state.batSoh != null ? state.batSoh + "%" : "--",
       },
       {
-        label: "Voltage",
+        label: t("devices.voltage"),
         value:
           state.batteryVoltage != null
             ? formatNumber(state.batteryVoltage, 1) + " V"
             : "--",
       },
       {
-        label: "Current",
+        label: t("devices.current"),
         value:
           state.batteryCurrent != null
             ? formatNumber(state.batteryCurrent, 1) + " A"
             : "--",
       },
       {
-        label: "Temperature",
+        label: t("devices.temperature"),
         value:
           state.batteryTemperature != null
             ? state.batteryTemperature + "\u00b0C"
             : "--",
       },
       {
-        label: "Charge/Discharge Rate",
+        label: t("devices.chargeRate"),
         value:
           state.batteryPower != null
             ? formatNumber(state.batteryPower, 2) + " kW"
             : "--",
       },
       {
-        label: "Max Charge Current",
+        label: t("devices.maxChargeCurrent"),
         value:
           state.maxChargeCurrent != null ? state.maxChargeCurrent + " A" : "--",
       },
       {
-        label: "Max Discharge Current",
+        label: t("devices.maxDischargeCurrent"),
         value:
           state.maxDischargeCurrent != null
             ? state.maxDischargeCurrent + " A"
@@ -1182,63 +1315,63 @@ var DevicesPage = {
         );
       })
       .join("");
-    return Components.sectionCard("Battery Status", body);
+    return Components.sectionCard(t("devices.batteryStatus"), body);
   },
 
   // ---- Inverter & Grid ----
   _buildInverterGrid: function (state, extra) {
     var rows = [
       {
-        label: "PV Power",
+        label: t("devices.pvPower"),
         value:
           state.pvPower != null ? formatNumber(state.pvPower, 2) + " kW" : "--",
       },
       {
-        label: "Inverter Temp",
+        label: t("devices.inverterTemp"),
         value:
           state.inverterTemp != null ? state.inverterTemp + "\u00b0C" : "--",
       },
       {
-        label: "Grid Power",
+        label: t("devices.gridPower"),
         value:
           state.gridPowerKw != null
             ? formatNumber(state.gridPowerKw, 2) + " kW"
             : "--",
       },
       {
-        label: "Grid Voltage",
+        label: t("devices.gridVoltage"),
         value:
           extra.gridVoltageR != null
             ? formatNumber(extra.gridVoltageR, 1) + " V"
             : "--",
       },
       {
-        label: "Grid Current",
+        label: t("devices.gridCurrent"),
         value:
           extra.gridCurrentR != null
             ? formatNumber(extra.gridCurrentR, 1) + " A"
             : "--",
       },
       {
-        label: "Power Factor",
+        label: t("devices.powerFactor"),
         value: extra.gridPf != null ? formatNumber(extra.gridPf, 2) : "--",
       },
       {
-        label: "Home Load",
+        label: t("devices.homeLoad"),
         value:
           state.loadPower != null
             ? formatNumber(state.loadPower, 2) + " kW"
             : "--",
       },
       {
-        label: "Total Buy",
+        label: t("devices.totalBuy"),
         value:
           extra.totalBuyKwh != null
             ? formatNumber(extra.totalBuyKwh, 1) + " kWh"
             : "--",
       },
       {
-        label: "Total Sell",
+        label: t("devices.totalSell"),
         value:
           extra.totalSellKwh != null
             ? formatNumber(extra.totalSellKwh, 1) + " kWh"
@@ -1256,7 +1389,7 @@ var DevicesPage = {
         );
       })
       .join("");
-    return Components.sectionCard("Inverter & Grid", body);
+    return Components.sectionCard(t("devices.inverterGrid"), body);
   },
 
   // ---- Device Configuration ----
@@ -1307,7 +1440,7 @@ var DevicesPage = {
           '">',
       },
       {
-        label: "SOC Min (%)",
+        label: t("devices.socMin"),
         input:
           '<input type="number" id="cfg-soc-min" class="config-input" min="0" max="100" value="' +
           (config.socMin != null ? config.socMin : 10) +
@@ -1319,7 +1452,7 @@ var DevicesPage = {
             : ""),
       },
       {
-        label: "SOC Max (%)",
+        label: t("devices.socMax"),
         input:
           '<input type="number" id="cfg-soc-max" class="config-input" min="0" max="100" value="' +
           (config.socMax != null ? config.socMax : 95) +
@@ -1331,14 +1464,14 @@ var DevicesPage = {
             : ""),
       },
       {
-        label: "Max Charge Rate (kW)",
+        label: t("devices.maxChargeRateKw"),
         input:
           '<input type="number" id="cfg-charge" class="config-input" step="0.1" value="' +
           (config.maxChargeRateKw || 5) +
           '">',
       },
       {
-        label: "Max Discharge Rate (kW)",
+        label: t("devices.maxDischargeRateKw"),
         input:
           '<input type="number" id="cfg-discharge" class="config-input" step="0.1" value="' +
           (config.maxDischargeRateKw || 5) +
@@ -1354,7 +1487,7 @@ var DevicesPage = {
           ">Yes</option></select>",
       },
       {
-        label: "Grid Import Limit (kW)",
+        label: t("devices.gridImportLimitKw"),
         input:
           '<input type="number" id="cfg-grid-limit" class="config-input" step="0.1" min="0" value="' +
           (config.gridImportLimitKw || 3) +
@@ -1374,7 +1507,7 @@ var DevicesPage = {
       })
       .join("");
 
-    return Components.sectionCard("Device Configuration", body);
+    return Components.sectionCard(t("devices.gatewayDetail"), body);
   },
 
   // ---- Daily Schedule ----
@@ -1390,7 +1523,7 @@ var DevicesPage = {
         ? "Synced"
         : schedule.syncStatus === "pending"
           ? "Pending"
-          : "Unknown";
+          : t("devices.unknown");
     var lastAck = schedule.lastAckAt
       ? formatISODateTime(schedule.lastAckAt)
       : "--";
@@ -1460,7 +1593,9 @@ var DevicesPage = {
       '">' +
       '<span class="sync-dot"></span> ' +
       syncLabel +
-      '<span class="sync-ack">Last ACK: ' +
+      '<span class="sync-ack">' +
+      t("devices.syncedLastAck") +
+      ": " +
       lastAck +
       "</span>" +
       "</div>" +
@@ -1468,11 +1603,17 @@ var DevicesPage = {
       barSegments +
       "</div>" +
       timeMarkers +
-      '<table class="schedule-table"><thead><tr><th>Start</th><th>End</th><th>Mode</th></tr></thead><tbody>' +
+      '<table class="schedule-table"><thead><tr><th>' +
+      t("devices.schedStart") +
+      "</th><th>" +
+      t("devices.schedEnd") +
+      "</th><th>" +
+      t("devices.schedMode") +
+      "</th></tr></thead><tbody>" +
       tableRows +
       "</tbody></table>";
 
-    return Components.sectionCard("Daily Schedule", body);
+    return Components.sectionCard(t("devices.dailySchedule"), body);
   },
 
   // =========================================================
@@ -1531,6 +1672,34 @@ var DevicesPage = {
     if (scheduleApplyBtn) {
       scheduleApplyBtn.addEventListener("click", function () {
         self._handleApplyGW();
+      });
+    }
+
+    // --- Device chip tab clicks (config card) ---
+    document
+      .querySelectorAll(".device-chip[data-asset-id]")
+      .forEach(function (chip) {
+        chip.addEventListener("click", function () {
+          self._selectedConfigDevice = chip.dataset.assetId;
+          var detail = self._currentDetail;
+          var devices = detail.devices || [];
+          var config = detail.config || {};
+          var container = document.getElementById("config-fields-container");
+          if (!container) return;
+          // Re-render config card content
+          var layer3 = document.getElementById("layer3");
+          if (layer3) {
+            layer3.innerHTML = self._buildLayer3GW();
+            self._setupLayer3Events();
+          }
+        });
+      });
+
+    // --- Config apply button ---
+    var configApplyBtn = document.getElementById("config-apply");
+    if (configApplyBtn) {
+      configApplyBtn.addEventListener("click", function () {
+        self._handleConfigApply();
       });
     }
 

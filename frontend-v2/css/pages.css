@@ -1820,6 +1820,9 @@
 }
 .device-chip.tag-online { border-left: 3px solid var(--positive); }
 .device-chip.tag-offline { border-left: 3px solid var(--negative); }
+.device-chip[data-asset-id] { cursor: pointer; transition: background 0.15s, box-shadow 0.15s; }
+.device-chip[data-asset-id]:hover { background: rgba(59, 130, 246, 0.1); }
+.device-chip.active { background: rgba(59, 130, 246, 0.15); box-shadow: 0 0 0 2px var(--accent); }
 
 /* ---- Device Rows (inside expanded gateway) ---- */
 .gw-devices {

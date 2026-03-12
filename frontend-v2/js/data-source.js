@@ -216,6 +216,12 @@ var DataSource = (function () {
       }
       return apiPut("/api/devices/" + assetId, config);
     },
+    putDevice: function (assetId, config) {
+      if (!USE_LIVE_API) {
+        return Promise.resolve({ success: true });
+      }
+      return apiPut("/api/devices/" + assetId, config);
+    },
     getSchedule: function (gatewayId) {
       return withFallback(
         function () {
