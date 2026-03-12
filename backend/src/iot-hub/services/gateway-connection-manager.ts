@@ -11,7 +11,7 @@ import { publishConfigGet } from "../handlers/publish-config";
  *
  * Reads gateways table at startup, connects to each gateway's MQTT broker,
  * subscribes to 5 topics per gateway (Solfacil Protocol v1.1).
- * Polls every 60s for new gateways. Marks offline after 90s without heartbeat.
+ * Polls every 60s for new gateways. Marks offline after 10min without heartbeat.
  */
 
 export type TopicHandler = (
@@ -37,7 +37,7 @@ interface GatewayClient {
 }
 
 const POLL_INTERVAL_MS = 60_000;
-const OFFLINE_THRESHOLD_MS = 90_000;
+const OFFLINE_THRESHOLD_MS = 600_000; // 10 minutes
 const HOURLY_POLL_MS = 3_600_000;
 
 export class GatewayConnectionManager {
@@ -70,7 +70,7 @@ export class GatewayConnectionManager {
       POLL_INTERVAL_MS,
     );
 
-    // Watchdog: mark offline if no heartbeat for 90s
+    // Watchdog: mark offline if no heartbeat for 10 minutes
     this.watchdogTimer = setInterval(
       () => this.heartbeatWatchdog(),
       POLL_INTERVAL_MS,
@@ -274,7 +274,7 @@ export class GatewayConnectionManager {
     }
   }
 
-  /** Mark gateways offline if no heartbeat for >90s. */
+  /** Mark gateways offline if no heartbeat for >10min. */
   private async heartbeatWatchdog(): Promise<void> {
     try {
       await this.pool.query(
