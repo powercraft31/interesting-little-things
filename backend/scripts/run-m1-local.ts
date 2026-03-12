@@ -16,13 +16,16 @@ import { CommandPublisher } from "../src/iot-hub/services/command-publisher";
 import { BackfillRequester } from "../src/iot-hub/services/backfill-requester";
 
 // Local PostgreSQL — service pool (BYPASSRLS)
-const pool = new Pool({
-  host: "localhost",
-  port: 5432,
-  database: "solfacil_vpp",
-  user: "solfacil_service",
-  password: "solfacil_service_2026",
-});
+// Reads SERVICE_DATABASE_URL env var if available, else falls back to localhost defaults
+const pool = process.env.SERVICE_DATABASE_URL
+  ? new Pool({ connectionString: process.env.SERVICE_DATABASE_URL })
+  : new Pool({
+      host: "localhost",
+      port: 5432,
+      database: "solfacil_vpp",
+      user: "solfacil_service",
+      password: "solfacil_service_2026",
+    });
 
 // Stats
 let msgCount = 0;
