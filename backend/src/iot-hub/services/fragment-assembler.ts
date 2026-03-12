@@ -219,101 +219,15 @@ export class FragmentAssembler {
     clientId: string,
     acc: Accumulator,
   ): Promise<void> {
-    const core = acc.core!;
-    const data = core as {
-      batList?: SolfacilListItem[];
-      pvList?: SolfacilListItem[];
-      gridList?: SolfacilListItem[];
-      loadList?: SolfacilListItem[];
-      flloadList?: SolfacilListItem[];
-    };
-
-    const bat = data.batList?.[0];
-    if (!bat) return; // Safety: core should always have batList
-
-    const pv = findPvSummary(data.pvList);
-    const pv1 = findPvMppt(data.pvList, "pv1");
-    const pv2 = findPvMppt(data.pvList, "pv2");
-    const grid = data.gridList?.[0];
-    const load = data.loadList?.[0];
-    const flload = data.flloadList?.[0];
-
-    const bp = bat.properties;
-    const gp = grid?.properties;
-    const lp = load?.properties;
-    const flp = flload?.properties;
-    const pvp = pv?.properties;
-
-    // Extract DO0/DO1 from dido fragment
-    const do0 = acc.dido?.do.find((d) => d.id === "DO0");
-    const do1 = acc.dido?.do.find((d) => d.id === "DO1");
-
-    // Build telemetry_extra with meters + dido DI + ems_health
-    const telemetryExtra = this.buildTelemetryExtra(
-      grid,
-      load,
-      flload,
-      pv1,
-      pv2,
-      acc.meters,
+    const parsed = parseTelemetryPayload(
+      clientId,
+      acc.recordedAt,
+      acc.core!,
       acc.dido,
+      acc.meters,
       acc.ems,
     );
-
-    const parsed: ParsedTelemetry = {
-      clientId,
-      deviceSn: bat.deviceSn,
-      recordedAt: acc.recordedAt,
-
-      // Battery core
-      batterySoc: safeFloat(bp.total_bat_soc),
-      batteryPowerKw: safeFloat(bp.total_bat_power),
-      dailyChargeKwh: safeFloat(bp.total_bat_dailyChargedEnergy),
-      dailyDischargeKwh: safeFloat(bp.total_bat_dailyDischargedEnergy),
-
-      // Battery deep (v5.14)
-      batterySoh: safeFloat(bp.total_bat_soh),
-      batteryVoltage: safeFloat(bp.total_bat_vlotage), // typo in protocol
-      batteryCurrent: safeFloat(bp.total_bat_current),
-      batteryTemperature: safeFloat(bp.total_bat_temperature),
-      maxChargeVoltage: safeFloat(bp.total_bat_maxChargeVoltage),
-      maxChargeCurrent: safeFloat(bp.total_bat_maxChargeCurrent),
-      maxDischargeCurrent: safeFloat(bp.total_bat_maxDischargeCurrent),
-      totalChargeKwh: safeFloat(bp.total_bat_totalChargedEnergy),
-      totalDischargeKwh: safeFloat(bp.total_bat_totalDischargedEnergy),
-
-      // Grid
-      gridPowerKw: safeFloat(gp?.grid_totalActivePower),
-      gridDailyBuyKwh: safeFloat(gp?.grid_dailyBuyEnergy),
-      gridDailySellKwh: safeFloat(gp?.grid_dailySellEnergy),
-
-      // PV
-      pvPowerKw: safeFloat(pvp?.pv_totalPower),
-      pvDailyEnergyKwh: safeFloat(pvp?.pv_dailyEnergy),
-
-      // Load
-      loadPowerKw: safeFloat(lp?.load1_totalPower),
-
-      // Flload
-      flloadPowerKw: safeFloat(flp?.flload_totalPower),
-
-      // DO from dido fragment (real values, not hardcoded false)
-      do0Active: do0?.value === "1",
-      do1Active: do1?.value === "1",
-
-      // v5.18: new hot-path fields
-      inverterTemp: safeFloat(gp?.grid_temp),
-      pvTotalEnergyKwh: safeFloat(pvp?.pv_totalEnergy),
-      pv1Voltage: safeFloat(pv1?.properties.pv1_voltage),
-      pv1Current: safeFloat(pv1?.properties.pv1_current),
-      pv1Power: safeFloat(pv1?.properties.pv1_power),
-      pv2Voltage: safeFloat(pv2?.properties.pv2_voltage),
-      pv2Current: safeFloat(pv2?.properties.pv2_current),
-      pv2Power: safeFloat(pv2?.properties.pv2_power),
-
-      // v5.18: JSONB extra
-      telemetryExtra,
-    };
+    if (!parsed) return;
 
     const { cache, buffer } = getInstances(this.pool);
     const assetId = await cache.resolve(parsed.deviceSn);
@@ -327,166 +241,6 @@ export class FragmentAssembler {
     await this.pool.query("SELECT pg_notify('telemetry_update', $1)", [
       clientId,
     ]);
-  }
-
-  private buildTelemetryExtra(
-    grid?: SolfacilListItem,
-    load?: SolfacilListItem,
-    flload?: SolfacilListItem,
-    pv1?: SolfacilListItem,
-    pv2?: SolfacilListItem,
-    meters?: SolfacilListItem[],
-    dido?: Accumulator["dido"],
-    ems?: SolfacilListItem,
-  ): Record<string, Record<string, number>> | null {
-    const extra: Record<string, Record<string, number>> = {};
-    let hasData = false;
-
-    // Grid per-phase from core (MSG#5)
-    if (grid?.properties) {
-      const g = grid.properties;
-      extra.grid = {
-        volt_a: safeFloat(g.grid_voltA),
-        volt_b: safeFloat(g.grid_voltB),
-        volt_c: safeFloat(g.grid_voltC),
-        current_a: safeFloat(g.grid_currentA),
-        current_b: safeFloat(g.grid_currentB),
-        current_c: safeFloat(g.grid_currentC),
-        active_power_a: safeFloat(g.grid_activePowerA),
-        active_power_b: safeFloat(g.grid_activePowerB),
-        active_power_c: safeFloat(g.grid_activePowerC),
-        reactive_power_a: safeFloat(g.grid_reactivePowerA),
-        reactive_power_b: safeFloat(g.grid_reactivePowerB),
-        reactive_power_c: safeFloat(g.grid_reactivePowerC),
-        total_reactive_power: safeFloat(g.grid_totalReactivePower),
-        apparent_power_a: safeFloat(g.grid_apparentPowerA),
-        apparent_power_b: safeFloat(g.grid_apparentPowerB),
-        apparent_power_c: safeFloat(g.grid_apparentPowerC),
-        total_apparent_power: safeFloat(g.grid_totalApparentPower),
-        factor_a: safeFloat(g.grid_factorA),
-        factor_b: safeFloat(g.grid_factorB),
-        factor_c: safeFloat(g.grid_factorC),
-        frequency: safeFloat(g.grid_frequency),
-        total_buy_kwh: safeFloat(g.grid_totalBuyEnergy),
-        total_sell_kwh: safeFloat(g.grid_totalSellEnergy),
-      };
-      hasData = true;
-    }
-
-    // Load per-phase from core (MSG#5)
-    if (load?.properties) {
-      const l = load.properties;
-      extra.load = {
-        volt_a: safeFloat(l.load1_voltA),
-        volt_b: safeFloat(l.load1_voltB),
-        volt_c: safeFloat(l.load1_voltC),
-        current_a: safeFloat(l.load1_currentA),
-        current_b: safeFloat(l.load1_currentB),
-        current_c: safeFloat(l.load1_currentC),
-        active_power_a: safeFloat(l.load1_activePowerA),
-        active_power_b: safeFloat(l.load1_activePowerB),
-        active_power_c: safeFloat(l.load1_activePowerC),
-        frequency_a: safeFloat(l.load1_frequencyA),
-        frequency_b: safeFloat(l.load1_frequencyB),
-        frequency_c: safeFloat(l.load1_frequencyC),
-      };
-      hasData = true;
-    }
-
-    // Flload per-phase from core (MSG#5)
-    if (flload?.properties) {
-      const f = flload.properties;
-      extra.flload = {
-        active_power_a: safeFloat(f.flload_activePowerA),
-        active_power_b: safeFloat(f.flload_activePowerB),
-        active_power_c: safeFloat(f.flload_activePowerC),
-        daily_energy_kwh: safeFloat(f.flload_dailyEnergy),
-      };
-      hasData = true;
-    }
-
-    // PV MPPT from core (MSG#5)
-    if (pv1?.properties || pv2?.properties) {
-      extra.pv = {};
-      if (pv1?.properties) {
-        extra.pv.pv1_voltage = safeFloat(pv1.properties.pv1_voltage);
-        extra.pv.pv1_current = safeFloat(pv1.properties.pv1_current);
-        extra.pv.pv1_power = safeFloat(pv1.properties.pv1_power);
-      }
-      if (pv2?.properties) {
-        extra.pv.pv2_voltage = safeFloat(pv2.properties.pv2_voltage);
-        extra.pv.pv2_current = safeFloat(pv2.properties.pv2_current);
-        extra.pv.pv2_power = safeFloat(pv2.properties.pv2_power);
-      }
-      hasData = true;
-    }
-
-    // Meters from MSG#3 + MSG#4 — classify by deviceBrand
-    if (meters && meters.length > 0) {
-      for (const meter of meters) {
-        const m = meter.properties;
-        const brand = meter.deviceBrand ?? "";
-        const isSingle = brand.toLowerCase().includes("single");
-        const key = isSingle ? "meter_single" : "meter_three";
-
-        extra[key] = {
-          volt_a: safeFloat(m.grid_voltA),
-          volt_b: safeFloat(m.grid_voltB),
-          volt_c: safeFloat(m.grid_voltC),
-          line_ab_volt: safeFloat(m.grid_lineABVolt),
-          line_bc_volt: safeFloat(m.grid_lineBCVolt),
-          line_ca_volt: safeFloat(m.grid_lineCAVolt),
-          current_a: safeFloat(m.grid_currentA),
-          current_b: safeFloat(m.grid_currentB),
-          current_c: safeFloat(m.grid_currentC),
-          active_power_a: safeFloat(m.grid_activePowerA),
-          active_power_b: safeFloat(m.grid_activePowerB),
-          active_power_c: safeFloat(m.grid_activePowerC),
-          total_active_power: safeFloat(m.grid_totalActivePower),
-          reactive_power_a: safeFloat(m.grid_reactivePowerA),
-          reactive_power_b: safeFloat(m.grid_reactivePowerB),
-          reactive_power_c: safeFloat(m.grid_reactivePowerC),
-          total_reactive_power: safeFloat(m.grid_totalReactivePower),
-          factor: safeFloat(m.grid_factor),
-          factor_a: safeFloat(m.grid_factorA),
-          factor_b: safeFloat(m.grid_factorB),
-          factor_c: safeFloat(m.grid_factorC),
-          frequency: safeFloat(m.grid_frequency),
-          positive_energy: safeFloat(m.grid_positiveEnergy),
-          positive_energy_a: safeFloat(m.grid_positiveEnergyA),
-          positive_energy_b: safeFloat(m.grid_positiveEnergyB),
-          positive_energy_c: safeFloat(m.grid_positiveEnergyC),
-          net_forward_energy: safeFloat(m.grid_netForwardActiveEnergy),
-          negative_energy_a: safeFloat(m.grid_negativeEnergyA),
-          negative_energy_b: safeFloat(m.grid_negativeEnergyB),
-          negative_energy_c: safeFloat(m.grid_negativeEnergyC),
-          net_reverse_energy: safeFloat(m.grid_netReverseActiveEnergy),
-        };
-        hasData = true;
-      }
-    }
-
-    // DIDO DI values (diagnostic)
-    if (dido?.di && dido.di.length > 0) {
-      extra.dido = {};
-      for (const di of dido.di) {
-        const key = di.id.toLowerCase(); // "DI0" → "di0"
-        extra.dido[key] = safeFloat(di.value);
-      }
-      hasData = true;
-    }
-
-    // EMS health snapshot (historical trail in telemetry_extra)
-    if (ems?.properties) {
-      const e = ems.properties;
-      extra.ems_health = {
-        wifi_signal_dbm: safeFloat(e.wifi_signal_dbm),
-        uptime_seconds: safeFloat(e.uptime_seconds),
-      };
-      hasData = true;
-    }
-
-    return hasData ? extra : null;
   }
 
   private async updateDeviceState(
@@ -515,6 +269,284 @@ export class FragmentAssembler {
       ],
     );
   }
+}
+
+/**
+ * Pure function: parse a complete telemetry data object into ParsedTelemetry.
+ * Shared by live FragmentAssembler (writeTelemetry) and backfill MissedDataHandler.
+ * Returns null if no batList found (safety).
+ */
+export function parseTelemetryPayload(
+  clientId: string,
+  recordedAt: Date,
+  data: Record<string, unknown>,
+  dido?: {
+    readonly do: ReadonlyArray<{
+      id: string;
+      type: string;
+      value: string;
+      gpionum?: string;
+    }>;
+    readonly di?: ReadonlyArray<{
+      id: string;
+      type: string;
+      value: string;
+      gpionum?: string;
+    }>;
+  },
+  meters?: SolfacilListItem[],
+  ems?: SolfacilListItem,
+): ParsedTelemetry | null {
+  const typed = data as {
+    batList?: SolfacilListItem[];
+    pvList?: SolfacilListItem[];
+    gridList?: SolfacilListItem[];
+    loadList?: SolfacilListItem[];
+    flloadList?: SolfacilListItem[];
+  };
+
+  const bat = typed.batList?.[0];
+  if (!bat) return null;
+
+  const pv = findPvSummary(typed.pvList);
+  const pv1 = findPvMppt(typed.pvList, "pv1");
+  const pv2 = findPvMppt(typed.pvList, "pv2");
+  const grid = typed.gridList?.[0];
+  const load = typed.loadList?.[0];
+  const flload = typed.flloadList?.[0];
+
+  const bp = bat.properties;
+  const gp = grid?.properties;
+  const lp = load?.properties;
+  const flp = flload?.properties;
+  const pvp = pv?.properties;
+
+  const do0 = dido?.do.find((d) => d.id === "DO0");
+  const do1 = dido?.do.find((d) => d.id === "DO1");
+
+  const telemetryExtra = buildTelemetryExtra(
+    grid,
+    load,
+    flload,
+    pv1,
+    pv2,
+    meters,
+    dido,
+    ems,
+  );
+
+  return {
+    clientId,
+    deviceSn: bat.deviceSn,
+    recordedAt,
+
+    batterySoc: safeFloat(bp.total_bat_soc),
+    batteryPowerKw: safeFloat(bp.total_bat_power),
+    dailyChargeKwh: safeFloat(bp.total_bat_dailyChargedEnergy),
+    dailyDischargeKwh: safeFloat(bp.total_bat_dailyDischargedEnergy),
+
+    batterySoh: safeFloat(bp.total_bat_soh),
+    batteryVoltage: safeFloat(bp.total_bat_vlotage),
+    batteryCurrent: safeFloat(bp.total_bat_current),
+    batteryTemperature: safeFloat(bp.total_bat_temperature),
+    maxChargeVoltage: safeFloat(bp.total_bat_maxChargeVoltage),
+    maxChargeCurrent: safeFloat(bp.total_bat_maxChargeCurrent),
+    maxDischargeCurrent: safeFloat(bp.total_bat_maxDischargeCurrent),
+    totalChargeKwh: safeFloat(bp.total_bat_totalChargedEnergy),
+    totalDischargeKwh: safeFloat(bp.total_bat_totalDischargedEnergy),
+
+    gridPowerKw: safeFloat(gp?.grid_totalActivePower),
+    gridDailyBuyKwh: safeFloat(gp?.grid_dailyBuyEnergy),
+    gridDailySellKwh: safeFloat(gp?.grid_dailySellEnergy),
+
+    pvPowerKw: safeFloat(pvp?.pv_totalPower),
+    pvDailyEnergyKwh: safeFloat(pvp?.pv_dailyEnergy),
+
+    loadPowerKw: safeFloat(lp?.load1_totalPower),
+
+    flloadPowerKw: safeFloat(flp?.flload_totalPower),
+
+    do0Active: do0?.value === "1",
+    do1Active: do1?.value === "1",
+
+    inverterTemp: safeFloat(gp?.grid_temp),
+    pvTotalEnergyKwh: safeFloat(pvp?.pv_totalEnergy),
+    pv1Voltage: safeFloat(pv1?.properties.pv1_voltage),
+    pv1Current: safeFloat(pv1?.properties.pv1_current),
+    pv1Power: safeFloat(pv1?.properties.pv1_power),
+    pv2Voltage: safeFloat(pv2?.properties.pv2_voltage),
+    pv2Current: safeFloat(pv2?.properties.pv2_current),
+    pv2Power: safeFloat(pv2?.properties.pv2_power),
+
+    telemetryExtra,
+  };
+}
+
+/** Build JSONB telemetry_extra from per-phase and meter data. */
+function buildTelemetryExtra(
+  grid?: SolfacilListItem,
+  load?: SolfacilListItem,
+  flload?: SolfacilListItem,
+  pv1?: SolfacilListItem,
+  pv2?: SolfacilListItem,
+  meters?: SolfacilListItem[],
+  dido?: {
+    readonly do: ReadonlyArray<{
+      id: string;
+      type: string;
+      value: string;
+      gpionum?: string;
+    }>;
+    readonly di?: ReadonlyArray<{
+      id: string;
+      type: string;
+      value: string;
+      gpionum?: string;
+    }>;
+  },
+  ems?: SolfacilListItem,
+): Record<string, Record<string, number>> | null {
+  const extra: Record<string, Record<string, number>> = {};
+  let hasData = false;
+
+  if (grid?.properties) {
+    const g = grid.properties;
+    extra.grid = {
+      volt_a: safeFloat(g.grid_voltA),
+      volt_b: safeFloat(g.grid_voltB),
+      volt_c: safeFloat(g.grid_voltC),
+      current_a: safeFloat(g.grid_currentA),
+      current_b: safeFloat(g.grid_currentB),
+      current_c: safeFloat(g.grid_currentC),
+      active_power_a: safeFloat(g.grid_activePowerA),
+      active_power_b: safeFloat(g.grid_activePowerB),
+      active_power_c: safeFloat(g.grid_activePowerC),
+      reactive_power_a: safeFloat(g.grid_reactivePowerA),
+      reactive_power_b: safeFloat(g.grid_reactivePowerB),
+      reactive_power_c: safeFloat(g.grid_reactivePowerC),
+      total_reactive_power: safeFloat(g.grid_totalReactivePower),
+      apparent_power_a: safeFloat(g.grid_apparentPowerA),
+      apparent_power_b: safeFloat(g.grid_apparentPowerB),
+      apparent_power_c: safeFloat(g.grid_apparentPowerC),
+      total_apparent_power: safeFloat(g.grid_totalApparentPower),
+      factor_a: safeFloat(g.grid_factorA),
+      factor_b: safeFloat(g.grid_factorB),
+      factor_c: safeFloat(g.grid_factorC),
+      frequency: safeFloat(g.grid_frequency),
+      total_buy_kwh: safeFloat(g.grid_totalBuyEnergy),
+      total_sell_kwh: safeFloat(g.grid_totalSellEnergy),
+    };
+    hasData = true;
+  }
+
+  if (load?.properties) {
+    const l = load.properties;
+    extra.load = {
+      volt_a: safeFloat(l.load1_voltA),
+      volt_b: safeFloat(l.load1_voltB),
+      volt_c: safeFloat(l.load1_voltC),
+      current_a: safeFloat(l.load1_currentA),
+      current_b: safeFloat(l.load1_currentB),
+      current_c: safeFloat(l.load1_currentC),
+      active_power_a: safeFloat(l.load1_activePowerA),
+      active_power_b: safeFloat(l.load1_activePowerB),
+      active_power_c: safeFloat(l.load1_activePowerC),
+      frequency_a: safeFloat(l.load1_frequencyA),
+      frequency_b: safeFloat(l.load1_frequencyB),
+      frequency_c: safeFloat(l.load1_frequencyC),
+    };
+    hasData = true;
+  }
+
+  if (flload?.properties) {
+    const f = flload.properties;
+    extra.flload = {
+      active_power_a: safeFloat(f.flload_activePowerA),
+      active_power_b: safeFloat(f.flload_activePowerB),
+      active_power_c: safeFloat(f.flload_activePowerC),
+      daily_energy_kwh: safeFloat(f.flload_dailyEnergy),
+    };
+    hasData = true;
+  }
+
+  if (pv1?.properties || pv2?.properties) {
+    extra.pv = {};
+    if (pv1?.properties) {
+      extra.pv.pv1_voltage = safeFloat(pv1.properties.pv1_voltage);
+      extra.pv.pv1_current = safeFloat(pv1.properties.pv1_current);
+      extra.pv.pv1_power = safeFloat(pv1.properties.pv1_power);
+    }
+    if (pv2?.properties) {
+      extra.pv.pv2_voltage = safeFloat(pv2.properties.pv2_voltage);
+      extra.pv.pv2_current = safeFloat(pv2.properties.pv2_current);
+      extra.pv.pv2_power = safeFloat(pv2.properties.pv2_power);
+    }
+    hasData = true;
+  }
+
+  if (meters && meters.length > 0) {
+    for (const meter of meters) {
+      const m = meter.properties;
+      const brand = meter.deviceBrand ?? "";
+      const isSingle = brand.toLowerCase().includes("single");
+      const key = isSingle ? "meter_single" : "meter_three";
+
+      extra[key] = {
+        volt_a: safeFloat(m.grid_voltA),
+        volt_b: safeFloat(m.grid_voltB),
+        volt_c: safeFloat(m.grid_voltC),
+        line_ab_volt: safeFloat(m.grid_lineABVolt),
+        line_bc_volt: safeFloat(m.grid_lineBCVolt),
+        line_ca_volt: safeFloat(m.grid_lineCAVolt),
+        current_a: safeFloat(m.grid_currentA),
+        current_b: safeFloat(m.grid_currentB),
+        current_c: safeFloat(m.grid_currentC),
+        active_power_a: safeFloat(m.grid_activePowerA),
+        active_power_b: safeFloat(m.grid_activePowerB),
+        active_power_c: safeFloat(m.grid_activePowerC),
+        total_active_power: safeFloat(m.grid_totalActivePower),
+        reactive_power_a: safeFloat(m.grid_reactivePowerA),
+        reactive_power_b: safeFloat(m.grid_reactivePowerB),
+        reactive_power_c: safeFloat(m.grid_reactivePowerC),
+        total_reactive_power: safeFloat(m.grid_totalReactivePower),
+        factor: safeFloat(m.grid_factor),
+        factor_a: safeFloat(m.grid_factorA),
+        factor_b: safeFloat(m.grid_factorB),
+        factor_c: safeFloat(m.grid_factorC),
+        frequency: safeFloat(m.grid_frequency),
+        positive_energy: safeFloat(m.grid_positiveEnergy),
+        positive_energy_a: safeFloat(m.grid_positiveEnergyA),
+        positive_energy_b: safeFloat(m.grid_positiveEnergyB),
+        positive_energy_c: safeFloat(m.grid_positiveEnergyC),
+        net_forward_energy: safeFloat(m.grid_netForwardActiveEnergy),
+        negative_energy_a: safeFloat(m.grid_negativeEnergyA),
+        negative_energy_b: safeFloat(m.grid_negativeEnergyB),
+        negative_energy_c: safeFloat(m.grid_negativeEnergyC),
+        net_reverse_energy: safeFloat(m.grid_netReverseActiveEnergy),
+      };
+      hasData = true;
+    }
+  }
+
+  if (dido?.di && dido.di.length > 0) {
+    extra.dido = {};
+    for (const di of dido.di) {
+      const key = di.id.toLowerCase();
+      extra.dido[key] = safeFloat(di.value);
+    }
+    hasData = true;
+  }
+
+  if (ems?.properties) {
+    const e = ems.properties;
+    extra.ems_health = {
+      wifi_signal_dbm: safeFloat(e.wifi_signal_dbm),
+      uptime_seconds: safeFloat(e.uptime_seconds),
+    };
+    hasData = true;
+  }
+
+  return hasData ? extra : null;
 }
 
 /** Find the PV summary item (name="pv") from pvList. */

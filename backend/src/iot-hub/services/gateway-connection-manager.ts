@@ -27,6 +27,7 @@ export interface TopicHandlers {
   readonly onGetReply: TopicHandler;
   readonly onSetReply: TopicHandler;
   readonly onHeartbeat: TopicHandler;
+  readonly onMissedData: TopicHandler;
 }
 
 interface GatewayClient {
@@ -146,6 +147,7 @@ export class GatewayConnectionManager {
       `device/ems/${cid}/config/get_reply`,
       `device/ems/${cid}/config/set_reply`,
       `device/ems/${cid}/status`,
+      `device/ems/${cid}/data/missed`,
     ];
 
     client.on("connect", () => {
@@ -214,6 +216,13 @@ export class GatewayConnectionManager {
     try {
       if (topic.endsWith("/deviceList")) {
         await this.handlers.onDeviceList(
+          this.pool,
+          gatewayId,
+          clientId,
+          payload,
+        );
+      } else if (topic.endsWith("/data/missed")) {
+        await this.handlers.onMissedData(
           this.pool,
           gatewayId,
           clientId,

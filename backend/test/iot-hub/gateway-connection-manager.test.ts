@@ -70,6 +70,7 @@ function createNoopHandlers(): TopicHandlers {
     onGetReply: jest.fn().mockResolvedValue(undefined),
     onSetReply: jest.fn().mockResolvedValue(undefined),
     onHeartbeat: jest.fn().mockResolvedValue(undefined),
+    onMissedData: jest.fn().mockResolvedValue(undefined),
   };
 }
 

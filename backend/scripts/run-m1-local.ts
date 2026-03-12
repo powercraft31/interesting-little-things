@@ -11,6 +11,7 @@ import {
   handleGetReply,
   handleSetReply,
 } from "../src/iot-hub/handlers/command-tracker";
+import { handleMissedData } from "../src/iot-hub/handlers/missed-data-handler";
 import { CommandPublisher } from "../src/iot-hub/services/command-publisher";
 import { BackfillRequester } from "../src/iot-hub/services/backfill-requester";
 
@@ -59,6 +60,7 @@ async function main() {
     onGetReply: wrapHandler("getReply", handleGetReply),
     onSetReply: wrapHandler("setReply", handleSetReply),
     onHeartbeat: wrapHandler("heartbeat", handleHeartbeat),
+    onMissedData: wrapHandler("missedData", handleMissedData),
   });
 
   await manager.start();
