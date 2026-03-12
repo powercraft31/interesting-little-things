@@ -121,23 +121,209 @@ var DevicesPage = {
   _handleSSEEvent: function (data) {
     var self = this;
     if (!data || !data.gatewayId) return;
+    if (!self._currentGatewayId || self._currentGatewayId !== data.gatewayId)
+      return;
 
-    // Debounce: coalesce rapid notifications into a single refresh
     if (self._sseDebounceTimer) clearTimeout(self._sseDebounceTimer);
     self._sseDebounceTimer = setTimeout(function () {
       self._sseDebounceTimer = null;
-
-      // If viewing Layer 3 and gatewayId matches → refresh detail
-      if (self._currentGatewayId && self._currentGatewayId === data.gatewayId) {
-        self._openLayer3GW(self._currentGatewayId);
-        return;
-      }
-
-      // If viewing Layer 1 (gateway list) → refresh the list
-      if (!self._currentGatewayId) {
-        self.init();
+      if (data.type === "telemetry_update") {
+        self._refreshTelemetryValues(data.gatewayId);
+      } else if (data.type === "gateway_health") {
+        self._refreshHealthValues(data.gatewayId);
       }
     }, 2000);
+  },
+
+  _refreshTelemetryValues: async function (gatewayId) {
+    var self = this;
+    try {
+      var detail = await DataSource.devices.gatewayDetail(gatewayId);
+      if (!detail) return;
+      self._currentDetail = detail;
+      var state = detail.state || {};
+      var extra = detail.telemetryExtra || {};
+
+      function setText(id, val) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = val;
+      }
+
+      // Energy Flow SVG values
+      setText(
+        "tv-pvPower",
+        state.pvPower != null
+          ? formatNumber(state.pvPower, 1) + " kW"
+          : "\u2014",
+      );
+      setText(
+        "tv-batteryPower",
+        state.batteryPower != null
+          ? formatNumber(Math.abs(state.batteryPower), 1) + " kW"
+          : "\u2014",
+      );
+      setText(
+        "tv-loadPower",
+        state.loadPower != null
+          ? formatNumber(state.loadPower, 1) + " kW"
+          : "\u2014",
+      );
+      setText(
+        "tv-gridPowerKw",
+        state.gridPowerKw != null
+          ? formatNumber(Math.abs(state.gridPowerKw), 1) + " kW"
+          : "\u2014",
+      );
+
+      // Battery sub-label
+      var batSub =
+        "SoC " + (state.batterySoc || 0) + "% \u00b7 " + t("devices.ef.idle");
+      if (state.batteryPower > 0.05)
+        batSub =
+          "SoC " +
+          (state.batterySoc || 0) +
+          "% \u00b7 " +
+          t("devices.ef.charging");
+      else if (state.batteryPower < -0.05)
+        batSub =
+          "SoC " +
+          (state.batterySoc || 0) +
+          "% \u00b7 " +
+          t("devices.ef.discharging");
+      setText("tv-batterySub", batSub);
+
+      // Grid sub-label
+      var gridSub =
+        state.gridPowerKw > 0
+          ? t("devices.ef.importing")
+          : state.gridPowerKw < 0
+            ? t("devices.ef.exporting")
+            : t("devices.ef.idle");
+      setText("tv-gridSub", gridSub);
+
+      // Battery Status card
+      setText(
+        "tv-batterySoc",
+        state.batterySoc != null ? state.batterySoc + "%" : "--",
+      );
+      setText(
+        "tv-batteryVoltage",
+        state.batteryVoltage != null
+          ? formatNumber(state.batteryVoltage, 1) + " V"
+          : "--",
+      );
+      setText(
+        "tv-batteryCurrent",
+        state.batteryCurrent != null
+          ? formatNumber(state.batteryCurrent, 1) + " A"
+          : "--",
+      );
+      setText(
+        "tv-batteryPowerRate",
+        state.batteryPower != null
+          ? formatNumber(state.batteryPower, 2) + " kW"
+          : "--",
+      );
+      setText(
+        "tv-maxChargeCurrent",
+        state.maxChargeCurrent != null ? state.maxChargeCurrent + " A" : "--",
+      );
+      setText(
+        "tv-maxDischargeCurrent",
+        state.maxDischargeCurrent != null
+          ? state.maxDischargeCurrent + " A"
+          : "--",
+      );
+
+      // Inverter & Grid card
+      setText(
+        "tv-pvPowerDetail",
+        state.pvPower != null ? formatNumber(state.pvPower, 2) + " kW" : "--",
+      );
+      setText(
+        "tv-inverterTemp",
+        state.inverterTemp != null ? state.inverterTemp + "\u00b0C" : "--",
+      );
+      setText(
+        "tv-gridPowerDetail",
+        state.gridPowerKw != null
+          ? formatNumber(state.gridPowerKw, 2) + " kW"
+          : "--",
+      );
+      setText(
+        "tv-loadPowerDetail",
+        state.loadPower != null
+          ? formatNumber(state.loadPower, 2) + " kW"
+          : "--",
+      );
+      setText(
+        "tv-gridVoltageR",
+        extra.gridVoltageR != null
+          ? formatNumber(extra.gridVoltageR, 1) + " V"
+          : "--",
+      );
+      setText(
+        "tv-gridCurrentR",
+        extra.gridCurrentR != null
+          ? formatNumber(extra.gridCurrentR, 1) + " A"
+          : "--",
+      );
+      setText(
+        "tv-gridPf",
+        extra.gridPf != null ? formatNumber(extra.gridPf, 2) : "--",
+      );
+      setText(
+        "tv-totalBuyKwh",
+        extra.totalBuyKwh != null
+          ? formatNumber(extra.totalBuyKwh, 1) + " kWh"
+          : "--",
+      );
+      setText(
+        "tv-totalSellKwh",
+        extra.totalSellKwh != null
+          ? formatNumber(extra.totalSellKwh, 1) + " kWh"
+          : "--",
+      );
+    } catch (err) {
+      console.warn("[P2] refreshTelemetry error:", err);
+    }
+  },
+
+  _refreshHealthValues: async function (gatewayId) {
+    var self = this;
+    try {
+      var detail = await DataSource.devices.gatewayDetail(gatewayId);
+      if (!detail) return;
+      self._currentDetail = detail;
+      var h = (detail.gateway && detail.gateway.emsHealth) || {};
+
+      function setText(id, val) {
+        var el = document.getElementById(id);
+        if (el) el.textContent = val;
+      }
+
+      setText("hv-cpuTemp", h.cpuTemp || h.CPU_temp || "--");
+      setText("hv-cpuUsage", h.cpuUsage || h.CPU_usage || "--");
+      setText("hv-memoryUsage", h.memoryUsage || h.memory_usage || "--");
+      setText("hv-diskUsage", h.diskUsage || h.disk_usage || "--");
+      setText(
+        "hv-wifiSignalStrength",
+        parseSignalStrength(
+          h.wifi_signal_strength || h.wifiSignalStrength || "",
+        ),
+      );
+      setText(
+        "hv-systemRuntime",
+        parseChineseRuntime(h.system_runtime || h.systemRuntime || ""),
+      );
+      setText("hv-emsTemp", h.emsTemp || h.ems_temp || "--");
+      setText(
+        "hv-simStatus",
+        parseFirmwareStatus(h.SIM_status || h.simStatus || ""),
+      );
+    } catch (err) {
+      console.warn("[P2] refreshHealth error:", err);
+    }
   },
 
   _cleanupSSE: function () {
@@ -684,7 +870,7 @@ var DevicesPage = {
     // Sync status
     var syncBadgeClass =
       schedule.syncStatus === "synced"
-        ? "sync-ok"
+        ? "synced"
         : schedule.syncStatus === "pending"
           ? "sync-pending"
           : schedule.syncStatus === "failed"
@@ -708,41 +894,54 @@ var DevicesPage = {
         key: "socMinLimit",
         label: t("devices.schedule.socMin"),
         value: cfg.socMinLimit,
+        min: 0,
+        max: 100,
       },
       {
         key: "socMaxLimit",
         label: t("devices.schedule.socMax"),
         value: cfg.socMaxLimit,
+        min: 0,
+        max: 100,
       },
       {
         key: "maxChargeCurrent",
         label: t("devices.schedule.maxCharge"),
         value: cfg.maxChargeCurrent,
+        min: 0,
       },
       {
         key: "maxDischargeCurrent",
         label: t("devices.schedule.maxDischarge"),
         value: cfg.maxDischargeCurrent,
+        min: 0,
       },
       {
         key: "gridImportLimitKw",
         label: t("devices.schedule.gridImportLimit"),
         value: cfg.gridImportLimitKw,
+        min: 0,
       },
     ];
 
     var paramsHtml = configFields
       .map(function (f) {
         var val = f.value != null ? f.value : "";
+        var attrs =
+          ' type="number" class="config-input" data-cfg-key="' +
+          f.key +
+          '" step="1" value="' +
+          val +
+          '"';
+        if (f.min != null) attrs += ' min="' + f.min + '"';
+        if (f.max != null) attrs += ' max="' + f.max + '"';
         return (
           '<div class="config-row"><span class="config-label">' +
           f.label +
           '</span><div class="config-field">' +
-          '<input type="number" class="config-input" data-cfg-key="' +
-          f.key +
-          '" step="1" value="' +
-          val +
-          '">' +
+          "<input" +
+          attrs +
+          ">" +
           "</div></div>"
         );
       })
@@ -1080,19 +1279,95 @@ var DevicesPage = {
     });
   },
 
+  _validateSchedule: function (cfg) {
+    // SOC range validation
+    var socMin = parseInt(cfg.socMinLimit, 10);
+    var socMax = parseInt(cfg.socMaxLimit, 10);
+    if (!Number.isInteger(socMin) || socMin < 0 || socMin > 100) {
+      return "SOC Min deve ser entre 0 e 100";
+    }
+    if (!Number.isInteger(socMax) || socMax < 0 || socMax > 100) {
+      return "SOC Max deve ser entre 0 e 100";
+    }
+    if (socMin >= socMax) {
+      return "SOC Min deve ser menor que SOC Max";
+    }
+
+    // Current/power limits
+    var chargeCurrent = parseInt(cfg.maxChargeCurrent, 10);
+    if (!Number.isInteger(chargeCurrent) || chargeCurrent < 0) {
+      return "Corrente de carga deve ser \u2265 0";
+    }
+    var dischargeCurrent = parseInt(cfg.maxDischargeCurrent, 10);
+    if (!Number.isInteger(dischargeCurrent) || dischargeCurrent < 0) {
+      return "Corrente de descarga deve ser \u2265 0";
+    }
+    var gridLimit = parseInt(cfg.gridImportLimitKw, 10);
+    if (!Number.isInteger(gridLimit) || gridLimit < 0) {
+      return "Limite de importa\u00e7\u00e3o deve ser \u2265 0";
+    }
+
+    // Slot validation
+    if (!cfg.slots || cfg.slots.length === 0) {
+      return "Os hor\u00e1rios devem cobrir 24h completas (00:00\u201324:00)";
+    }
+
+    for (var i = 0; i < cfg.slots.length; i++) {
+      var slot = cfg.slots[i];
+      if (
+        !Number.isInteger(slot.startMinute) ||
+        slot.startMinute < 0 ||
+        slot.startMinute > 1380 ||
+        slot.startMinute % 60 !== 0
+      ) {
+        return "Hor\u00e1rio de in\u00edcio inv\u00e1lido no slot " + (i + 1);
+      }
+      if (
+        !Number.isInteger(slot.endMinute) ||
+        slot.endMinute < 60 ||
+        slot.endMinute > 1440 ||
+        slot.endMinute % 60 !== 0
+      ) {
+        return "Hor\u00e1rio de fim inv\u00e1lido no slot " + (i + 1);
+      }
+      if (slot.endMinute <= slot.startMinute) {
+        return "Fim deve ser posterior ao in\u00edcio no slot " + (i + 1);
+      }
+    }
+
+    // Coverage validation: sort by start, check full 24h
+    var sorted = cfg.slots.slice().sort(function (a, b) {
+      return a.startMinute - b.startMinute;
+    });
+
+    if (
+      sorted[0].startMinute !== 0 ||
+      sorted[sorted.length - 1].endMinute !== 1440
+    ) {
+      return "Os hor\u00e1rios devem cobrir 24h completas (00:00\u201324:00)";
+    }
+
+    for (var j = 1; j < sorted.length; j++) {
+      if (sorted[j].startMinute < sorted[j - 1].endMinute) {
+        return "Sobreposi\u00e7\u00e3o detectada entre hor\u00e1rios";
+      }
+      if (sorted[j].startMinute > sorted[j - 1].endMinute) {
+        return "Intervalo detectado entre hor\u00e1rios";
+      }
+    }
+
+    return null; // valid
+  },
+
   _handleApplySchedule: async function () {
     var self = this;
     var gwId = self._currentGatewayId;
     if (!gwId || !self._pendingConfig) return;
 
-    // Client-side validation
-    var cfg = self._pendingConfig;
-    if (cfg.socMinLimit >= cfg.socMaxLimit) {
-      self._showToast("SOC Min must be < SOC Max", "warning");
-      return;
-    }
-    if (!cfg.slots || cfg.slots.length === 0) {
-      self._showToast(t("devices.invalidSchedule"), "warning");
+    // Client-side validation (matches BFF validateSchedule rules)
+    var validationError = self._validateSchedule(self._pendingConfig);
+    if (validationError) {
+      self._showToast(validationError, "warning");
       return;
     }
 
@@ -1137,6 +1412,7 @@ var DevicesPage = {
 
     var indicators = [
       {
+        id: "hv-wifiSignalStrength",
         icon: "\ud83d\udce1",
         label: t("devices.health.wifi"),
         value: parseSignalStrength(
@@ -1144,36 +1420,43 @@ var DevicesPage = {
         ),
       },
       {
+        id: "hv-cpuTemp",
         icon: "\ud83c\udf21",
         label: t("devices.health.cpuTemp"),
         value: h.cpuTemp || h.CPU_temp || "--",
       },
       {
+        id: "hv-cpuUsage",
         icon: "\ud83d\udcbb",
         label: t("devices.health.cpuUsage"),
         value: h.cpuUsage || h.CPU_usage || "--",
       },
       {
+        id: "hv-memoryUsage",
         icon: "\ud83d\udcbe",
         label: t("devices.health.memory"),
         value: h.memoryUsage || h.memory_usage || "--",
       },
       {
+        id: "hv-diskUsage",
         icon: "\ud83d\udcbf",
         label: t("devices.health.disk"),
         value: h.diskUsage || h.disk_usage || "--",
       },
       {
+        id: "hv-systemRuntime",
         icon: "\u23f1",
         label: t("devices.health.uptime"),
         value: parseChineseRuntime(h.system_runtime || h.systemRuntime || ""),
       },
       {
+        id: "hv-emsTemp",
         icon: "\ud83c\udf21",
         label: t("devices.health.emsTemp"),
         value: h.emsTemp || h.ems_temp || "--",
       },
       {
+        id: "hv-simStatus",
         icon: "\ud83d\udcf6",
         label: t("devices.health.sim"),
         value: parseFirmwareStatus(h.SIM_status || h.simStatus || ""),
@@ -1189,7 +1472,9 @@ var DevicesPage = {
             '<span class="ems-icon">' +
             ind.icon +
             "</span>" +
-            '<span class="ems-value">' +
+            '<span class="ems-value" id="' +
+            ind.id +
+            '">' +
             ind.value +
             "</span>" +
             '<span class="ems-label">' +
@@ -1393,27 +1678,27 @@ var DevicesPage = {
     var body =
       '<div class="energy-flow-diamond">' +
       svgOverlay +
-      '<div class="ef-pv ef-node"><div class="ef-node-icon">\u2600\ufe0f</div><div class="ef-node-value">' +
+      '<div class="ef-pv ef-node"><div class="ef-node-icon">\u2600\ufe0f</div><div class="ef-node-value" id="tv-pvPower">' +
       pvVal +
       '</div><div class="ef-node-label">' +
       t("devices.ef.solarPv") +
       "</div></div>" +
-      '<div class="ef-battery ef-node"><div class="ef-node-icon">\ud83d\udd0b</div><div class="ef-node-value">' +
+      '<div class="ef-battery ef-node"><div class="ef-node-icon">\ud83d\udd0b</div><div class="ef-node-value" id="tv-batteryPower">' +
       batVal +
-      '</div><div class="ef-node-sub">' +
+      '</div><div class="ef-node-sub" id="tv-batterySub">' +
       batSub +
       "</div></div>" +
       '<div class="ef-center"><div class="ef-center-hub"></div></div>' +
-      '<div class="ef-load ef-node"><div class="ef-node-icon">\ud83c\udfe0</div><div class="ef-node-value">' +
+      '<div class="ef-load ef-node"><div class="ef-node-icon">\ud83c\udfe0</div><div class="ef-node-value" id="tv-loadPower">' +
       loadVal +
       '</div><div class="ef-node-label">' +
       t("devices.ef.load") +
       "</div></div>" +
       '<div class="ef-grid ef-node ' +
       gridClass +
-      '"><div class="ef-node-icon">\u26a1</div><div class="ef-node-value">' +
+      '"><div class="ef-node-icon">\u26a1</div><div class="ef-node-value" id="tv-gridPowerKw">' +
       gridVal +
-      '</div><div class="ef-node-sub">' +
+      '</div><div class="ef-node-sub" id="tv-gridSub">' +
       gridSub +
       "</div></div>" +
       "</div>";
@@ -1425,14 +1710,17 @@ var DevicesPage = {
   _buildBatteryStatus: function (state) {
     var rows = [
       {
+        id: "tv-batterySoc",
         label: t("devices.soc"),
         value: state.batterySoc != null ? state.batterySoc + "%" : "--",
       },
       {
+        id: "tv-batSoh",
         label: t("devices.soh"),
         value: state.batSoh != null ? state.batSoh + "%" : "--",
       },
       {
+        id: "tv-batteryVoltage",
         label: t("devices.voltage"),
         value:
           state.batteryVoltage != null
@@ -1440,6 +1728,7 @@ var DevicesPage = {
             : "--",
       },
       {
+        id: "tv-batteryCurrent",
         label: t("devices.current"),
         value:
           state.batteryCurrent != null
@@ -1447,6 +1736,7 @@ var DevicesPage = {
             : "--",
       },
       {
+        id: "tv-batteryTemperature",
         label: t("devices.temperature"),
         value:
           state.batteryTemperature != null
@@ -1454,6 +1744,7 @@ var DevicesPage = {
             : "--",
       },
       {
+        id: "tv-batteryPowerRate",
         label: t("devices.chargeRate"),
         value:
           state.batteryPower != null
@@ -1461,11 +1752,13 @@ var DevicesPage = {
             : "--",
       },
       {
+        id: "tv-maxChargeCurrent",
         label: t("devices.maxChargeCurrent"),
         value:
           state.maxChargeCurrent != null ? state.maxChargeCurrent + " A" : "--",
       },
       {
+        id: "tv-maxDischargeCurrent",
         label: t("devices.maxDischargeCurrent"),
         value:
           state.maxDischargeCurrent != null
@@ -1478,7 +1771,9 @@ var DevicesPage = {
         return (
           '<div class="tele-row"><span class="tele-label">' +
           r.label +
-          '</span><span class="tele-value">' +
+          '</span><span class="tele-value" id="' +
+          r.id +
+          '">' +
           r.value +
           "</span></div>"
         );
@@ -1491,16 +1786,19 @@ var DevicesPage = {
   _buildInverterGrid: function (state, extra) {
     var rows = [
       {
+        id: "tv-pvPowerDetail",
         label: t("devices.pvPower"),
         value:
           state.pvPower != null ? formatNumber(state.pvPower, 2) + " kW" : "--",
       },
       {
+        id: "tv-inverterTemp",
         label: t("devices.inverterTemp"),
         value:
           state.inverterTemp != null ? state.inverterTemp + "\u00b0C" : "--",
       },
       {
+        id: "tv-gridPowerDetail",
         label: t("devices.gridPower"),
         value:
           state.gridPowerKw != null
@@ -1508,6 +1806,7 @@ var DevicesPage = {
             : "--",
       },
       {
+        id: "tv-gridVoltageR",
         label: t("devices.gridVoltage"),
         value:
           extra.gridVoltageR != null
@@ -1515,6 +1814,7 @@ var DevicesPage = {
             : "--",
       },
       {
+        id: "tv-gridCurrentR",
         label: t("devices.gridCurrent"),
         value:
           extra.gridCurrentR != null
@@ -1522,10 +1822,12 @@ var DevicesPage = {
             : "--",
       },
       {
+        id: "tv-gridPf",
         label: t("devices.powerFactor"),
         value: extra.gridPf != null ? formatNumber(extra.gridPf, 2) : "--",
       },
       {
+        id: "tv-loadPowerDetail",
         label: t("devices.homeLoad"),
         value:
           state.loadPower != null
@@ -1533,6 +1835,7 @@ var DevicesPage = {
             : "--",
       },
       {
+        id: "tv-totalBuyKwh",
         label: t("devices.totalBuy"),
         value:
           extra.totalBuyKwh != null
@@ -1540,6 +1843,7 @@ var DevicesPage = {
             : "--",
       },
       {
+        id: "tv-totalSellKwh",
         label: t("devices.totalSell"),
         value:
           extra.totalSellKwh != null
@@ -1552,7 +1856,9 @@ var DevicesPage = {
         return (
           '<div class="tele-row"><span class="tele-label">' +
           r.label +
-          '</span><span class="tele-value">' +
+          '</span><span class="tele-value" id="' +
+          r.id +
+          '">' +
           r.value +
           "</span></div>"
         );
@@ -1683,7 +1989,7 @@ var DevicesPage = {
   _buildScheduleCard: function (schedule) {
     var syncBadgeClass =
       schedule.syncStatus === "synced"
-        ? "sync-ok"
+        ? "synced"
         : schedule.syncStatus === "pending"
           ? "sync-pending"
           : "sync-unknown";

@@ -49,7 +49,22 @@ export async function handler(
     return apiError(400, "gatewayId is required");
   }
 
-  // Query 1: Latest get_reply for ground truth battery_schedule
+  // Query 1: Latest successful set command (user's last applied config)
+  const setSuccessResult = await queryWithOrg(
+    `SELECT payload_json
+     FROM device_command_logs
+     WHERE gateway_id = $1
+       AND command_type = 'set'
+       AND config_name = 'battery_schedule'
+       AND result = 'success'
+       AND payload_json IS NOT NULL
+     ORDER BY created_at DESC
+     LIMIT 1`,
+    [gatewayId],
+    rlsOrgId,
+  );
+
+  // Query 2: Fallback — latest get_reply (gateway-reported config)
   const getReplyResult = await queryWithOrg(
     `SELECT payload_json
      FROM device_command_logs
@@ -63,7 +78,7 @@ export async function handler(
     rlsOrgId,
   );
 
-  // Query 2: Latest set command for sync status
+  // Query 3: Latest set command (any status) for sync status
   const setResult = await queryWithOrg(
     `SELECT result, resolved_at, created_at
      FROM device_command_logs
@@ -76,7 +91,7 @@ export async function handler(
     rlsOrgId,
   );
 
-  // Parse get_reply into domain format
+  // Priority: successful set payload > get_reply > null
   let batterySchedule: {
     socMinLimit: number | null;
     socMaxLimit: number | null;
@@ -92,11 +107,28 @@ export async function handler(
     }>;
   } | null = null;
 
-  if (getReplyResult.rows.length > 0) {
+  if (setSuccessResult.rows.length > 0) {
+    // Use the DomainSchedule we stored in payload_json at PUT time
+    const row = setSuccessResult.rows[0] as Record<string, unknown>;
+    const domain = row.payload_json as {
+      socMinLimit: number; socMaxLimit: number;
+      maxChargeCurrent: number; maxDischargeCurrent: number;
+      gridImportLimitKw: number;
+      slots: DomainSlot[];
+    };
+    batterySchedule = {
+      socMinLimit: domain.socMinLimit,
+      socMaxLimit: domain.socMaxLimit,
+      maxChargeCurrent: domain.maxChargeCurrent,
+      maxDischargeCurrent: domain.maxDischargeCurrent,
+      gridImportLimitKw: domain.gridImportLimitKw,
+      slots: domain.slots.map(domainSlotToResponse),
+    };
+  } else if (getReplyResult.rows.length > 0) {
+    // Fallback: parse protocol format from get_reply
     const row = getReplyResult.rows[0] as Record<string, unknown>;
     const protocolData = row.payload_json as ProtocolSchedule | null;
     const domain = parseGetReply(protocolData);
-
     if (domain) {
       batterySchedule = {
         socMinLimit: domain.socMinLimit,

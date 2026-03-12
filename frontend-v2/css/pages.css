@@ -2192,6 +2192,43 @@
 
 .schedule-section {
   margin-bottom: var(--space-sm);
+  overflow-x: auto;
+}
+
+.schedule-section .schedule-table {
+  table-layout: fixed;
+  min-width: 420px;
+}
+
+.schedule-section .schedule-table th,
+.schedule-section .schedule-table td {
+  padding: 4px 4px;
+  font-size: 0.78rem;
+  white-space: nowrap;
+}
+
+/* Compact column widths for schedule editor */
+.schedule-section .schedule-table th:nth-child(1),
+.schedule-section .schedule-table td:nth-child(1),
+.schedule-section .schedule-table th:nth-child(2),
+.schedule-section .schedule-table td:nth-child(2) { width: 65px; }
+
+.schedule-section .schedule-table th:nth-child(3),
+.schedule-section .schedule-table td:nth-child(3) { width: 120px; }
+
+.schedule-section .schedule-table th:nth-child(4),
+.schedule-section .schedule-table td:nth-child(4) { width: 80px; }
+
+.schedule-section .schedule-table th:nth-child(5),
+.schedule-section .schedule-table td:nth-child(5) { width: 70px; }
+
+.schedule-section .schedule-table th:nth-child(6),
+.schedule-section .schedule-table td:nth-child(6) { width: 30px; }
+
+.schedule-section .schedule-table select.config-input {
+  max-width: 100%;
+  font-size: 0.75rem;
+  padding: 2px 2px;
 }
 
 .slot-na {
