@@ -435,6 +435,28 @@ var DataSource = (function () {
     },
   };
 
+  // ── Asset (P3 History) ───────────────────────────────────
+  var asset = {
+    telemetry: function (assetId, from, to, resolution) {
+      var qs =
+        "?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
+      if (resolution) qs += "&resolution=" + encodeURIComponent(resolution);
+      return withFallback(
+        function () {
+          return apiGet("/api/assets/" + assetId + "/telemetry" + qs);
+        },
+        { points: [], summary: {} },
+      );
+    },
+    health: function (assetId, from, to) {
+      var qs =
+        "?from=" + encodeURIComponent(from) + "&to=" + encodeURIComponent(to);
+      return withFallback(function () {
+        return apiGet("/api/assets/" + assetId + "/health" + qs);
+      }, {});
+    },
+  };
+
   // ── Public API ────────────────────────────────────────────
   return {
     get USE_LIVE_API() {
@@ -456,5 +478,6 @@ var DataSource = (function () {
     tariffs: tariffs,
     vpp: vpp,
     performance: performance,
+    asset: asset,
   };
 })();

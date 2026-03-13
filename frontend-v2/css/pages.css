@@ -2380,3 +2380,264 @@
     width: 100%;
   }
 }
+
+/* ---- P3-AE: Asset Energy Flow ---- */
+.p3ae-page {
+  padding: 0;
+}
+
+.p3ae-header {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-md);
+}
+
+.p3ae-back-btn {
+  flex-shrink: 0;
+}
+
+.p3ae-title h2 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text);
+  margin: 0;
+}
+
+.p3ae-date-display {
+  font-size: 0.82rem;
+  color: var(--muted);
+  font-family: var(--font-data);
+}
+
+.p3ae-controls {
+  margin-bottom: var(--space-md);
+}
+
+.p3ae-controls-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  flex-wrap: wrap;
+}
+
+.p3ae-gran-group {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.p3ae-gran-btn {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  border-right: 1px solid var(--border);
+  padding: 8px 16px;
+  font-size: 0.82rem;
+  font-family: var(--font-ui);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.p3ae-gran-btn:last-child {
+  border-right: none;
+}
+
+.p3ae-gran-btn.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.p3ae-gran-btn:hover:not(.active) {
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--text);
+}
+
+.p3ae-nav-group {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+}
+
+.p3ae-nav-arrow {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  width: 36px;
+  height: 36px;
+  font-size: 1rem;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: background var(--transition-fast);
+}
+
+.p3ae-nav-arrow:hover {
+  background: var(--accent-bg);
+  border-color: var(--accent);
+}
+
+.p3ae-date-input {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text);
+  padding: 6px 12px;
+  font-size: 0.85rem;
+  font-family: var(--font-data);
+  height: 36px;
+}
+
+.p3ae-date-input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 2px rgba(59, 130, 246, 0.15);
+}
+
+.p3ae-shortcuts {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.p3ae-shortcut {
+  background: transparent;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--muted);
+  padding: 6px 12px;
+  font-size: 0.78rem;
+  font-family: var(--font-ui);
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.p3ae-shortcut:hover {
+  background: var(--accent-bg);
+  color: var(--accent);
+  border-color: var(--accent);
+}
+
+.p3ae-summary {
+  margin-bottom: var(--space-md);
+}
+
+.p3ae-chart {
+  height: 420px;
+}
+
+/* Responsive: stack controls vertically on narrow screens */
+@media (max-width: 1200px) {
+  .p3ae-controls-row {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+}
+
+/* Asset energy link in P2 device rows */
+.p2-asset-energy-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: var(--accent);
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+
+.p2-asset-energy-link:hover {
+  color: #2563eb;
+  text-decoration: underline;
+}
+
+/* Asset health link in P2 device rows */
+.p2-asset-health-link {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  color: #8b5cf6;
+  font-size: 0.78rem;
+  cursor: pointer;
+  text-decoration: none;
+  transition: color var(--transition-fast);
+  margin-left: 8px;
+}
+
+.p2-asset-health-link:hover {
+  color: #7c3aed;
+  text-decoration: underline;
+}
+
+/* ---- P3-2: Asset Health ---- */
+.p3ah-page {
+  padding: 0;
+}
+
+.p3ah-tabs {
+  display: flex;
+  gap: 0;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+  margin-bottom: var(--space-md);
+  width: fit-content;
+}
+
+.p3ah-tab {
+  background: transparent;
+  color: var(--muted);
+  border: none;
+  border-right: 1px solid var(--border);
+  padding: 8px 20px;
+  font-size: 0.85rem;
+  font-family: var(--font-ui);
+  font-weight: 500;
+  cursor: pointer;
+  transition: background var(--transition-fast), color var(--transition-fast);
+}
+
+.p3ah-tab:last-child {
+  border-right: none;
+}
+
+.p3ah-tab.active {
+  background: var(--accent);
+  color: #fff;
+}
+
+.p3ah-tab:hover:not(.active) {
+  background: rgba(59, 130, 246, 0.08);
+  color: var(--text);
+}
+
+.p3ah-summary {
+  margin-bottom: var(--space-md);
+}
+
+.p3ah-chart {
+  height: 320px;
+}
+
+.p3ah-soh-hint {
+  color: var(--muted);
+  font-size: 0.85rem;
+  padding: var(--space-lg);
+  text-align: center;
+  font-style: italic;
+}
+
+.p3ah-do-table {
+  width: 100%;
+}
+
+.p3ah-no-events {
+  color: var(--muted);
+  font-size: 0.85rem;
+  text-align: center;
+  padding: var(--space-md);
+}

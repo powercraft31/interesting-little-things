@@ -116,7 +116,9 @@ function navigateTo(pageId) {
   currentPage = pageId;
 
   // Update hash without triggering hashchange loop
-  if (location.hash !== page.hash) {
+  // Preserve query params if base hash already matches (e.g. #energy?gw=...)
+  var baseHash = (location.hash || "").split("?")[0];
+  if (baseHash !== page.hash) {
     history.pushState(null, "", page.hash);
   }
 
@@ -233,7 +235,8 @@ function formatShortDate(iso) {
 
 // Listen for hash changes (back/forward navigation)
 window.addEventListener("hashchange", function () {
-  var hash = location.hash || "#fleet";
+  var hash = (location.hash || "#fleet").split("?")[0];
+
   var page = PAGES.find(function (p) {
     return p.hash === hash;
   });
@@ -454,7 +457,7 @@ document.addEventListener("DOMContentLoaded", function () {
   });
 
   // Navigate to initial page
-  var hash = location.hash || "#fleet";
+  var hash = (location.hash || "#fleet").split("?")[0];
   var page = PAGES.find(function (p) {
     return p.hash === hash;
   });

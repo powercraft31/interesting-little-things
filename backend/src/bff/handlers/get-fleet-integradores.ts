@@ -22,7 +22,7 @@ export async function handler(
   let ctx;
   try {
     ctx = extractTenantContext(event);
-    requireRole(ctx, [Role.SOLFACIL_ADMIN]);
+    requireRole(ctx, [Role.SOLFACIL_ADMIN, Role.ORG_MANAGER, Role.ORG_OPERATOR, Role.ORG_VIEWER]);
   } catch (err: unknown) {
     const e = err as { statusCode?: number; message?: string };
     return apiError(e.statusCode ?? 500, e.message ?? "Error");
@@ -42,7 +42,7 @@ export async function handler(
      GROUP BY o.org_id, o.name
      ORDER BY o.name`,
     [],
-    null, // admin-only — bypass RLS
+    ctx.role === 'SOLFACIL_ADMIN' ? null : ctx.orgId,
   );
 
   const integradores = rows.map((r: Record<string, unknown>) => ({

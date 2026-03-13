@@ -37,6 +37,9 @@ import { handler as vppLatencyHandler } from "../src/bff/handlers/get-vpp-latenc
 import { handler as vppDrEventsHandler } from "../src/bff/handlers/get-vpp-dr-events";
 import { handler as perfScorecardHandler } from "../src/bff/handlers/get-performance-scorecard";
 import { handler as perfSavingsHandler } from "../src/bff/handlers/get-performance-savings";
+// v5.24: P3 Asset History View
+import { handler as getAssetTelemetryHandler } from "../src/bff/handlers/get-asset-telemetry";
+import { handler as getAssetHealthHandler } from "../src/bff/handlers/get-asset-health";
 import { handleCceeWebhook } from "../src/open-api/handlers/ccee-webhook";
 import { handleWeatherWebhook } from "../src/open-api/handlers/weather-webhook";
 import { createTelemetryWebhookHandler } from "../src/iot-hub/handlers/telemetry-webhook";
@@ -268,6 +271,19 @@ app.get(
   "/api/performance/savings",
   wrapHandler(perfSavingsHandler, "GET", "/api/performance/savings"),
 );
+// v5.24: P3 Asset History View
+app.get(
+  "/api/assets/:assetId/telemetry",
+  wrapHandler(
+    getAssetTelemetryHandler,
+    "GET",
+    "/api/assets/:assetId/telemetry",
+  ),
+);
+app.get(
+  "/api/assets/:assetId/health",
+  wrapHandler(getAssetHealthHandler, "GET", "/api/assets/:assetId/health"),
+);
 // ────────────────────────────────────────────────────────────────────────
 
 // ── v5.7 Inbound Webhooks ────────────────────────────────────────────────
@@ -322,7 +338,9 @@ console.log(
 // Local:  backend/dist/scripts → ../../../frontend-v2 = repo-root/frontend-v2
 const FRONTEND_DOCKER = path.resolve(__dirname, "../../frontend-v2");
 const FRONTEND_LOCAL = path.resolve(__dirname, "../../../frontend-v2");
-const FRONTEND_DIR = fs.existsSync(FRONTEND_DOCKER) ? FRONTEND_DOCKER : FRONTEND_LOCAL;
+const FRONTEND_DIR = fs.existsSync(FRONTEND_DOCKER)
+  ? FRONTEND_DOCKER
+  : FRONTEND_LOCAL;
 app.use(express.static(FRONTEND_DIR));
 app.get("/", (_req, res) =>
   res.sendFile(path.join(FRONTEND_DIR, "index.html")),
@@ -363,6 +381,8 @@ app.listen(PORT, () => {
   console.log("  GET  /api/vpp/dr-events             (v5.12)");
   console.log("  GET  /api/performance/scorecard     (v5.12)");
   console.log("  GET  /api/performance/savings       (v5.12)");
+  console.log("  GET  /api/assets/:id/telemetry     (v5.24)");
+  console.log("  GET  /api/assets/:id/health        (v5.24)");
   console.log("  POST /webhooks/ccee-pld");
   console.log("  POST /webhooks/weather");
   console.log("  POST /api/telemetry/mock");

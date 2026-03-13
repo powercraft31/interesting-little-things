@@ -569,7 +569,7 @@ var DevicesPage = {
         } else {
           deviceList.innerHTML = devices
             .map(function (dev) {
-              return self._buildDeviceRow(dev);
+              return self._buildDeviceRow(dev, gwId);
             })
             .join("");
           self._attachDeviceRowListeners(deviceList);
@@ -584,7 +584,7 @@ var DevicesPage = {
     }
   },
 
-  _buildDeviceRow: function (dev) {
+  _buildDeviceRow: function (dev, gatewayId) {
     var st = dev.state || {};
 
     var typeIcons = {
@@ -652,12 +652,59 @@ var DevicesPage = {
       '<div class="dev-stats">' +
       statsHtml +
       "</div>" +
+      (dev.assetType === "INVERTER_BATTERY"
+        ? '<a class="p2-asset-energy-link" data-gw="' +
+          (gatewayId || "") +
+          '" href="#energy?gw=' +
+          encodeURIComponent(gatewayId || "") +
+          '&tab=energy">' +
+          t("p3ae.viewEnergy") +
+          " \u2192</a>" +
+          '<a class="p2-asset-health-link" data-gw="' +
+          (gatewayId || "") +
+          '" href="#energy?gw=' +
+          encodeURIComponent(gatewayId || "") +
+          '&tab=health">' +
+          t("p3ah.viewHealth") +
+          " \u2192</a>"
+        : "") +
       "</div>"
     );
   },
 
   _attachDeviceRowListeners: function (container) {
-    // Device rows are now info-only — no click → Layer 3
+    // Energy link click handlers for INVERTER_BATTERY devices
+    container
+      .querySelectorAll(".p2-asset-energy-link")
+      .forEach(function (link) {
+        link.addEventListener("click", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var gwId = link.dataset.gw;
+          if (gwId) {
+            // Force re-init of energy page with this gateway
+            delete pageInitialized["energy"];
+            window.location.hash =
+              "#energy?gw=" + encodeURIComponent(gwId) + "&tab=energy";
+          }
+        });
+      });
+
+    // Health link click handlers for INVERTER_BATTERY devices
+    container
+      .querySelectorAll(".p2-asset-health-link")
+      .forEach(function (link) {
+        link.addEventListener("click", function (e) {
+          e.preventDefault();
+          e.stopPropagation();
+          var gwId = link.dataset.gw;
+          if (gwId) {
+            delete pageInitialized["energy"];
+            window.location.hash =
+              "#energy?gw=" + encodeURIComponent(gwId) + "&tab=health";
+          }
+        });
+      });
   },
 
   // =========================================================
