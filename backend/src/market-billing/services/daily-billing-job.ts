@@ -438,8 +438,8 @@ export async function runDailyPsSavings(
     )
     SELECT
       p.asset_id,
-      GREATEST(0, p.daily_peak_kva - COALESCE(h.contracted_demand_kw, 0)) AS avoided_kva,
-      GREATEST(0, p.daily_peak_kva - COALESCE(h.contracted_demand_kw, 0))
+      GREATEST(0, p.daily_peak_kva - COALESCE(g.contracted_demand_kw, 0)) AS avoided_kva,
+      GREATEST(0, p.daily_peak_kva - COALESCE(g.contracted_demand_kw, 0))
         * COALESCE(ts.demand_charge_rate_per_kva, 0)
         / GREATEST(1, DATE_PART('days',
             DATE_TRUNC('month', $1::date) + INTERVAL '1 month'

@@ -10,7 +10,7 @@ import { publishConfigGet } from "../handlers/publish-config";
  * PR3: MQTT Connection Manager
  *
  * Reads gateways table at startup, connects to each gateway's MQTT broker,
- * subscribes to 5 topics per gateway (Solfacil Protocol v1.1).
+ * subscribes to 6 topics per gateway (Solfacil Protocol v1.2).
  * Polls every 60s for new gateways. Marks offline after 10min without heartbeat.
  */
 
@@ -121,7 +121,7 @@ export class GatewayConnectionManager {
     return result.rows;
   }
 
-  /** Connect to a single gateway's MQTT broker and subscribe to 5 topics. */
+  /** Connect to a single gateway's MQTT broker and subscribe to 6 topics. */
   private async connectGateway(gw: GatewayRecord): Promise<void> {
     if (this.gatewayClients.has(gw.gateway_id)) return;
 
