@@ -41,6 +41,9 @@ import { handleWeatherWebhook } from "../src/open-api/handlers/weather-webhook";
 import { createTelemetryWebhookHandler } from "../src/iot-hub/handlers/telemetry-webhook";
 
 import { getServicePool, closeAllPools } from "../src/shared/db";
+import { authMiddleware } from "../src/bff/middleware/auth";
+import { createLoginHandler } from "../src/bff/handlers/auth-login";
+import { createAdminUsersHandler } from "../src/bff/handlers/admin-users";
 import { startScheduleGenerator } from "../src/optimization-engine/services/schedule-generator";
 import { startCommandDispatcher } from "../src/dr-dispatcher/services/command-dispatcher";
 import { startTimeoutChecker } from "../src/dr-dispatcher/handlers/timeout-checker";
@@ -54,7 +57,7 @@ type LambdaHandler = (
   event: APIGatewayProxyEventV2,
 ) => Promise<APIGatewayProxyResultV2>;
 
-const PORT = 3000;
+const PORT = Number(process.env.PORT) || 3000;
 
 function makeStubEvent(
   req: express.Request,
@@ -130,18 +133,8 @@ const app = express();
 
 app.use(express.json()); // Parse POST body (needed for webhooks)
 
-// Demo mode: inject default auth context if no Authorization header is provided
-// Allows frontend to call the API without a login flow during local testing
-app.use((req, _res, next) => {
-  if (!req.headers.authorization) {
-    req.headers.authorization = JSON.stringify({
-      userId: "demo-user",
-      orgId: "ORG_ENERGIA_001",
-      role: "SOLFACIL_ADMIN", // demo: see all 4 assets across orgs
-    });
-  }
-  next();
-});
+// v5.23: JWT auth middleware (replaces demo auth injection)
+app.use(authMiddleware);
 
 app.use(
   cors({
@@ -284,6 +277,11 @@ app.post("/webhooks/weather", handleWeatherWebhook);
 // ── Shared DB pool (v5.11: dual pool — service pool for cron/internal) ────
 const servicePool = getServicePool();
 
+// ── v5.23 Auth Routes ────────────────────────────────────────────────────
+app.post("/api/auth/login", createLoginHandler(servicePool));
+app.post("/api/users", createAdminUsersHandler(servicePool));
+// ────────────────────────────────────────────────────────────────────────
+
 // ── v5.21 SSE endpoint — raw express handler, not Lambda wrapper ──────────
 app.get("/api/events", createSseHandler(servicePool));
 // ────────────────────────────────────────────────────────────────────────
@@ -318,13 +316,16 @@ console.log(
 );
 // ────────────────────────────────────────────────────────────────────────
 
-// ── Static frontend serving ──────────────────────────────────────────────
-// Resolve frontend-v2 relative to compiled dist/scripts/local-server.js → ../../frontend-v2
-const FRONTEND_DIR = path.resolve(__dirname, "../../frontend-v2");
+// ── Static frontend serving (v5.23: removed /frontend-v2/ path, added /login) ──
+// From compiled dist/scripts/local-server.js, need 3 levels up to reach repo root frontend-v2/
+const FRONTEND_DIR = path.resolve(__dirname, "../../../frontend-v2");
 app.use(express.static(FRONTEND_DIR));
-app.use("/frontend-v2", express.static(FRONTEND_DIR));
-app.get("/", (_req, res) => res.sendFile(path.join(FRONTEND_DIR, "index.html")));
-app.get("/frontend-v2/", (_req, res) => res.sendFile(path.join(FRONTEND_DIR, "index.html")));
+app.get("/", (_req, res) =>
+  res.sendFile(path.join(FRONTEND_DIR, "index.html")),
+);
+app.get("/login", (_req, res) =>
+  res.sendFile(path.join(FRONTEND_DIR, "login.html")),
+);
 // ────────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
@@ -363,10 +364,14 @@ app.listen(PORT, () => {
   console.log("  POST /api/telemetry/mock");
   console.log("  GET  /api/events (SSE)              (v5.21)");
   console.log("  POST /api/dispatch/ack");
+  console.log("  POST /api/auth/login             (v5.23)");
+  console.log("  POST /api/users                  (v5.23)");
   console.log("");
-  console.log("Auth: pass Authorization header as raw JSON, e.g.:");
+  console.log("Auth: JWT required for /api/* routes (except /api/auth/login)");
+  console.log("  curl -X POST http://localhost:3000/api/auth/login \\");
+  console.log('    -H "Content-Type: application/json" \\');
   console.log(
-    '  curl -H \'Authorization: {"userId":"u1","orgId":"ORG_ENERGIA_001","role":"ORG_MANAGER"}\' http://localhost:3000/dashboard',
+    '    -d \'{"email":"admin@solfacil.com.br","password":"solfacil2026"}\'',
   );
 });
 

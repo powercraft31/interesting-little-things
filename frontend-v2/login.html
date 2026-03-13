@@ -1,0 +1,294 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>SOLFACIL VPP — Login</title>
+
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+
+  <style>
+    :root {
+      --bg: #0f1117;
+      --card: #1a1d27;
+      --border: #2a2d3a;
+      --text: #e4e4e7;
+      --muted: #9ca3af;
+      --accent: #3b82f6;
+      --negative: #ef4444;
+      --font-ui: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      --radius-md: 10px;
+      --radius-sm: 6px;
+    }
+
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+
+    body {
+      font-family: var(--font-ui);
+      background: var(--bg);
+      color: var(--text);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+
+    .login-container {
+      width: 100%;
+      max-width: 400px;
+      padding: 24px;
+    }
+
+    .login-brand {
+      text-align: center;
+      margin-bottom: 32px;
+    }
+
+    .login-brand .brand-icon {
+      font-size: 48px;
+      margin-bottom: 8px;
+    }
+
+    .login-brand h1 {
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: 1px;
+    }
+
+    .login-brand p {
+      color: var(--muted);
+      font-size: 14px;
+      margin-top: 4px;
+    }
+
+    .login-card {
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-md);
+      padding: 32px;
+    }
+
+    .form-group {
+      margin-bottom: 20px;
+    }
+
+    .form-group label {
+      display: block;
+      font-size: 13px;
+      font-weight: 500;
+      color: var(--muted);
+      margin-bottom: 6px;
+    }
+
+    .form-group input {
+      width: 100%;
+      padding: 10px 14px;
+      font-size: 14px;
+      font-family: var(--font-ui);
+      background: var(--bg);
+      border: 1px solid var(--border);
+      border-radius: var(--radius-sm);
+      color: var(--text);
+      outline: none;
+      transition: border-color 0.2s;
+    }
+
+    .form-group input:focus {
+      border-color: var(--accent);
+    }
+
+    .login-btn {
+      width: 100%;
+      padding: 12px;
+      font-size: 15px;
+      font-weight: 600;
+      font-family: var(--font-ui);
+      background: var(--accent);
+      color: #fff;
+      border: none;
+      border-radius: var(--radius-sm);
+      cursor: pointer;
+      transition: opacity 0.2s;
+    }
+
+    .login-btn:hover { opacity: 0.9; }
+    .login-btn:disabled { opacity: 0.5; cursor: not-allowed; }
+
+    .error-msg {
+      color: var(--negative);
+      font-size: 13px;
+      margin-bottom: 16px;
+      display: none;
+      text-align: center;
+    }
+
+    .error-msg.visible { display: block; }
+
+    .lang-row {
+      text-align: center;
+      margin-top: 20px;
+    }
+
+    .lang-row select {
+      background: var(--bg);
+      border: 1px solid var(--border);
+      color: var(--text);
+      font-family: var(--font-ui);
+      font-size: 13px;
+      padding: 4px 8px;
+      border-radius: var(--radius-sm);
+    }
+  </style>
+</head>
+<body>
+  <div class="login-container">
+    <div class="login-brand">
+      <div class="brand-icon">&#x26A1;</div>
+      <h1>SOLFACIL VPP</h1>
+      <p id="login-subtitle">Admin Portal</p>
+    </div>
+
+    <div class="login-card">
+      <form id="login-form">
+        <div class="form-group">
+          <label id="lbl-email">Email</label>
+          <input type="email" id="input-email" required autocomplete="email" placeholder="email@example.com">
+        </div>
+        <div class="form-group">
+          <label id="lbl-password">Password</label>
+          <input type="password" id="input-password" required autocomplete="current-password">
+        </div>
+        <div class="error-msg" id="error-msg"></div>
+        <button type="submit" class="login-btn" id="btn-login">Login</button>
+      </form>
+    </div>
+
+    <div class="lang-row">
+      <select id="lang-switcher">
+        <option value="pt-BR">&#x1F1E7;&#x1F1F7; PT</option>
+        <option value="en">&#x1F1FA;&#x1F1F8; EN</option>
+        <option value="zh-CN">&#x1F1E8;&#x1F1F3; &#x4E2D;&#x6587;</option>
+      </select>
+    </div>
+  </div>
+
+  <script>
+    // i18n translations for login page
+    var LOGIN_I18N = {
+      "pt-BR": {
+        subtitle: "Portal Administrativo",
+        email: "E-mail",
+        password: "Senha",
+        login: "Entrar",
+        error_required: "E-mail e senha obrigat\u00f3rios",
+        error_auth: "E-mail ou senha inv\u00e1lidos",
+        error_disabled: "Conta desativada",
+        error_server: "Erro do servidor \u2014 tente novamente",
+      },
+      en: {
+        subtitle: "Admin Portal",
+        email: "Email",
+        password: "Password",
+        login: "Login",
+        error_required: "Email and password are required",
+        error_auth: "Invalid email or password",
+        error_disabled: "Account is disabled",
+        error_server: "Server error \u2014 please try again",
+      },
+      "zh-CN": {
+        subtitle: "\u7ba1\u7406\u5e73\u53f0",
+        email: "\u7535\u5b50\u90ae\u4ef6",
+        password: "\u5bc6\u7801",
+        login: "\u767b\u5165",
+        error_required: "\u8bf7\u8f93\u5165\u7535\u5b50\u90ae\u4ef6\u548c\u5bc6\u7801",
+        error_auth: "\u7535\u5b50\u90ae\u4ef6\u6216\u5bc6\u7801\u9519\u8bef",
+        error_disabled: "\u8d26\u6237\u5df2\u505c\u7528",
+        error_server: "\u670d\u52a1\u5668\u9519\u8bef\u2014\u8bf7\u91cd\u8bd5",
+      },
+    };
+
+    var currentLang = localStorage.getItem("lang") || "pt-BR";
+
+    function tr(key) {
+      var dict = LOGIN_I18N[currentLang] || LOGIN_I18N["pt-BR"];
+      return dict[key] || key;
+    }
+
+    function updateLabels() {
+      document.getElementById("login-subtitle").textContent = tr("subtitle");
+      document.getElementById("lbl-email").textContent = tr("email");
+      document.getElementById("lbl-password").textContent = tr("password");
+      document.getElementById("btn-login").textContent = tr("login");
+    }
+
+    // Auto-redirect if already logged in
+    if (localStorage.getItem("solfacil_jwt")) {
+      window.location.href = "index.html";
+    }
+
+    // Language switcher
+    var langSwitcher = document.getElementById("lang-switcher");
+    langSwitcher.value = currentLang;
+    langSwitcher.addEventListener("change", function () {
+      currentLang = langSwitcher.value;
+      localStorage.setItem("lang", currentLang);
+      updateLabels();
+    });
+
+    updateLabels();
+
+    // Login form handler
+    document.getElementById("login-form").addEventListener("submit", function (e) {
+      e.preventDefault();
+      var email = document.getElementById("input-email").value.trim();
+      var password = document.getElementById("input-password").value;
+      var errorEl = document.getElementById("error-msg");
+      var btnEl = document.getElementById("btn-login");
+
+      if (!email || !password) {
+        errorEl.textContent = tr("error_required");
+        errorEl.classList.add("visible");
+        return;
+      }
+
+      errorEl.classList.remove("visible");
+      btnEl.disabled = true;
+      btnEl.textContent = "...";
+
+      fetch("/api/auth/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ email: email, password: password }),
+      })
+        .then(function (res) {
+          return res.json().then(function (data) {
+            return { status: res.status, body: data };
+          });
+        })
+        .then(function (result) {
+          if (result.body.success && result.body.data && result.body.data.token) {
+            localStorage.setItem("solfacil_jwt", result.body.data.token);
+            window.location.href = "index.html";
+          } else {
+            var msg = result.body.error || tr("error_auth");
+            if (msg === "Account is disabled") msg = tr("error_disabled");
+            else if (msg === "Invalid email or password") msg = tr("error_auth");
+            else if (msg === "Email and password are required") msg = tr("error_required");
+            errorEl.textContent = msg;
+            errorEl.classList.add("visible");
+          }
+        })
+        .catch(function () {
+          errorEl.textContent = tr("error_server");
+          errorEl.classList.add("visible");
+        })
+        .finally(function () {
+          btnEl.disabled = false;
+          btnEl.textContent = tr("login");
+        });
+    });
+  </script>
+</body>
+</html>

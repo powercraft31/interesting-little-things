@@ -23,11 +23,12 @@ var DataSource = (function () {
 
   // ── Helpers ───────────────────────────────────────────────
   function getAuthHeader() {
-    return JSON.stringify({
-      userId: "demo-user",
-      orgId: "ORG_ENERGIA_001",
-      role: "SOLFACIL_ADMIN",
-    });
+    var token = localStorage.getItem("solfacil_jwt");
+    if (!token) {
+      window.location.href = "login.html";
+      return "";
+    }
+    return "Bearer " + token;
   }
 
   function apiGet(path) {
@@ -35,10 +36,16 @@ var DataSource = (function () {
       headers: { Authorization: getAuthHeader() },
     })
       .then(function (res) {
+        if (res.status === 401) {
+          localStorage.removeItem("solfacil_jwt");
+          window.location.href = "login.html";
+          return;
+        }
         if (!res.ok) throw new Error("API " + res.status);
         return res.json();
       })
       .then(function (envelope) {
+        if (!envelope) return;
         if (envelope.success) return envelope.data;
         throw new Error(envelope.error || "API error");
       });
@@ -54,10 +61,16 @@ var DataSource = (function () {
       body: JSON.stringify(body),
     })
       .then(function (res) {
+        if (res.status === 401) {
+          localStorage.removeItem("solfacil_jwt");
+          window.location.href = "login.html";
+          return;
+        }
         if (!res.ok) throw new Error("API " + res.status);
         return res.json();
       })
       .then(function (envelope) {
+        if (!envelope) return;
         if (envelope.success) return envelope.data;
         throw new Error(envelope.error || "API error");
       });
@@ -73,6 +86,11 @@ var DataSource = (function () {
       body: JSON.stringify(body),
     })
       .then(function (res) {
+        if (res.status === 401) {
+          localStorage.removeItem("solfacil_jwt");
+          window.location.href = "login.html";
+          return;
+        }
         if (!res.ok) {
           var err = new Error("API " + res.status);
           err.status = res.status;
@@ -81,6 +99,7 @@ var DataSource = (function () {
         return res.json();
       })
       .then(function (envelope) {
+        if (!envelope) return;
         if (envelope.success) return envelope.data;
         throw new Error(envelope.error || "API error");
       });

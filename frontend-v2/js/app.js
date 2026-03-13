@@ -3,6 +3,11 @@
    Hash router + Role switching + DemoStore + Page init + i18n
    ============================================ */
 
+// v5.23: Auth guard — redirect to login if no JWT token
+if (!localStorage.getItem("solfacil_jwt")) {
+  window.location.href = "login.html";
+}
+
 // =========================================================
 // DemoStore — sessionStorage-backed cross-page state
 // =========================================================
@@ -390,6 +395,15 @@ document.addEventListener("DOMContentLoaded", function () {
       if (pageId) navigateTo(pageId);
     });
   });
+
+  // v5.23: Logout button handler
+  var logoutBtn = document.getElementById("btn-logout");
+  if (logoutBtn) {
+    logoutBtn.addEventListener("click", function () {
+      localStorage.removeItem("solfacil_jwt");
+      window.location.href = "login.html";
+    });
+  }
 
   // Set default theme
   document.body.dataset.theme = "dark";

@@ -1,0 +1,3 @@
+-- v5.23: JWT Auth Shell — No schema changes needed
+-- users + user_org_roles tables already exist in ddl_base.sql
+-- Actual seed uses the TypeScript seed script for bcrypt hash generation at runtime.
