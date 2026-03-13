@@ -1,5 +1,6 @@
 import express from "express";
 import path from "path";
+import fs from "fs";
 import cors from "cors";
 import type {
   APIGatewayProxyEventV2,
@@ -317,8 +318,11 @@ console.log(
 // ────────────────────────────────────────────────────────────────────────
 
 // ── Static frontend serving (v5.23: removed /frontend-v2/ path, added /login) ──
-// From compiled dist/scripts/local-server.js, need 3 levels up to reach repo root frontend-v2/
-const FRONTEND_DIR = path.resolve(__dirname, "../../../frontend-v2");
+// Docker: /app/dist/scripts → ../../frontend-v2 = /app/frontend-v2
+// Local:  backend/dist/scripts → ../../../frontend-v2 = repo-root/frontend-v2
+const FRONTEND_DOCKER = path.resolve(__dirname, "../../frontend-v2");
+const FRONTEND_LOCAL = path.resolve(__dirname, "../../../frontend-v2");
+const FRONTEND_DIR = fs.existsSync(FRONTEND_DOCKER) ? FRONTEND_DOCKER : FRONTEND_LOCAL;
 app.use(express.static(FRONTEND_DIR));
 app.get("/", (_req, res) =>
   res.sendFile(path.join(FRONTEND_DIR, "index.html")),
