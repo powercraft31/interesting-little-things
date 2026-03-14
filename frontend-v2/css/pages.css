@@ -986,6 +986,333 @@
   flex-shrink: 0;
 }
 
+/* ---- P4 v6.0: New Component Styles ---- */
+
+/* Parameter Panels */
+.p4-param-panel {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+  margin-top: var(--space-md);
+}
+.p4-param-panel h4 {
+  font-size: 0.95rem;
+  font-weight: 600;
+  margin-bottom: var(--space-md);
+  color: var(--text-primary, #e0e0e0);
+}
+.p4-param-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-md);
+  margin-bottom: var(--space-sm);
+}
+.p4-param-row label {
+  min-width: 120px;
+  font-size: 0.85rem;
+  color: var(--text-secondary, #aaa);
+}
+.p4-param-row input[type="range"] {
+  flex: 1;
+  accent-color: var(--accent);
+}
+.p4-soc-min-val,
+.p4-soc-max-val {
+  font-family: var(--font-data);
+  font-weight: 700;
+  font-size: 0.9rem;
+  min-width: 2.5rem;
+  text-align: right;
+  color: var(--accent);
+}
+.p4-grid-limit {
+  margin-top: var(--space-sm);
+}
+.p4-grid-limit input[type="number"] {
+  background: var(--bg-secondary, #1e1e1e);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-primary, #e0e0e0);
+  padding: 0.4rem 0.6rem;
+  width: 120px;
+  font-family: var(--font-data);
+}
+
+/* Arbitrage Grid — 24-tile horizontal layout */
+.p4-arb-brush {
+  display: flex;
+  gap: var(--space-lg);
+  margin-bottom: var(--space-md);
+  align-items: center;
+}
+.p4-arb-brush label {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+  padding: 0.3rem 0.8rem;
+  border-radius: var(--radius-sm, 4px);
+  border: 1px solid var(--border);
+  transition: background 0.15s, border-color 0.15s;
+}
+.p4-arb-brush label:has(input:checked) {
+  background: rgba(59, 130, 246, 0.15);
+  border-color: var(--accent);
+}
+.p4-arb-brush label[data-brush="charge"],
+.p4-arb-brush label:first-of-type {
+  --brush-color: #22c55e;
+}
+.p4-arb-brush label[data-brush="discharge"],
+.p4-arb-brush label:last-of-type {
+  --brush-color: #f97316;
+}
+.p4-arb-brush label::before {
+  content: "";
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  background: var(--brush-color, var(--border));
+  flex-shrink: 0;
+}
+.p4-arb-brush input[type="radio"] {
+  accent-color: var(--accent);
+}
+.p4-arb-grid {
+  display: grid;
+  grid-template-columns: repeat(12, 1fr);
+  gap: 4px;
+  margin-bottom: var(--space-md);
+  user-select: none;
+}
+.p4-arb-cell {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: var(--bg-secondary, #1e1e1e);
+  border: 2px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  font-size: 0.82rem;
+  font-family: var(--font-data);
+  color: var(--text-secondary, #aaa);
+  cursor: pointer;
+  transition: background 0.12s, border-color 0.12s, transform 0.1s;
+  height: 40px;
+}
+.p4-arb-cell:hover {
+  border-color: var(--accent);
+  transform: scale(1.05);
+  z-index: 1;
+}
+.p4-arb-cell.p4-arb-charge {
+  background: rgba(34, 197, 94, 0.35);
+  border-color: #22c55e;
+  color: #fff;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+.p4-arb-cell.p4-arb-discharge {
+  background: rgba(249, 115, 22, 0.35);
+  border-color: #f97316;
+  color: #fff;
+  font-weight: 700;
+  text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+.p4-arb-cell {
+  position: relative;
+}
+@media (max-width: 768px) {
+  .p4-arb-grid {
+    grid-template-columns: repeat(8, 1fr);
+  }
+}
+@media (max-width: 480px) {
+  .p4-arb-grid {
+    grid-template-columns: repeat(6, 1fr);
+  }
+}
+
+/* Arb Templates */
+.p4-arb-templates {
+  display: flex;
+  gap: var(--space-sm);
+  flex-wrap: wrap;
+}
+.p4-arb-templates .btn {
+  font-size: 0.78rem;
+  padding: 0.3rem 0.7rem;
+  background: var(--bg-secondary, #1e1e1e);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm, 4px);
+  color: var(--text-secondary, #aaa);
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+}
+.p4-arb-templates .btn:hover {
+  background: rgba(59, 130, 246, 0.12);
+  border-color: var(--accent);
+  color: var(--text-primary, #e0e0e0);
+}
+
+/* Navigation Buttons */
+.p4-nav-buttons {
+  display: flex;
+  justify-content: space-between;
+  margin-top: var(--space-lg);
+  gap: var(--space-md);
+}
+.p4-btn-prev,
+.p4-btn-next {
+  padding: 0.6rem 1.5rem;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 0.9rem;
+  font-weight: 600;
+  cursor: pointer;
+  transition: background 0.15s, opacity 0.15s;
+  border: 1px solid var(--border);
+}
+.p4-btn-prev {
+  background: var(--bg-secondary, #1e1e1e);
+  color: var(--text-secondary, #aaa);
+}
+.p4-btn-prev:hover {
+  background: var(--bg-tertiary, #333);
+}
+.p4-btn-next {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.p4-btn-next:hover:not(:disabled) {
+  filter: brightness(1.15);
+}
+.p4-btn-next:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+.p4-btn-dispatch {
+  background: var(--accent);
+  color: #fff;
+  border: none;
+  padding: 0.7rem 2rem;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 0.95rem;
+  font-weight: 700;
+  cursor: pointer;
+  transition: filter 0.15s, transform 0.1s;
+}
+.p4-btn-dispatch:hover {
+  filter: brightness(1.15);
+  transform: translateY(-1px);
+}
+
+/* Gateway Selection Table */
+.p4-gw-table {
+  width: 100%;
+  border-collapse: collapse;
+  margin-top: var(--space-md);
+}
+.p4-gw-table th {
+  text-align: left;
+  padding: 0.6rem 0.8rem;
+  font-size: 0.72rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  color: var(--text-secondary, #888);
+  border-bottom: 1px solid var(--border);
+}
+.p4-gw-table td {
+  padding: 0.7rem 0.8rem;
+  font-size: 0.85rem;
+  border-bottom: 1px solid rgba(255,255,255,0.05);
+  color: var(--text-primary, #e0e0e0);
+}
+.p4-gw-table tr:hover td {
+  background: rgba(59, 130, 246, 0.06);
+}
+.p4-gw-table input[type="checkbox"] {
+  accent-color: var(--accent);
+  width: 16px;
+  height: 16px;
+}
+
+/* Step 3: Confirmation Summary */
+.p4-config-summary {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-lg);
+}
+.p4-config-summary p {
+  margin: 0.4rem 0;
+  font-size: 0.9rem;
+  color: var(--text-primary, #e0e0e0);
+}
+.p4-gw-preview {
+  margin-top: var(--space-md);
+  max-height: 200px;
+  overflow-y: auto;
+}
+.p4-gw-preview li {
+  padding: 0.3rem 0;
+  font-size: 0.82rem;
+  color: var(--text-secondary, #aaa);
+  border-bottom: 1px solid rgba(255,255,255,0.04);
+}
+
+/* Confirm Modal */
+.p4-confirm-modal {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.6);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+  backdrop-filter: blur(4px);
+}
+.p4-confirm-modal > div {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-xl, 2rem);
+  max-width: 420px;
+  width: 90%;
+  text-align: center;
+}
+.p4-confirm-modal h3 {
+  margin-bottom: var(--space-md);
+  font-size: 1.1rem;
+}
+.p4-confirm-modal p {
+  margin-bottom: var(--space-lg);
+  color: var(--text-secondary, #aaa);
+  font-size: 0.9rem;
+}
+.p4-confirm-ok,
+.p4-confirm-cancel {
+  padding: 0.5rem 1.2rem;
+  border-radius: var(--radius-sm, 4px);
+  font-size: 0.85rem;
+  font-weight: 600;
+  cursor: pointer;
+  margin: 0 0.3rem;
+  border: 1px solid var(--border);
+}
+.p4-confirm-ok {
+  background: var(--accent);
+  color: #fff;
+  border-color: var(--accent);
+}
+.p4-confirm-cancel {
+  background: var(--bg-secondary, #1e1e1e);
+  color: var(--text-secondary, #aaa);
+}
+
 /* Mode Selection Cards */
 .p4-mode-cards {
   display: grid;
@@ -1017,8 +1344,24 @@
 }
 
 .p4-mode-card[selected] {
-  border-color: var(--mode-border, var(--accent));
-  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.25);
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.3), 0 6px 20px rgba(0,0,0,0.3);
+  background: rgba(59, 130, 246, 0.12);
+  transform: translateY(-3px);
+}
+.p4-mode-card[selected] .p4-mode-title {
+  color: var(--accent);
+  font-size: 1.05rem;
+}
+.p4-mode-card[selected] .p4-mode-desc {
+  color: var(--text-primary, #e0e0e0);
+}
+.p4-mode-card[selected] .p4-mode-icon {
+  transform: scale(1.1);
+  transition: transform 0.2s;
+}
+.p4-mode-card[selected] .p4-mode-check {
+  transform: scale(1.15);
 }
 
 .p4-mode-card.p4-mode-disabled {
