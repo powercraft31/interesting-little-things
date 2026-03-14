@@ -2527,14 +2527,45 @@
 }
 
 .p3ae-chart {
-  height: 420px;
+  height: min(420px, 50vh);
 }
 
-/* Responsive: stack controls vertically on narrow screens */
+/* ── P3 Responsive ─────────────────────────────────── */
+
+/* Content max-width to prevent over-stretching on wide screens */
+.p3ae-page {
+  max-width: 1200px;
+}
+
+/* Controls wrap on narrow screens */
 @media (max-width: 1200px) {
+  .p3ae-controls-row {
+    flex-wrap: wrap;
+    gap: var(--space-sm);
+  }
+}
+
+@media (max-width: 900px) {
   .p3ae-controls-row {
     flex-direction: column;
     align-items: flex-start;
+  }
+  .p3ae-chart {
+    height: min(320px, 45vh);
+  }
+}
+
+@media (max-width: 600px) {
+  .p3ae-chart {
+    height: min(260px, 40vh);
+  }
+  .p3ae-gran-btn {
+    padding: 4px 8px;
+    font-size: 0.75rem;
+  }
+  .p3ae-shortcut {
+    padding: 3px 6px;
+    font-size: 0.7rem;
   }
 }
 
@@ -2576,6 +2607,7 @@
 /* ---- P3-2: Asset Health ---- */
 .p3ah-page {
   padding: 0;
+  max-width: 1200px;
 }
 
 .p3ah-tabs {
@@ -2620,7 +2652,13 @@
 }
 
 .p3ah-chart {
-  height: 320px;
+  height: min(320px, 45vh);
+}
+
+@media (max-width: 900px) {
+  .p3ah-chart {
+    height: min(260px, 40vh);
+  }
 }
 
 .p3ah-soh-hint {
@@ -2640,4 +2678,27 @@
   font-size: 0.85rem;
   text-align: center;
   padding: var(--space-md);
+}
+
+/* P3 Energy Flow Toggle (eye icon) */
+.p3ae-flow-toggle {
+  background: transparent;
+  border: 1px solid #2a2d3a;
+  border-radius: 6px;
+  color: #6b7280;
+  cursor: pointer;
+  padding: 4px 8px;
+  display: flex;
+  align-items: center;
+  gap: 4px;
+  transition: all 0.2s ease;
+}
+.p3ae-flow-toggle:hover {
+  border-color: #3b82f6;
+  color: #9ca3af;
+}
+.p3ae-flow-toggle.active {
+  border-color: #3b82f6;
+  color: #3b82f6;
+  background: rgba(59, 130, 246, 0.1);
 }

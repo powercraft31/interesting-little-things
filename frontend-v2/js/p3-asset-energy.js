@@ -15,6 +15,7 @@ var AssetEnergyPage = (function () {
   var _chartInstance = null;
   var _fetchTimer = null;
   var _fetchAbort = null;
+  var _energyFlowMode = false; // false=simple load bars, true=source breakdown
 
   var BRT_TZ = "America/Sao_Paulo";
   var WEEKDAYS_PT = ["Dom", "Seg", "Ter", "Qua", "Qui", "Sex", "Sáb"];
@@ -328,9 +329,24 @@ var AssetEnergyPage = (function () {
       _granularity === "day"
         ? t("p3ae.chartTitle.day")
         : t("p3ae.chartTitle.period");
-    return Components.sectionCard(
-      title,
-      '<div id="p3ae-chart" class="chart-container p3ae-chart"></div>',
+    // Eye icon for energy flow breakdown toggle
+    var eyeBtn =
+      '<button id="p3ae-flow-toggle" class="p3ae-flow-toggle' +
+      (_energyFlowMode ? ' active' : '') +
+      '" title="' + t("p3ae.energyFlow") + '">' +
+      '<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">' +
+      '<path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z"></path>' +
+      '<circle cx="12" cy="12" r="3"></circle>' +
+      '</svg></button>';
+    return (
+      '<div class="section-card">' +
+      '<div class="section-card-header" style="display:flex;align-items:center;justify-content:space-between">' +
+      '<h3>' + title + '</h3>' +
+      eyeBtn +
+      '</div>' +
+      '<div class="section-card-body">' +
+      '<div id="p3ae-chart" class="chart-container p3ae-chart"></div>' +
+      '</div></div>'
     );
   }
 
@@ -561,99 +577,123 @@ var AssetEnergyPage = (function () {
       );
     });
 
-    var pvSelfUse = pts.map(function (p) {
-      var pv = p.pvTotal || 0;
-      var exp = p.gridExport || 0;
-      return Math.max(0, +(pv - exp).toFixed(2));
+    // Load total for each period
+    var loadData = pts.map(function (p) {
+      return +(p.loadTotal || 0).toFixed(2);
     });
 
-    var batNet = pts.map(function (p) {
-      var dis = p.discharge || 0;
-      var ch = p.charge || 0;
-      return Math.max(0, +(dis - ch).toFixed(2));
-    });
-
-    var gridImp = pts.map(function (p) {
-      return +(p.gridImport || 0).toFixed(2);
-    });
-
-    var pvTotal = pts.map(function (p) {
-      return +(p.pvTotal || 0).toFixed(2);
-    });
-
-    var option = {
-      tooltip: {
-        trigger: "axis",
-        backgroundColor: "#1a1d27",
-        borderColor: "#2a2d3a",
-        borderWidth: 1,
-        textStyle: { color: "#e4e4e7", fontSize: 12 },
-        extraCssText:
-          "border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);",
-      },
-      legend: {
-        data: [
-          t("p3ae.bar.pvSelf"),
-          t("p3ae.bar.batNet"),
-          t("p3ae.bar.gridImp"),
-          t("p3ae.bar.pvTotal"),
-        ],
-        top: 0,
-        textStyle: { color: "#9ca3af", fontSize: 11 },
-      },
-      grid: { left: 12, right: 20, top: 50, bottom: 12, containLabel: true },
-      xAxis: {
-        type: "category",
-        data: labels,
-        axisLabel: { fontSize: 10, color: "#9ca3af" },
-        axisLine: { lineStyle: { color: "#2a2d3a" } },
-        axisTick: { lineStyle: { color: "#2a2d3a" } },
-      },
-      yAxis: {
-        type: "value",
-        name: "kWh",
-        nameTextStyle: { color: "#9ca3af", fontSize: 11 },
-        axisLabel: { fontSize: 11, color: "#9ca3af" },
-        splitLine: { lineStyle: { color: "rgba(42, 45, 58, 0.6)" } },
-        axisLine: { lineStyle: { color: "#2a2d3a" } },
-      },
-      series: [
-        {
-          name: t("p3ae.bar.pvSelf"),
-          type: "bar",
-          stack: "energy",
-          data: pvSelfUse,
-          itemStyle: { color: "#eab308" },
-          barMaxWidth: 40,
-        },
-        {
-          name: t("p3ae.bar.batNet"),
-          type: "bar",
-          stack: "energy",
-          data: batNet,
-          itemStyle: { color: "#22c55e" },
-          barMaxWidth: 40,
-        },
-        {
-          name: t("p3ae.bar.gridImp"),
-          type: "bar",
-          stack: "energy",
-          data: gridImp,
-          itemStyle: { color: "#ef4444" },
-          barMaxWidth: 40,
-        },
-        {
-          name: t("p3ae.bar.pvTotal"),
-          type: "line",
-          data: pvTotal,
-          lineStyle: { color: "#eab308", width: 2, type: "dashed" },
-          itemStyle: { color: "#eab308" },
-          symbol: "circle",
-          symbolSize: 6,
-          z: 10,
-        },
-      ],
+    var commonTooltip = {
+      trigger: "axis",
+      backgroundColor: "#1a1d27",
+      borderColor: "#2a2d3a",
+      borderWidth: 1,
+      textStyle: { color: "#e4e4e7", fontSize: 12 },
+      extraCssText:
+        "border-radius: 8px; box-shadow: 0 4px 20px rgba(0,0,0,0.4);",
     };
+    var commonGrid = { left: 12, right: 20, top: 50, bottom: 12, containLabel: true };
+    var commonXAxis = {
+      type: "category",
+      data: labels,
+      axisLabel: { fontSize: 10, color: "#9ca3af" },
+      axisLine: { lineStyle: { color: "#2a2d3a" } },
+      axisTick: { lineStyle: { color: "#2a2d3a" } },
+    };
+    var commonYAxis = {
+      type: "value",
+      name: "kWh",
+      nameTextStyle: { color: "#9ca3af", fontSize: 11 },
+      axisLabel: { fontSize: 11, color: "#9ca3af" },
+      splitLine: { lineStyle: { color: "rgba(42, 45, 58, 0.6)" } },
+      axisLine: { lineStyle: { color: "#2a2d3a" } },
+    };
+
+    var option;
+
+    if (!_energyFlowMode) {
+      // === Simple mode: single blue bars (load total) ===
+      option = {
+        tooltip: commonTooltip,
+        legend: {
+          data: [t("p3ae.bar.load")],
+          top: 0,
+          textStyle: { color: "#9ca3af", fontSize: 11 },
+        },
+        grid: commonGrid,
+        xAxis: commonXAxis,
+        yAxis: commonYAxis,
+        series: [
+          {
+            name: t("p3ae.bar.load"),
+            type: "bar",
+            data: loadData,
+            itemStyle: {
+              color: "#3b82f6",
+              borderRadius: [3, 3, 0, 0],
+            },
+            barMaxWidth: 40,
+          },
+        ],
+      };
+    } else {
+      // === Energy Flow mode: stacked source breakdown ===
+      // Constraint: pvDirect + batDischarge + gridImport = loadTotal
+      var batDischarge = pts.map(function (p) {
+        return +(p.discharge || 0).toFixed(2);
+      });
+      var gridImport = pts.map(function (p) {
+        return +(p.gridImport || 0).toFixed(2);
+      });
+      // PV direct = loadTotal - discharge - gridImport (residual, ensures sum = load)
+      var pvDirect = pts.map(function (p, i) {
+        var load = loadData[i];
+        var bat = batDischarge[i];
+        var grid = gridImport[i];
+        return Math.max(0, +(load - bat - grid).toFixed(2));
+      });
+
+      option = {
+        tooltip: commonTooltip,
+        legend: {
+          data: [
+            t("p3ae.bar.pvDirect"),
+            t("p3ae.bar.batDischarge"),
+            t("p3ae.bar.gridImp"),
+          ],
+          top: 0,
+          textStyle: { color: "#9ca3af", fontSize: 11 },
+        },
+        grid: commonGrid,
+        xAxis: commonXAxis,
+        yAxis: commonYAxis,
+        series: [
+          {
+            name: t("p3ae.bar.pvDirect"),
+            type: "bar",
+            stack: "energy",
+            data: pvDirect,
+            itemStyle: { color: "#eab308" },
+            barMaxWidth: 40,
+          },
+          {
+            name: t("p3ae.bar.batDischarge"),
+            type: "bar",
+            stack: "energy",
+            data: batDischarge,
+            itemStyle: { color: "#22c55e" },
+            barMaxWidth: 40,
+          },
+          {
+            name: t("p3ae.bar.gridImp"),
+            type: "bar",
+            stack: "energy",
+            data: gridImport,
+            itemStyle: { color: "#ef4444", borderRadius: [3, 3, 0, 0] },
+            barMaxWidth: 40,
+          },
+        ],
+      };
+    }
 
     Charts.createChart("p3ae-chart", option, { pageId: "asset-energy" });
   }
@@ -796,6 +836,16 @@ var AssetEnergyPage = (function () {
 
   // ── Event Binding ─────────────────────────────────────────
   function _setupEvents() {
+    // Energy Flow toggle (eye icon)
+    var flowBtn = document.getElementById("p3ae-flow-toggle");
+    if (flowBtn) {
+      flowBtn.addEventListener("click", function () {
+        _energyFlowMode = !_energyFlowMode;
+        flowBtn.classList.toggle("active", _energyFlowMode);
+        _renderChart(); // re-render without refetching
+      });
+    }
+
     // Granularity buttons
     document.querySelectorAll(".p3ae-gran-btn").forEach(function (btn) {
       btn.addEventListener("click", function () {

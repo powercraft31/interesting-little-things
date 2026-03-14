@@ -142,7 +142,7 @@ const Charts = {
     // Singleton: check for existing instance — but verify it's on the SAME DOM node
     var chart = echarts.getInstanceByDom(container);
     if (chart) {
-      chart.setOption(option, { notMerge: false });
+      chart.setOption(option, { notMerge: true });
     } else {
       // New init
       chart = echarts.init(container, null, { renderer: "canvas" });
