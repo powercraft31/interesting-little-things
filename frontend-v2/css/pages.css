@@ -2522,8 +2522,54 @@
   border-color: var(--accent);
 }
 
+
 .p3ae-summary {
   margin-bottom: var(--space-md);
+  grid-template-columns: repeat(4, 1fr) !important;
+}
+
+@media (max-width: 1000px) {
+  .p3ae-summary {
+    grid-template-columns: repeat(3, 1fr) !important;
+  }
+}
+
+@media (max-width: 700px) {
+  .p3ae-summary {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
+}
+
+
+/* P3 KPI card alignment fix */
+.p3ae-summary .kpi-card,
+.p3ah-summary .kpi-card {
+  min-height: 80px;
+  justify-content: center;
+}
+
+.p3ae-summary .kpi-card .kpi-label,
+.p3ah-summary .kpi-card .kpi-label {
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  font-size: 0.75rem;
+}
+
+.p3ae-summary .kpi-card .kpi-value,
+.p3ah-summary .kpi-card .kpi-value {
+  font-size: 1.1rem;
+}
+
+@media (max-width: 1100px) {
+  .p3ae-summary .kpi-card .kpi-value,
+  .p3ah-summary .kpi-card .kpi-value {
+    font-size: 0.95rem;
+  }
+  .p3ae-summary .kpi-card .kpi-label,
+  .p3ah-summary .kpi-card .kpi-label {
+    font-size: 0.7rem;
+  }
 }
 
 .p3ae-chart {
@@ -2532,9 +2578,9 @@
 
 /* ── P3 Responsive ─────────────────────────────────── */
 
-/* Content max-width to prevent over-stretching on wide screens */
+/* P3 pages fill available width naturally */
 .p3ae-page {
-  max-width: 1200px;
+  padding: 0;
 }
 
 /* Controls wrap on narrow screens */
@@ -2607,7 +2653,6 @@
 /* ---- P3-2: Asset Health ---- */
 .p3ah-page {
   padding: 0;
-  max-width: 1200px;
 }
 
 .p3ah-tabs {
@@ -2649,6 +2694,13 @@
 
 .p3ah-summary {
   margin-bottom: var(--space-md);
+  grid-template-columns: repeat(3, 1fr) !important;
+}
+
+@media (max-width: 700px) {
+  .p3ah-summary {
+    grid-template-columns: repeat(2, 1fr) !important;
+  }
 }
 
 .p3ah-chart {

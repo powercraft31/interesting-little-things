@@ -145,7 +145,9 @@
 .main-content {
   margin-left: var(--sidebar-width);
   flex: 1;
+  min-width: 0;
   min-height: 100vh;
+  overflow-x: hidden;
   transition: margin-left var(--transition-normal);
 }
 
@@ -234,6 +236,8 @@
 /* Page Containers */
 .page-content {
   padding: var(--space-lg);
+  min-width: 0;
+  overflow-x: hidden;
 }
 
 .page-section {
