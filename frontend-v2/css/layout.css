@@ -238,6 +238,9 @@
   padding: var(--space-lg);
   min-width: 0;
   overflow-x: hidden;
+  max-width: 1600px;
+  margin-left: auto;
+  margin-right: auto;
 }
 
 .page-section {

@@ -52,6 +52,14 @@
   --transition-normal: 200ms ease;
 }
 
+/* Breakpoints (used as literals in @media — CSS vars not supported in queries)
+   --bp-xl: 1440px   (wide desktop — sidebar expands)
+   --bp-lg: 1200px   (standard desktop)
+   --bp-md: 1024px   (tablet landscape / small laptop — sidebar hidden)
+   --bp-sm:  768px   (tablet portrait)
+   --bp-xs:  480px   (mobile)
+*/
+
 /* Light theme placeholder — same values for now, fill in real light colors later */
 [data-theme="light"] {
   --bg: #f8f9fa;
