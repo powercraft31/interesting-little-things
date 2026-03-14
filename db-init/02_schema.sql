@@ -837,6 +837,10 @@ CREATE TABLE public.assets (
     max_discharge_rate_kw real,
     allow_export boolean DEFAULT false NOT NULL,
     gateway_id character varying(50),
+    rated_max_power_kw real,
+    rated_max_current_a real,
+    rated_min_power_kw real,
+    rated_min_current_a real,
     CONSTRAINT assets_asset_type_check CHECK (((asset_type)::text = ANY ((ARRAY['INVERTER_BATTERY'::character varying, 'SMART_METER'::character varying, 'HVAC'::character varying, 'EV_CHARGER'::character varying, 'SOLAR_PANEL'::character varying])::text[]))),
     CONSTRAINT assets_submercado_check CHECK (((submercado)::text = ANY ((ARRAY['SUDESTE'::character varying, 'SUL'::character varying, 'NORDESTE'::character varying, 'NORTE'::character varying])::text[])))
 );
@@ -945,6 +949,8 @@ CREATE TABLE public.device_command_logs (
     device_timestamp timestamp with time zone,
     resolved_at timestamp with time zone,
     created_at timestamp with time zone DEFAULT now() NOT NULL,
+    batch_id character varying(50),
+    source character varying(10) DEFAULT 'p2'::character varying,
     CONSTRAINT device_command_logs_command_type_check CHECK (((command_type)::text = ANY ((ARRAY['get'::character varying, 'get_reply'::character varying, 'set'::character varying, 'set_reply'::character varying])::text[])))
 );
 
@@ -968,6 +974,48 @@ COMMENT ON COLUMN public.device_command_logs.command_type IS 'get = request sent
 --
 
 COMMENT ON COLUMN public.device_command_logs.device_timestamp IS 'Parsed from payload.timeStamp (epoch ms). Device clock, not server clock.';
+
+
+--
+-- Name: COLUMN device_command_logs.batch_id; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.device_command_logs.batch_id IS 'P4 批量操作 ID，null = 單筆操作（P2/自動）';
+
+
+--
+-- Name: COLUMN device_command_logs.source; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.device_command_logs.source IS '指令來源：p2=手動單台, p4=批量, auto=M2自動排程';
+
+
+--
+-- Name: COLUMN assets.rated_max_power_kw; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.assets.rated_max_power_kw IS 'Gateway MQTT deviceList 回報的額定最大功率 (kW)，硬體銘牌值';
+
+
+--
+-- Name: COLUMN assets.rated_max_current_a; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.assets.rated_max_current_a IS 'Gateway MQTT deviceList 回報的額定最大電流 (A)，硬體銘牌值';
+
+
+--
+-- Name: COLUMN assets.rated_min_power_kw; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.assets.rated_min_power_kw IS 'Gateway MQTT deviceList 回報的額定最小功率 (kW)';
+
+
+--
+-- Name: COLUMN assets.rated_min_current_a; Type: COMMENT; Schema: public; Owner: -
+--
+
+COMMENT ON COLUMN public.assets.rated_min_current_a IS 'Gateway MQTT deviceList 回報的額定最小電流 (A)';
 
 
 --
@@ -3017,6 +3065,13 @@ CREATE INDEX idx_dcl_accepted_set ON public.device_command_logs USING btree (cre
 --
 
 CREATE INDEX idx_dcl_dispatched_set ON public.device_command_logs USING btree (created_at) WHERE (((result)::text = 'dispatched'::text) AND ((command_type)::text = 'set'::text));
+
+
+--
+-- Name: idx_dcl_batch; Type: INDEX; Schema: public; Owner: -
+--
+
+CREATE INDEX idx_dcl_batch ON public.device_command_logs USING btree (batch_id) WHERE (batch_id IS NOT NULL);
 
 
 --

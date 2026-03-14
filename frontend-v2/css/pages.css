@@ -934,6 +934,58 @@
 
 /* ---- P4: HEMS Control ---- */
 
+/* Step Indicator */
+.p4-step-indicator {
+  display: flex;
+  align-items: center;
+  gap: 0;
+  margin-bottom: 1.5rem;
+}
+.p4-step-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 1rem;
+  color: var(--text-secondary);
+  font-size: 0.85rem;
+  opacity: 0.6;
+}
+.p4-step-item.p4-step-active {
+  color: var(--accent);
+  opacity: 1;
+  font-weight: 600;
+}
+.p4-step-item.p4-step-done {
+  color: var(--success, #4caf50);
+  opacity: 0.8;
+}
+.p4-step-num {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  background: var(--bg-tertiary, #333);
+  font-weight: 700;
+  font-size: 0.8rem;
+  flex-shrink: 0;
+}
+.p4-step-active .p4-step-num {
+  background: var(--accent);
+  color: #fff;
+}
+.p4-step-done .p4-step-num {
+  background: var(--success, #4caf50);
+  color: #fff;
+}
+.p4-step-divider {
+  width: 2rem;
+  height: 2px;
+  background: var(--border-color, #444);
+  flex-shrink: 0;
+}
+
 /* Mode Selection Cards */
 .p4-mode-cards {
   display: grid;

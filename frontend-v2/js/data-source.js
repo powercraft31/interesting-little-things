@@ -354,6 +354,28 @@ var DataSource = (function () {
         filters: filters,
       });
     },
+    batchDispatch: function (params) {
+      return withFallback(
+        function () {
+          return apiPost("/api/hems/batch-dispatch", params);
+        },
+        {
+          batchId: "mock-batch-1",
+          results: [],
+          summary: { total: 0, pending: 0, skipped: 0 },
+        },
+      );
+    },
+    batchHistory: function (limit) {
+      return withFallback(
+        function () {
+          return apiGet("/api/hems/batch-history?limit=" + (limit || 20));
+        },
+        typeof MOCK_DATA !== "undefined" && MOCK_DATA.BATCH_HISTORY
+          ? MOCK_DATA.BATCH_HISTORY
+          : { batches: [] },
+      );
+    },
   };
 
   // ── Tariffs ────────────────────────────────────────────────

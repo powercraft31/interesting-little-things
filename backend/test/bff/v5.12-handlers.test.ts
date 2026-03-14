@@ -25,7 +25,7 @@ import { handler as homesHandler } from "../../src/bff/handlers/get-homes";
 import { handler as homeEnergyHandler } from "../../src/bff/handlers/get-home-energy";
 import { handler as homesSummaryHandler } from "../../src/bff/handlers/get-homes-summary";
 import { handler as hemsOverviewHandler } from "../../src/bff/handlers/get-hems-overview";
-import { handler as hemsDispatchHandler } from "../../src/bff/handlers/post-hems-dispatch";
+import { handler as hemsDispatchHandler } from "../../src/bff/handlers/post-hems-batch-dispatch";
 import { handler as vppCapacityHandler } from "../../src/bff/handlers/get-vpp-capacity";
 import { handler as vppLatencyHandler } from "../../src/bff/handlers/get-vpp-latency";
 import { handler as vppDrEventsHandler } from "../../src/bff/handlers/get-vpp-dr-events";
@@ -452,30 +452,40 @@ describe("GET /api/hems/overview", () => {
 });
 
 // ---------------------------------------------------------------------------
-// EP-10: POST /api/hems/dispatch
+// EP-10: POST /api/hems/batch-dispatch (v6.0: replaces old /api/hems/dispatch)
 // ---------------------------------------------------------------------------
 
-describe("POST /api/hems/dispatch", () => {
-  it("creates batch dispatch", async () => {
-    // First call: find matching assets
+describe("POST /api/hems/batch-dispatch", () => {
+  it("creates batch dispatch for self_consumption mode", async () => {
+    // Q1: batch RLS check
     mockQueryWithOrg.mockResolvedValueOnce({
-      rows: [
-        { asset_id: "DEV-005", org_id: "ORG_ENERGIA_001" },
-        { asset_id: "DEV-006", org_id: "ORG_ENERGIA_001" },
-      ],
+      rows: [{ gateway_id: "GW-001" }],
     });
-    // Next calls: INSERT dispatch commands (one per asset)
-    mockQueryWithOrg.mockResolvedValue({ rows: [] });
+    // Q2: batch read historical schedules
+    mockQueryWithOrg.mockResolvedValueOnce({ rows: [] });
+    // Q3: batch check active commands
+    mockQueryWithOrg.mockResolvedValueOnce({ rows: [] });
+    // Q4: batch rated capacity
+    mockQueryWithOrg.mockResolvedValueOnce({ rows: [] });
+    // Q5: INSERT command log
+    mockQueryWithOrg.mockResolvedValueOnce({ rows: [{ id: "42" }] });
 
     const event = makeEvent(
       "POST",
-      "/api/hems/dispatch",
+      "/api/hems/batch-dispatch",
       JSON.stringify({
         userId: "u1",
         orgId: "ORG_ENERGIA_001",
         role: "ORG_OPERATOR",
       }),
-      { body: JSON.stringify({ targetMode: "peak_shaving" }) },
+      {
+        body: JSON.stringify({
+          mode: "self_consumption",
+          socMinLimit: 20,
+          socMaxLimit: 95,
+          gatewayIds: ["GW-001"],
+        }),
+      },
     );
     const result = (await hemsDispatchHandler(
       event,
@@ -483,20 +493,33 @@ describe("POST /api/hems/dispatch", () => {
 
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
-    expect(body.data).toHaveProperty("affectedDevices", 2);
-    expect(body.data).toHaveProperty("targetMode", "peak_shaving");
+    expect(body.data).toHaveProperty("batchId");
+    expect(body.data).toHaveProperty("summary");
+    const summary = (body.data as Record<string, unknown>).summary as Record<
+      string,
+      number
+    >;
+    expect(summary.pending).toBe(1);
+    expect(summary.skipped).toBe(0);
   });
 
-  it("rejects invalid targetMode", async () => {
+  it("rejects invalid mode", async () => {
     const event = makeEvent(
       "POST",
-      "/api/hems/dispatch",
+      "/api/hems/batch-dispatch",
       JSON.stringify({
         userId: "u1",
         orgId: "ORG_ENERGIA_001",
         role: "ORG_OPERATOR",
       }),
-      { body: JSON.stringify({ targetMode: "invalid_mode" }) },
+      {
+        body: JSON.stringify({
+          mode: "invalid_mode",
+          socMinLimit: 20,
+          socMaxLimit: 95,
+          gatewayIds: ["GW-001"],
+        }),
+      },
     );
     const result = (await hemsDispatchHandler(
       event,
@@ -507,13 +530,20 @@ describe("POST /api/hems/dispatch", () => {
   it("rejects viewer role", async () => {
     const event = makeEvent(
       "POST",
-      "/api/hems/dispatch",
+      "/api/hems/batch-dispatch",
       JSON.stringify({
         userId: "u1",
         orgId: "ORG_ENERGIA_001",
         role: "ORG_VIEWER",
       }),
-      { body: JSON.stringify({ targetMode: "peak_shaving" }) },
+      {
+        body: JSON.stringify({
+          mode: "self_consumption",
+          socMinLimit: 20,
+          socMaxLimit: 95,
+          gatewayIds: ["GW-001"],
+        }),
+      },
     );
     const result = (await hemsDispatchHandler(
       event,

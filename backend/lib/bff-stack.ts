@@ -92,6 +92,20 @@ export class BffStack extends cdk.Stack {
       stage,
     );
 
+    // v6.0: P4 batch dispatch handlers
+    const postHemsBatchDispatch = this.createHandler(
+      "PostHemsBatchDispatch",
+      handlersDir,
+      "post-hems-batch-dispatch.handler",
+      stage,
+    );
+    const getHemsBatchHistory = this.createHandler(
+      "GetHemsBatchHistory",
+      handlersDir,
+      "get-hems-batch-history.handler",
+      stage,
+    );
+
     // ── Route Bindings ─────────────────────────────────────────────
     this.addRoute(httpApi, "GET", "/dashboard", getDashboard);
     this.addRoute(httpApi, "GET", "/assets", getAssets);
@@ -115,6 +129,19 @@ export class BffStack extends cdk.Stack {
       "PUT",
       "/api/gateways/{gatewayId}/schedule",
       putGatewaySchedule,
+    );
+    // v6.0: P4 batch dispatch routes
+    this.addRoute(
+      httpApi,
+      "POST",
+      "/api/hems/batch-dispatch",
+      postHemsBatchDispatch,
+    );
+    this.addRoute(
+      httpApi,
+      "GET",
+      "/api/hems/batch-history",
+      getHemsBatchHistory,
     );
 
     // ── Outputs ────────────────────────────────────────────────────

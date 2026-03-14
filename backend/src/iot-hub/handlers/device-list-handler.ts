@@ -37,15 +37,10 @@ export async function handleDeviceList(
   // Look up gateway's org_id for asset FK population
   const gwResult = await pool.query<{
     org_id: string;
-  }>(
-    `SELECT org_id FROM gateways WHERE gateway_id = $1`,
-    [gatewayId],
-  );
+  }>(`SELECT org_id FROM gateways WHERE gateway_id = $1`, [gatewayId]);
 
   if (gwResult.rows.length === 0) {
-    console.error(
-      `[DeviceListHandler] Gateway not found: ${gatewayId}`,
-    );
+    console.error(`[DeviceListHandler] Gateway not found: ${gatewayId}`);
     return;
   }
 
@@ -66,27 +61,37 @@ export async function handleDeviceList(
     await pool.query(
       `INSERT INTO assets
          (asset_id, serial_number, name, brand, model, asset_type,
-          gateway_id, org_id, is_active, commissioned_at, capacity_kwh)
+          gateway_id, org_id, is_active, commissioned_at, capacity_kwh,
+          rated_max_power_kw, rated_max_current_a, rated_min_power_kw, rated_min_current_a)
        VALUES (
-         $1, $1, $2, $3, $4, $5, $6, $7, true, NOW(), 0
+         $1, $1, $2, $3, $4, $5, $6, $7, true, NOW(), 0,
+         NULLIF($8, '')::REAL, NULLIF($9, '')::REAL, NULLIF($10, '')::REAL, NULLIF($11, '')::REAL
        )
        ON CONFLICT (asset_id) DO UPDATE SET
-         name       = EXCLUDED.name,
-         brand      = EXCLUDED.brand,
-         model      = EXCLUDED.model,
-         asset_type = EXCLUDED.asset_type,
-         gateway_id = EXCLUDED.gateway_id,
-         org_id     = EXCLUDED.org_id,
-         is_active  = true,
-         updated_at = NOW()`,
+         name               = EXCLUDED.name,
+         brand              = EXCLUDED.brand,
+         model              = EXCLUDED.model,
+         asset_type         = EXCLUDED.asset_type,
+         gateway_id         = EXCLUDED.gateway_id,
+         org_id             = EXCLUDED.org_id,
+         is_active          = true,
+         rated_max_power_kw = EXCLUDED.rated_max_power_kw,
+         rated_max_current_a = EXCLUDED.rated_max_current_a,
+         rated_min_power_kw = EXCLUDED.rated_min_power_kw,
+         rated_min_current_a = EXCLUDED.rated_min_current_a,
+         updated_at         = NOW()`,
       [
-        device.deviceSn,        // asset_id = serial_number (deterministic)
-        device.name,            // name
-        device.vendor,          // brand
-        device.deviceBrand,     // model
-        assetType,              // asset_type
-        gatewayId,              // gateway_id
-        orgId,                  // org_id
+        device.deviceSn, // $1 asset_id = serial_number (deterministic)
+        device.name, // $2 name
+        device.vendor, // $3 brand
+        device.deviceBrand, // $4 model
+        assetType, // $5 asset_type
+        gatewayId, // $6 gateway_id
+        orgId, // $7 org_id
+        device.maxPower ?? "", // $8 rated_max_power_kw
+        device.maxCurrent ?? "", // $9 rated_max_current_a
+        device.minPower ?? "", // $10 rated_min_power_kw
+        device.minCurrent ?? "", // $11 rated_min_current_a
       ],
     );
   }

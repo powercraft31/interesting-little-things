@@ -62,6 +62,7 @@ export async function handler(
         a.asset_id, a.name AS device_name, a.asset_type,
         a.brand, a.model, a.serial_number,
         a.capacidade_kw, a.capacity_kwh, a.operation_mode, a.allow_export,
+        a.rated_max_power_kw,
         ds.battery_soc, ds.bat_soh, ds.battery_voltage,
         ds.battery_power, ds.pv_power,
         ds.grid_power_kw, ds.load_power,
@@ -128,7 +129,8 @@ export async function handler(
           cpuUsage: (emsHealthRaw.CPU_usage as string) ?? null,
           memoryUsage: (emsHealthRaw.memory_usage as string) ?? null,
           diskUsage: (emsHealthRaw.disk_usage as string) ?? null,
-          wifiSignalStrength: (emsHealthRaw.wifi_signal_strength as string) ?? null,
+          wifiSignalStrength:
+            (emsHealthRaw.wifi_signal_strength as string) ?? null,
           systemRuntime: (emsHealthRaw.system_runtime as string) ?? null,
           simStatus: (emsHealthRaw.SIM_status as string) ?? null,
           emsTemp: (emsHealthRaw.ems_temp as string) ?? null,
@@ -138,11 +140,16 @@ export async function handler(
 
   // ── Group Q1 rows by asset_type ──
   const rows = q1Result.rows as Array<Record<string, unknown>>;
-  const inverters = rows.filter(r => r.asset_type === "INVERTER_BATTERY" && r.asset_id);
-  const meters = rows.filter(r => r.asset_type === "SMART_METER" && r.asset_id);
+  const inverters = rows.filter(
+    (r) => r.asset_type === "INVERTER_BATTERY" && r.asset_id,
+  );
+  const meters = rows.filter(
+    (r) => r.asset_type === "SMART_METER" && r.asset_id,
+  );
 
   // Primary inverter: first online, or first available
-  const primary = inverters.find(r => safeBool(r.is_online)) || inverters[0] || null;
+  const primary =
+    inverters.find((r) => safeBool(r.is_online)) || inverters[0] || null;
 
   // ── Telemetry extras from Q2 ──
   const th = (q2Result.rows[0] ?? {}) as Record<string, unknown>;
@@ -153,7 +160,9 @@ export async function handler(
     ? {
         batterySoc: safeFloat(primary.battery_soc),
         batSoh: safeFloat(th.battery_soh ?? primary.bat_soh),
-        batteryVoltage: safeFloat(th.battery_voltage ?? primary.battery_voltage),
+        batteryVoltage: safeFloat(
+          th.battery_voltage ?? primary.battery_voltage,
+        ),
         batteryCurrent: safeFloat(th.battery_current),
         batteryTemperature: safeFloat(th.battery_temperature),
         batteryPower: safeFloat(primary.battery_power),
@@ -170,16 +179,26 @@ export async function handler(
           : null,
       }
     : {
-        batterySoc: null, batSoh: null, batteryVoltage: null,
-        batteryCurrent: null, batteryTemperature: null, batteryPower: null,
-        pvPower: null, gridPowerKw: null, loadPower: null, flloadPower: null,
-        inverterTemp: null, maxChargeCurrent: null, maxDischargeCurrent: null,
-        isOnline: false, updatedAt: null,
+        batterySoc: null,
+        batSoh: null,
+        batteryVoltage: null,
+        batteryCurrent: null,
+        batteryTemperature: null,
+        batteryPower: null,
+        pvPower: null,
+        gridPowerKw: null,
+        loadPower: null,
+        flloadPower: null,
+        inverterTemp: null,
+        maxChargeCurrent: null,
+        maxDischargeCurrent: null,
+        isOnline: false,
+        updatedAt: null,
       };
 
   // ── Fix #2: Grid data priority — inverter > smart meter > null ──
   if (state.gridPowerKw == null && meters.length > 0) {
-    const meter = meters.find(r => safeBool(r.is_online)) || meters[0];
+    const meter = meters.find((r) => safeBool(r.is_online)) || meters[0];
     if (meter) {
       state.gridPowerKw = safeFloat(meter.grid_power_kw);
     }
@@ -202,13 +221,14 @@ export async function handler(
     maxChargeRateKw: safeFloat(primaryAsset.capacidade_kw),
     maxDischargeRateKw: safeFloat(primaryAsset.capacidade_kw),
     gridImportLimitKw: null as number | null,
+    ratedMaxPowerKw: safeFloat(primaryAsset.rated_max_power_kw),
     defaults: { socMin: 10, socMax: 100, source: "hardcoded" },
   };
 
   // ── Sub-devices list ──
   const devices = rows
-    .filter(r => r.asset_id != null)
-    .map(r => ({
+    .filter((r) => r.asset_id != null)
+    .map((r) => ({
       assetId: r.asset_id as string,
       name: r.device_name as string,
       assetType: r.asset_type as string,
@@ -219,7 +239,11 @@ export async function handler(
     }));
 
   // ── Schedule from Q4 ──
-  let schedule: { syncStatus: string; lastAckAt: string | null; slots: unknown[] };
+  let schedule: {
+    syncStatus: string;
+    lastAckAt: string | null;
+    slots: unknown[];
+  };
   if (q4Result.rows.length === 0) {
     schedule = { syncStatus: "unknown", lastAckAt: null, slots: [] };
   } else {
@@ -227,9 +251,12 @@ export async function handler(
     const result = cmd.result as string;
     const payload = cmd.payload_json as Record<string, unknown> | null;
     schedule = {
-      syncStatus: result === "success" ? "synced"
-        : (result === "pending" || result === "pending_dispatch") ? "pending"
-        : "unknown",
+      syncStatus:
+        result === "success"
+          ? "synced"
+          : result === "pending" || result === "pending_dispatch"
+            ? "pending"
+            : "unknown",
       lastAckAt: cmd.resolved_at
         ? new Date(cmd.resolved_at as string).toISOString()
         : null,

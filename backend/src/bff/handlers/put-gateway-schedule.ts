@@ -109,6 +109,34 @@ export async function handler(
     return apiError(400, msg);
   }
 
+  // Phase 2: Validate against hardware rated capacity
+  const ratedResult = await queryWithOrg<{ rated_max_power_kw: number | null }>(
+    `SELECT rated_max_power_kw
+     FROM assets
+     WHERE gateway_id = $1 AND asset_type = 'INVERTER_BATTERY' AND is_active = true
+     LIMIT 1`,
+    [gatewayId],
+    rlsOrgId,
+  );
+
+  if (ratedResult.rows.length > 0) {
+    const ratedMax = ratedResult.rows[0].rated_max_power_kw;
+    if (ratedMax != null) {
+      if (schedule.maxChargeCurrent > ratedMax) {
+        return apiError(
+          400,
+          `maxChargeCurrent (${schedule.maxChargeCurrent}) exceeds hardware rated capacity (${ratedMax} kW)`,
+        );
+      }
+      if (schedule.maxDischargeCurrent > ratedMax) {
+        return apiError(
+          400,
+          `maxDischargeCurrent (${schedule.maxDischargeCurrent}) exceeds hardware rated capacity (${ratedMax} kW)`,
+        );
+      }
+    }
+  }
+
   // Validate gateway exists
   const gwResult = await queryWithOrg(
     `SELECT 1 FROM gateways WHERE gateway_id = $1`,

@@ -31,7 +31,8 @@ import { handler as gatewayScheduleHandler } from "../src/bff/handlers/get-gatew
 import { handler as putGatewayScheduleHandler } from "../src/bff/handlers/put-gateway-schedule";
 import { handler as tariffsHandler } from "../src/bff/handlers/get-tariffs";
 import { handler as hemsOverviewHandler } from "../src/bff/handlers/get-hems-overview";
-import { handler as hemsDispatchHandler } from "../src/bff/handlers/post-hems-dispatch";
+import { handler as hemsDispatchHandler } from "../src/bff/handlers/post-hems-batch-dispatch";
+import { handler as hemsBatchHistoryHandler } from "../src/bff/handlers/get-hems-batch-history";
 import { handler as vppCapacityHandler } from "../src/bff/handlers/get-vpp-capacity";
 import { handler as vppLatencyHandler } from "../src/bff/handlers/get-vpp-latency";
 import { handler as vppDrEventsHandler } from "../src/bff/handlers/get-vpp-dr-events";
@@ -246,8 +247,12 @@ app.get(
   wrapHandler(hemsOverviewHandler, "GET", "/api/hems/overview"),
 );
 app.post(
-  "/api/hems/dispatch",
-  wrapHandler(hemsDispatchHandler, "POST", "/api/hems/dispatch"),
+  "/api/hems/batch-dispatch",
+  wrapHandler(hemsDispatchHandler, "POST", "/api/hems/batch-dispatch"),
+);
+app.get(
+  "/api/hems/batch-history",
+  wrapHandler(hemsBatchHistoryHandler, "GET", "/api/hems/batch-history"),
 );
 // VPP
 app.get(
@@ -375,7 +380,8 @@ app.listen(PORT, () => {
   console.log("  PUT  /api/devices/:id/schedule      (v5.19)");
   console.log("  GET  /api/tariffs                   (v5.19)");
   console.log("  GET  /api/hems/overview             (v5.12)");
-  console.log("  POST /api/hems/dispatch             (v5.12)");
+  console.log("  POST /api/hems/batch-dispatch       (v6.0)");
+  console.log("  GET  /api/hems/batch-history        (v6.0)");
   console.log("  GET  /api/vpp/capacity              (v5.12)");
   console.log("  GET  /api/vpp/latency               (v5.12)");
   console.log("  GET  /api/vpp/dr-events             (v5.12)");

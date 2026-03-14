@@ -727,6 +727,69 @@ const LAST_DISPATCH = {
 };
 
 // =========================================================
+// P4: BATCH HISTORY MOCK (v6.0)
+// =========================================================
+var MOCK_DATA = {
+  BATCH_HISTORY: {
+    batches: [
+      {
+        batchId: "batch-1710400000000-a1b2",
+        source: "p4",
+        dispatchedAt: "2026-03-10T14:30:00Z",
+        total: 3,
+        successCount: 2,
+        failedCount: 0,
+        gateways: [
+          { gatewayId: "WKRD24070202100144F", result: "accepted" },
+          { gatewayId: "WKRD24070202100228G", result: "accepted" },
+          { gatewayId: "WKRD24070202100212P", result: "pending" },
+        ],
+        samplePayload: {
+          socMinLimit: 20,
+          socMaxLimit: 95,
+          maxChargeCurrent: 100,
+          maxDischargeCurrent: 100,
+          gridImportLimitKw: 3000,
+          slots: [
+            {
+              mode: "self_consumption",
+              startMinute: 0,
+              endMinute: 1440,
+            },
+          ],
+        },
+      },
+      {
+        batchId: "batch-1710300000000-c3d4",
+        source: "p4",
+        dispatchedAt: "2026-03-09T10:15:00Z",
+        total: 2,
+        successCount: 2,
+        failedCount: 0,
+        gateways: [
+          { gatewayId: "WKRD24070202100144F", result: "accepted" },
+          { gatewayId: "WKRD24070202100228G", result: "accepted" },
+        ],
+        samplePayload: {
+          socMinLimit: 15,
+          socMaxLimit: 90,
+          maxChargeCurrent: 100,
+          maxDischargeCurrent: 100,
+          gridImportLimitKw: 50,
+          slots: [
+            {
+              mode: "peak_shaving",
+              startMinute: 0,
+              endMinute: 1440,
+            },
+          ],
+        },
+      },
+    ],
+  },
+};
+
+// =========================================================
 // P5: VPP & DR DATA
 // =========================================================
 const VPP_CAPACITY = {

@@ -1,15 +1,25 @@
 /* ============================================
-   SOLFACIL Admin Portal — P4: HEMS Control
-   Optimization mode selection, batch dispatch,
-   Tarifa Branca rates, rule application status.
+   SOLFACIL Admin Portal — P4: HEMS Control (v6.0)
+   Three-step batch dispatch flow:
+     Step 1: Mode selection + parameters
+     Step 2: Gateway selection
+     Step 3: Preview + dispatch + history
    ============================================ */
 
 var HEMSPage = {
+  _currentStep: 1,
   _selectedMode: null,
-  _previewDone: false,
-  _previewResult: null,
+  _socMinLimit: 20,
+  _socMaxLimit: 95,
+  _gridImportLimitKw: 50,
+  _arbGrid: null, // 24-element array: 'charge'|'discharge'|null
+  _arbBrush: "charge",
+  _gateways: null,
+  _selectedGateways: {},
+  _batchHistory: null,
+  _overview: null,
 
-  // Mode metadata (keys → i18n)
+  // Mode metadata
   _modeKeys: {
     self_consumption: {
       icon: "\u2600\uFE0F",
@@ -17,17 +27,17 @@ var HEMSPage = {
       descKey: "hems.mode.selfCons.desc",
       borderColor: "var(--positive)",
     },
-    peak_valley_arbitrage: {
-      icon: "\uD83D\uDCCA",
-      titleKey: "hems.mode.arb",
-      descKey: "hems.mode.arb.desc",
-      borderColor: "var(--accent)",
-    },
     peak_shaving: {
       icon: "\u26A1",
       titleKey: "hems.mode.peak",
       descKey: "hems.mode.peak.desc",
       borderColor: "var(--neutral)",
+    },
+    peak_valley_arbitrage: {
+      icon: "\uD83D\uDCCA",
+      titleKey: "hems.mode.arb",
+      descKey: "hems.mode.arb.desc",
+      borderColor: "var(--accent)",
     },
   },
 
@@ -35,37 +45,36 @@ var HEMSPage = {
   // INIT / LIFECYCLE
   // =========================================================
 
-  init: async function () {
+  init: function () {
     var self = this;
     var container = document.getElementById("hems-content");
     if (!container) return;
 
     container.innerHTML = this._buildSkeleton();
+    self._arbGrid = [];
+    for (var i = 0; i < 24; i++) self._arbGrid.push(null);
 
-    try {
-      var results = await Promise.all([
-        DataSource.hems.overview(),
-        DataSource.devices.list(),
-        DataSource.devices.gateways(),
-      ]);
-      self._overview = results[0];
-      self._devices = results[1];
-      self._gateways = results[2];
-    } catch (err) {
-      showErrorBoundary("hems-content", err);
-      return;
-    }
-
-    container.innerHTML = self._buildContent();
-    self._setupEventListeners();
+    Promise.all([
+      DataSource.hems.overview(),
+      DataSource.devices.gateways(),
+      DataSource.hems.batchHistory(20),
+    ])
+      .then(function (results) {
+        self._overview = results[0];
+        self._gateways = results[1];
+        self._batchHistory = results[2] ? results[2].batches || [] : [];
+        container.innerHTML = self._buildContent();
+        self._setupStepListeners();
+      })
+      .catch(function (err) {
+        if (typeof showErrorBoundary === "function") {
+          showErrorBoundary("hems-content", err);
+        }
+      });
   },
 
-  onRoleChange: function (role) {
-    var container = document.getElementById("hems-content");
-    if (!container) return;
-    // Re-render to update disabled states
-    container.innerHTML = this._buildContent();
-    this._setupEventListeners();
+  onRoleChange: function () {
+    this.init();
   },
 
   // =========================================================
@@ -80,63 +89,74 @@ var HEMSPage = {
       '<div class="skeleton" style="height:180px;border-radius:10px"></div>',
       "</div>",
       Components.skeletonTable(4),
-      '<div class="two-col">',
-      '<div class="section-card"><div class="section-card-body">',
-      Components.skeletonChart(),
-      "</div></div>",
-      '<div class="section-card"><div class="section-card-body">',
-      Components.skeletonTable(3),
-      "</div></div>",
-      "</div>",
     ].join("");
   },
 
   // =========================================================
-  // REAL CONTENT
+  // MAIN CONTENT
   // =========================================================
 
   _buildContent: function () {
-    var isAdmin = typeof currentRole !== "undefined" && currentRole === "admin";
     return [
-      this._buildModeCards(isAdmin),
-      this._buildBatchDispatch(isAdmin),
-      '<div class="two-col">',
-      this._buildTarifaCard(isAdmin),
-      this._buildAckStatusCard(),
+      this._buildStepIndicator(),
+      '<div id="p4-step-container">',
+      this._buildCurrentStep(),
       "</div>",
     ].join("");
   },
 
-  // ---- T4.1: Mode Selection Cards ----
-  _buildModeCards: function (isAdmin) {
-    var dist =
-      DemoStore.get("targetModeDistribution") ||
-      (this._overview ? this._overview.modeDistribution : {});
-    var total =
-      dist.self_consumption + dist.peak_valley_arbitrage + dist.peak_shaving;
-    var modes = Object.keys(this._modeKeys);
+  _buildStepIndicator: function () {
+    var steps = [
+      { num: 1, label: t("hems.step1") || "Modo & Parâmetros" },
+      { num: 2, label: t("hems.step2") || "Gateways" },
+      { num: 3, label: t("hems.step3") || "Confirmar & Enviar" },
+    ];
     var self = this;
+    var items = steps
+      .map(function (s) {
+        var cls = "p4-step-item";
+        if (s.num === self._currentStep) cls += " p4-step-active";
+        if (s.num < self._currentStep) cls += " p4-step-done";
+        return (
+          '<div class="' +
+          cls +
+          '"><span class="p4-step-num">' +
+          s.num +
+          "</span><span>" +
+          s.label +
+          "</span></div>"
+        );
+      })
+      .join('<div class="p4-step-divider"></div>');
+
+    return '<div class="p4-step-indicator">' + items + "</div>";
+  },
+
+  _buildCurrentStep: function () {
+    if (this._currentStep === 1) return this._buildStep1();
+    if (this._currentStep === 2) return this._buildStep2();
+    return this._buildStep3();
+  },
+
+  // =========================================================
+  // STEP 1 — Mode Selection + Parameters
+  // =========================================================
+
+  _buildStep1: function () {
+    var self = this;
+    var modes = Object.keys(this._modeKeys);
 
     var cards = modes
       .map(function (modeKey) {
         var meta = self._modeKeys[modeKey];
-        var count = dist[modeKey] || 0;
-        var pct = total > 0 ? ((count / total) * 100).toFixed(1) : "0.0";
-        var selectedAttr = self._selectedMode === modeKey ? " selected" : "";
-        var disabledClass = isAdmin ? "" : " p4-mode-disabled";
-
+        var selected = self._selectedMode === modeKey ? " selected" : "";
         return [
-          '<div class="p4-mode-card' + disabledClass + selectedAttr + '"',
+          '<div class="p4-mode-card' + selected + '"',
           ' data-mode="' + modeKey + '"',
           ' style="--mode-border: ' + meta.borderColor + '">',
           '<div class="p4-mode-icon">' + meta.icon + "</div>",
           '<div class="p4-mode-title">' + t(meta.titleKey) + "</div>",
           '<div class="p4-mode-desc">' + t(meta.descKey) + "</div>",
-          '<div class="p4-mode-count">',
-          '<span class="p4-mode-num">' + count + "</span>",
-          '<span class="p4-mode-pct">(' + pct + "%)</span>",
-          "</div>",
-          '<div class="p4-mode-label">' + t("shared.devices") + "</div>",
           self._selectedMode === modeKey
             ? '<div class="p4-mode-check">\u2713</div>'
             : "",
@@ -145,697 +165,726 @@ var HEMSPage = {
       })
       .join("");
 
+    // SoC parameters
+    var socPanel = [
+      '<div class="p4-param-panel">',
+      '<h4>' + (t("hems.socParams") || "Parâmetros SoC") + "</h4>",
+      '<div class="p4-param-row">',
+      '<label>SoC Mínimo (%): <strong id="p4-soc-min-val">' +
+        this._socMinLimit +
+        "</strong></label>",
+      '<input type="range" id="p4-soc-min" min="5" max="50" value="' +
+        this._socMinLimit +
+        '">',
+      "</div>",
+      '<div class="p4-param-row">',
+      '<label>SoC Máximo (%): <strong id="p4-soc-max-val">' +
+        this._socMaxLimit +
+        "</strong></label>",
+      '<input type="range" id="p4-soc-max" min="70" max="100" value="' +
+        this._socMaxLimit +
+        '">',
+      "</div>",
+      "</div>",
+    ].join("");
+
+    // Peak shaving params (only shown when peak_shaving selected)
+    var peakPanel = "";
+    if (this._selectedMode === "peak_shaving") {
+      peakPanel = [
+        '<div class="p4-param-panel">',
+        '<h4>' + (t("hems.peakParams") || "Limite de Demanda") + "</h4>",
+        '<div class="p4-param-row">',
+        '<label>Grid Import Limit (kW):</label>',
+        '<input type="number" id="p4-grid-limit" min="0" step="1" value="' +
+          this._gridImportLimitKw +
+          '" style="width:100px">',
+        "</div>",
+        "</div>",
+      ].join("");
+    }
+
+    // Arbitrage editor (only shown when arb selected)
+    var arbEditor = "";
+    if (this._selectedMode === "peak_valley_arbitrage") {
+      arbEditor = this._buildArbEditor();
+    }
+
+    var nextDisabled = this._validateStep1() ? "" : " disabled";
+
     return [
       '<div class="section-card">',
-      '<div class="section-card-header">',
-      "<h3>" + t("hems.optMode") + "</h3>",
-      !isAdmin
-        ? '<span class="p4-readonly-badge">' + t("hems.readonly") + "</span>"
-        : "",
-      "</div>",
+      '<div class="section-card-header"><h3>' +
+        (t("hems.step1Title") || "Selecionar Modo") +
+        "</h3></div>",
       '<div class="section-card-body">',
       '<div class="p4-mode-cards">' + cards + "</div>",
+      socPanel,
+      peakPanel,
+      arbEditor,
+      '<div class="p4-nav-buttons">',
+      '<button id="p4-btn-next" class="btn btn-primary"' +
+        nextDisabled +
+        ">" +
+        (t("hems.next") || "Próximo") +
+        "</button>",
+      "</div>",
       "</div>",
       "</div>",
     ].join("");
   },
 
-  // ---- T4.2: Batch Dispatch ----
-  _buildBatchDispatch: function (isAdmin) {
-    var disabledAttr = isAdmin ? "" : " disabled";
-    var tooltip = isAdmin ? "" : ' title="' + t("hems.requiresAdmin") + '"';
-
-    // Build integrador options
-    var integradores = this._overview ? this._overview.integradores : [];
-    var intOptions = (integradores || [])
-      .map(function (ig) {
-        return '<option value="' + ig.orgId + '">' + ig.name + "</option>";
-      })
-      .join("");
-
-    // Build gateway options
-    var homeOptions = (this._gateways || [])
-      .map(function (gw) {
-        return '<option value="' + gw.gatewayId + '">' + gw.name + "</option>";
-      })
-      .join("");
-
-    // Build mode options for Current Mode filter
+  _buildArbEditor: function () {
     var self = this;
-    var modeFilterOpts = Object.keys(this._modeKeys)
-      .map(function (k) {
+    var hours = [];
+    for (var h = 0; h < 24; h++) {
+      var val = self._arbGrid[h];
+      var cls = "p4-arb-cell";
+      if (val === "charge") cls += " p4-arb-charge";
+      if (val === "discharge") cls += " p4-arb-discharge";
+      var label = h < 10 ? "0" + h : "" + h;
+      hours.push(
+        '<div class="' +
+          cls +
+          '" data-hour="' +
+          h +
+          '"><span>' +
+          label +
+          "</span></div>",
+      );
+    }
+
+    var filledCount = 0;
+    for (var j = 0; j < 24; j++) {
+      if (self._arbGrid[j]) filledCount++;
+    }
+
+    var templates = [
+      '<div class="p4-arb-templates">',
+      '<button class="btn btn-sm" data-template="enel">' +
+        (t("hems.tplEnel") || "Enel SP") +
+        "</button>",
+      '<button class="btn btn-sm" data-template="night">' +
+        (t("hems.tplNight") || "Carga Noturna") +
+        "</button>",
+      '<button class="btn btn-sm" data-template="double">' +
+        (t("hems.tplDouble") || "Dupla Carga") +
+        "</button>",
+      '<button class="btn btn-sm" data-template="clear">' +
+        (t("hems.tplClear") || "Limpar") +
+        "</button>",
+      "</div>",
+    ].join("");
+
+    return [
+      '<div class="p4-param-panel">',
+      '<h4>' +
+        (t("hems.arbTitle") || "Horários de Carga/Descarga") +
+        " (" +
+        filledCount +
+        "/24)</h4>",
+      '<div class="p4-arb-brush">',
+      '<label><input type="radio" name="p4-brush" value="charge"' +
+        (self._arbBrush === "charge" ? " checked" : "") +
+        "> " +
+        (t("hems.charge") || "Carga") +
+        "</label>",
+      '<label><input type="radio" name="p4-brush" value="discharge"' +
+        (self._arbBrush === "discharge" ? " checked" : "") +
+        "> " +
+        (t("hems.discharge") || "Descarga") +
+        "</label>",
+      "</div>",
+      '<div class="p4-arb-grid">' + hours.join("") + "</div>",
+      templates,
+      "</div>",
+    ].join("");
+  },
+
+  _applyArbTemplate: function (name) {
+    var grid = this._arbGrid;
+    var i;
+    if (name === "clear") {
+      for (i = 0; i < 24; i++) grid[i] = null;
+    } else if (name === "enel") {
+      // Enel SP: charge 0-6, 9-17; discharge 6-9, 17-24
+      for (i = 0; i < 24; i++) {
+        if ((i >= 0 && i < 6) || (i >= 9 && i < 17)) grid[i] = "charge";
+        else grid[i] = "discharge";
+      }
+    } else if (name === "night") {
+      // Night charge: charge 0-6; discharge 6-24
+      for (i = 0; i < 24; i++) {
+        grid[i] = i < 6 ? "charge" : "discharge";
+      }
+    } else if (name === "double") {
+      // Double charge: charge 0-6 & 12-17; discharge 6-12 & 17-24
+      for (i = 0; i < 24; i++) {
+        if ((i >= 0 && i < 6) || (i >= 12 && i < 17)) grid[i] = "charge";
+        else grid[i] = "discharge";
+      }
+    }
+    this._renderStep();
+  },
+
+  _validateStep1: function () {
+    if (!this._selectedMode) return false;
+    if (this._selectedMode === "peak_valley_arbitrage") {
+      for (var i = 0; i < 24; i++) {
+        if (!this._arbGrid[i]) return false;
+      }
+    }
+    return true;
+  },
+
+  // =========================================================
+  // STEP 2 — Gateway Selection
+  // =========================================================
+
+  _buildStep2: function () {
+    var self = this;
+    var gateways = this._gateways || [];
+
+    var rows = gateways
+      .map(function (gw) {
+        var checked = self._selectedGateways[gw.gatewayId] ? " checked" : "";
+        var statusCls =
+          gw.status === "online"
+            ? "status-badge-online"
+            : "status-badge-offline";
+        var statusText = gw.status === "online" ? "Online" : "Offline";
+        return [
+          "<tr>",
+          '<td><input type="checkbox" class="p4-gw-check" data-gw="' +
+            gw.gatewayId +
+            '"' +
+            checked +
+            "></td>",
+          "<td>" + gw.gatewayId + "</td>",
+          "<td>" + (gw.name || "\u2014") + "</td>",
+          '<td><span class="' +
+            statusCls +
+            '">' +
+            statusText +
+            "</span></td>",
+          "<td>" + (gw.deviceCount != null ? gw.deviceCount : "\u2014") + "</td>",
+          "<td>" +
+            (gw.lastSeenAt
+              ? typeof formatISODateTime === "function"
+                ? formatISODateTime(gw.lastSeenAt)
+                : gw.lastSeenAt
+              : "\u2014") +
+            "</td>",
+          "</tr>",
+        ].join("");
+      })
+      .join("");
+
+    var allChecked =
+      gateways.length > 0 &&
+      gateways.every(function (gw) {
+        return self._selectedGateways[gw.gatewayId];
+      });
+
+    var selectedCount = Object.keys(this._selectedGateways).filter(function (k) {
+      return self._selectedGateways[k];
+    }).length;
+
+    return [
+      '<div class="section-card">',
+      '<div class="section-card-header"><h3>' +
+        (t("hems.step2Title") || "Selecionar Gateways") +
+        " (" +
+        selectedCount +
+        "/" +
+        gateways.length +
+        ")</h3></div>",
+      '<div class="section-card-body">',
+      '<div class="table-wrapper"><table class="data-table">',
+      "<thead><tr>",
+      '<th><input type="checkbox" id="p4-gw-all"' +
+        (allChecked ? " checked" : "") +
+        "></th>",
+      "<th>Gateway ID</th>",
+      "<th>" + (t("hems.home") || "Residência") + "</th>",
+      "<th>Status</th>",
+      "<th>" + (t("hems.devices") || "Dispositivos") + "</th>",
+      "<th>" + (t("hems.lastSync") || "Último Sync") + "</th>",
+      "</tr></thead>",
+      "<tbody>" + rows + "</tbody>",
+      "</table></div>",
+      '<div class="p4-nav-buttons">',
+      '<button id="p4-btn-prev" class="btn">' +
+        (t("hems.prev") || "Anterior") +
+        "</button>",
+      '<button id="p4-btn-next" class="btn btn-primary"' +
+        (selectedCount === 0 ? " disabled" : "") +
+        ">" +
+        (t("hems.next") || "Próximo") +
+        "</button>",
+      "</div>",
+      "</div>",
+      "</div>",
+    ].join("");
+  },
+
+  // =========================================================
+  // STEP 3 — Preview + Dispatch + History
+  // =========================================================
+
+  _buildStep3: function () {
+    var self = this;
+    var modeMeta = this._modeKeys[this._selectedMode] || {};
+    var modeTitle = t(modeMeta.titleKey) || this._selectedMode;
+    var selectedIds = this._getSelectedGatewayIds();
+
+    // Config summary
+    var configSummary = [
+      '<div class="p4-config-summary">',
+      "<div><strong>" +
+        (t("hems.mode") || "Modo") +
+        ":</strong> " +
+        (modeMeta.icon || "") +
+        " " +
+        modeTitle +
+        "</div>",
+      "<div><strong>SoC:</strong> " +
+        this._socMinLimit +
+        "% \u2013 " +
+        this._socMaxLimit +
+        "%</div>",
+    ];
+
+    if (this._selectedMode === "peak_shaving") {
+      configSummary.push(
+        "<div><strong>Grid Import Limit:</strong> " +
+          this._gridImportLimitKw +
+          " kW</div>",
+      );
+    }
+
+    if (this._selectedMode === "peak_valley_arbitrage") {
+      configSummary.push(
+        "<div><strong>" +
+          (t("hems.arbSlots") || "Horários") +
+          ":</strong> " +
+          this._buildArbSummary() +
+          "</div>",
+      );
+    }
+
+    configSummary.push(
+      "<div><strong>" +
+        (t("hems.gwCount") || "Gateways") +
+        ":</strong> " +
+        selectedIds.length +
+        "</div>",
+      "</div>",
+    );
+
+    // Gateway list preview
+    var gwPreview = selectedIds
+      .map(function (gwId) {
+        var gw = (self._gateways || []).filter(function (g) {
+          return g.gatewayId === gwId;
+        })[0];
+        var name = gw ? gw.name || gwId : gwId;
+        var status = gw ? gw.status : "unknown";
         return (
-          '<option value="' +
-          k +
+          "<div>" +
+          name +
+          ' <span class="' +
+          (status === "online"
+            ? "status-badge-online"
+            : "status-badge-offline") +
           '">' +
-          t(self._modeKeys[k].titleKey) +
-          "</option>"
+          status +
+          "</span></div>"
         );
       })
       .join("");
 
-    // Build target mode radio buttons
-    var targetRadios = Object.keys(this._modeKeys)
-      .map(function (k) {
+    // Batch history
+    var historyHtml = this._buildBatchHistory();
+
+    return [
+      '<div class="section-card">',
+      '<div class="section-card-header"><h3>' +
+        (t("hems.step3Title") || "Confirmar & Enviar") +
+        "</h3></div>",
+      '<div class="section-card-body">',
+      configSummary.join(""),
+      '<div class="p4-gw-preview"><h4>' +
+        (t("hems.selectedGw") || "Gateways Selecionados") +
+        "</h4>" +
+        gwPreview +
+        "</div>",
+      '<div class="p4-nav-buttons">',
+      '<button id="p4-btn-prev" class="btn">' +
+        (t("hems.prev") || "Anterior") +
+        "</button>",
+      '<button id="p4-btn-dispatch" class="btn btn-primary">' +
+        (t("hems.dispatch") || "Enviar") +
+        "</button>",
+      "</div>",
+      "</div>",
+      "</div>",
+      historyHtml,
+    ].join("");
+  },
+
+  _buildArbSummary: function () {
+    var slots = this._buildArbSlots();
+    return slots
+      .map(function (s) {
+        var label = s.action === "charge" ? "Carga" : "Descarga";
+        return (
+          s.startHour + ":00\u2013" + s.endHour + ":00 " + label
+        );
+      })
+      .join(", ");
+  },
+
+  _buildArbSlots: function () {
+    var slots = [];
+    var grid = this._arbGrid;
+    var i = 0;
+    while (i < 24) {
+      var action = grid[i];
+      if (!action) {
+        i++;
+        continue;
+      }
+      var start = i;
+      while (i < 24 && grid[i] === action) i++;
+      slots.push({ startHour: start, endHour: i, action: action });
+    }
+    return slots;
+  },
+
+  _buildBatchHistory: function () {
+    var batches = this._batchHistory || [];
+    if (batches.length === 0) {
+      return [
+        '<div class="section-card" style="margin-top:var(--space-lg)">',
+        '<div class="section-card-header"><h3>' +
+          (t("hems.history") || "Histórico de Operações") +
+          "</h3></div>",
+        '<div class="section-card-body">',
+        '<div class="empty-state-detail">' +
+          (t("hems.noHistory") || "Nenhuma operação anterior") +
+          "</div>",
+        "</div></div>",
+      ].join("");
+    }
+
+    var rows = batches
+      .map(function (b) {
+        var modeLabel = "\u2014";
+        if (b.samplePayload && b.samplePayload.slots) {
+          var firstSlot = b.samplePayload.slots[0];
+          if (firstSlot) modeLabel = firstSlot.mode || "\u2014";
+        }
+        var time =
+          typeof formatISODateTime === "function"
+            ? formatISODateTime(b.dispatchedAt)
+            : b.dispatchedAt;
         return [
-          '<label class="p4-radio-label"' + tooltip + ">",
-          "<input",
-          ' type="radio"',
-          ' name="target-mode"',
-          ' value="' + k + '"',
-          disabledAttr,
-          ">",
-          '<span class="p4-radio-text">' +
-            self._modeKeys[k].icon +
-            " " +
-            t(self._modeKeys[k].titleKey) +
-            "</span>",
-          "</label>",
+          "<tr>",
+          "<td>" + time + "</td>",
+          "<td>" + (b.source || "p4") + "</td>",
+          "<td>" + modeLabel + "</td>",
+          "<td>" + b.total + "</td>",
+          "<td>" + b.successCount + "</td>",
+          "<td>" + b.failedCount + "</td>",
+          "</tr>",
         ].join("");
       })
       .join("");
 
     return [
-      '<div class="section-card">',
-      '<div class="section-card-header">',
-      "<h3>" + t("hems.batchDispatch") + "</h3>",
-      !isAdmin
-        ? '<span class="p4-readonly-badge">' +
-          t("hems.requiresAdmin") +
-          "</span>"
-        : "",
-      "</div>",
+      '<div class="section-card" style="margin-top:var(--space-lg)">',
+      '<div class="section-card-header"><h3>' +
+        (t("hems.history") || "Histórico de Operações") +
+        "</h3></div>",
       '<div class="section-card-body">',
-
-      // Filters row
-      '<div class="p4-filter-row">',
-      '<select id="p4-filter-integrador"' + disabledAttr + tooltip + ">",
-      '<option value="">' + t("hems.filter.allInt") + "</option>",
-      intOptions,
-      "</select>",
-      '<select id="p4-filter-home"' + disabledAttr + tooltip + ">",
-      '<option value="">' + t("hems.filter.allHomes") + "</option>",
-      homeOptions,
-      "</select>",
-      '<select id="p4-filter-type"' + disabledAttr + tooltip + ">",
-      '<option value="">' + t("hems.filter.allTypes") + "</option>",
-      '<option value="Inverter + Battery">' +
-        t("dtype.Inverter + Battery") +
-        "</option>",
-      '<option value="Smart Meter">' + t("dtype.Smart Meter") + "</option>",
-      '<option value="AC">' + t("dtype.AC") + "</option>",
-      '<option value="EV Charger">' + t("dtype.EV Charger") + "</option>",
-      "</select>",
-      '<select id="p4-filter-mode"' + disabledAttr + tooltip + ">",
-      '<option value="">' + t("hems.filter.allModes") + "</option>",
-      modeFilterOpts,
-      "</select>",
-      "</div>",
-
-      // Target mode
-      '<div class="p4-target-section">',
-      '<div class="p4-target-label">' + t("hems.targetMode") + "</div>",
-      '<div class="p4-target-radios">' + targetRadios + "</div>",
-      "</div>",
-
-      // Action buttons
-      '<div class="p4-dispatch-actions">',
-      '<button id="p4-btn-preview" class="btn btn-primary"' +
-        disabledAttr +
-        tooltip +
-        ">" +
-        t("hems.preview") +
-        "</button>",
-      '<button id="p4-btn-apply" class="btn btn-primary p4-btn-apply" disabled' +
-        tooltip +
-        ">" +
-        t("hems.apply") +
-        "</button>",
-      "</div>",
-
-      // Preview result area
-      '<div id="p4-preview-result" class="p4-preview-result"></div>',
-      "</div>",
-      "</div>",
+      '<div class="table-wrapper"><table class="data-table">',
+      "<thead><tr>",
+      "<th>" + (t("hems.time") || "Data/Hora") + "</th>",
+      "<th>" + (t("hems.source") || "Origem") + "</th>",
+      "<th>" + (t("hems.mode") || "Modo") + "</th>",
+      "<th>Total</th>",
+      "<th>" + (t("hems.success") || "Sucesso") + "</th>",
+      "<th>" + (t("hems.failed") || "Falha") + "</th>",
+      "</tr></thead>",
+      "<tbody>" + rows + "</tbody>",
+      "</table></div>",
+      "</div></div>",
     ].join("");
   },
 
-  // ---- T4.3: Tarifa Branca Rate Table ----
-  _buildTarifaCard: function (isAdmin) {
-    var rates =
-      DemoStore.get("tarifaRates") ||
-      (this._overview ? this._overview.tarifaRates : {});
+  // =========================================================
+  // NAVIGATION
+  // =========================================================
 
-    var body = [
-      '<div class="p4-tarifa-table">',
-      '<div class="p4-tarifa-row">',
-      '<span class="p4-tarifa-label">' + t("hems.disco") + "</span>",
-      '<span class="p4-tarifa-value">' + rates.disco + "</span>",
-      "</div>",
-      '<div class="p4-tarifa-row p4-tarifa-peak">',
-      '<span class="p4-tarifa-label">' +
-        t("hems.peak") +
-        " (" +
-        rates.peakHours +
-        ")</span>",
-      '<span class="p4-tarifa-value font-data">R$ ' +
-        rates.peak.toFixed(2).replace(".", ",") +
-        "/kWh</span>",
-      "</div>",
-      rates.intermediateHours
-        ? '<div class="p4-tarifa-row p4-tarifa-inter">' +
-          '<span class="p4-tarifa-label">' +
-          t("hems.intermediate") +
-          " (" +
-          rates.intermediateHours +
-          ")</span>" +
-          '<span class="p4-tarifa-value font-data">R$ ' +
-          rates.intermediate.toFixed(2).replace(".", ",") +
-          "/kWh</span>" +
-          "</div>"
-        : "",
-      '<div class="p4-tarifa-row p4-tarifa-offpeak">',
-      '<span class="p4-tarifa-label">' + t("hems.offpeak") + "</span>",
-      '<span class="p4-tarifa-value font-data">R$ ' +
-        rates.offPeak.toFixed(2).replace(".", ",") +
-        "/kWh</span>",
-      "</div>",
-      '<div class="p4-tarifa-row">',
-      '<span class="p4-tarifa-label">' + t("hems.effectiveDate") + "</span>",
-      '<span class="p4-tarifa-value">' + rates.effectiveDate + "</span>",
-      "</div>",
-      "</div>",
-      isAdmin
-        ? '<button id="p4-btn-edit-tarifa" class="btn" style="margin-top:var(--space-md)">' +
-          t("hems.editRates") +
-          "</button>"
-        : "",
-    ].join("");
-
-    return Components.sectionCard(t("hems.tarifa"), body);
+  _renderStep: function () {
+    var container = document.getElementById("hems-content");
+    if (!container) return;
+    container.innerHTML = this._buildContent();
+    this._setupStepListeners();
   },
 
-  // ---- T4.4: ACK Status Panel (D3: simplified — no ackList table) ----
-  _buildAckStatusCard: function () {
-    var dispatch =
-      this._overview && this._overview.lastDispatch
-        ? this._overview.lastDispatch
-        : null;
-
-    if (!dispatch) {
-      return Components.sectionCard(
-        t("hems.ackStatus"),
-        '<div class="empty-state-detail">' +
-          t("hems.noRecentDispatch") +
-          "</div>",
-      );
+  _nextStep: function () {
+    if (this._currentStep === 1 && !this._validateStep1()) return;
+    if (this._currentStep === 2 && this._getSelectedGatewayIds().length === 0)
+      return;
+    if (this._currentStep < 3) {
+      this._currentStep++;
+      this._renderStep();
     }
-
-    var toLabel =
-      dispatch.toMode && this._modeKeys[dispatch.toMode]
-        ? t(this._modeKeys[dispatch.toMode].titleKey)
-        : dispatch.toMode || "—";
-
-    var summary = [
-      '<div class="p4-dispatch-summary">',
-      '<div class="p4-dispatch-info">',
-      '<span class="p4-dispatch-time">' +
-        t("hems.lastChange") +
-        " " +
-        (dispatch.timestamp ? formatISODateTime(dispatch.timestamp) : "—") +
-        "</span>",
-      '<span class="p4-dispatch-detail">' +
-        t("hems.targetMode") +
-        ": " +
-        toLabel +
-        "</span>",
-      '<span class="p4-dispatch-detail">' +
-        t("hems.affected") +
-        " " +
-        (dispatch.affectedDevices != null ? dispatch.affectedDevices : "—") +
-        " " +
-        t("shared.devices") +
-        "</span>",
-      '<span class="p4-dispatch-detail">' +
-        t("hems.successRate") +
-        " " +
-        (dispatch.successRate != null ? dispatch.successRate + "%" : "—") +
-        "</span>",
-      "</div>",
-      "</div>",
-    ].join("");
-
-    var link =
-      '<div class="p4-view-link"><a href="#energy" id="p4-link-energy">' +
-      t("hems.viewBehavior") +
-      "</a></div>";
-
-    return Components.sectionCard(t("hems.ackStatus"), summary + link);
   },
 
-  // =========================================================
-  // MODE CARD LISTENER (shared helper — avoids duplication)
-  // =========================================================
+  _prevStep: function () {
+    if (this._currentStep > 1) {
+      this._currentStep--;
+      this._renderStep();
+    }
+  },
 
-  _attachModeCardListeners: function () {
+  _getSelectedGatewayIds: function () {
     var self = this;
-    document
-      .querySelectorAll(".p4-mode-card:not(.p4-mode-disabled)")
-      .forEach(function (card) {
-        card.addEventListener("click", function () {
-          var mode = card.dataset.mode;
-          self._selectedMode = mode;
-
-          // Update card visuals
-          document.querySelectorAll(".p4-mode-card").forEach(function (c) {
-            c.removeAttribute("selected");
-            var check = c.querySelector(".p4-mode-check");
-            if (check) check.remove();
-          });
-          card.setAttribute("selected", "");
-          var checkEl = document.createElement("div");
-          checkEl.className = "p4-mode-check";
-          checkEl.textContent = "\u2713";
-          card.appendChild(checkEl);
-
-          // Sync: also select the matching target-mode radio
-          var radio = document.querySelector(
-            'input[name="target-mode"][value="' + mode + '"]',
-          );
-          if (radio) radio.checked = true;
-        });
-      });
+    return Object.keys(this._selectedGateways).filter(function (k) {
+      return self._selectedGateways[k];
+    });
   },
 
   // =========================================================
   // EVENT LISTENERS
   // =========================================================
 
-  _setupEventListeners: function () {
+  _setupStepListeners: function () {
     var self = this;
-    var isAdmin = typeof currentRole !== "undefined" && currentRole === "admin";
 
-    // Mode card clicks (admin only) — also syncs target radio
-    if (isAdmin) {
-      self._attachModeCardListeners();
-    }
-
-    // Preview button
-    var previewBtn = document.getElementById("p4-btn-preview");
-    if (previewBtn && isAdmin) {
-      previewBtn.addEventListener("click", function () {
-        self._handlePreview();
+    // Step navigation
+    var nextBtn = document.getElementById("p4-btn-next");
+    if (nextBtn) {
+      nextBtn.addEventListener("click", function () {
+        self._nextStep();
       });
     }
 
-    // Apply button
-    var applyBtn = document.getElementById("p4-btn-apply");
-    if (applyBtn && isAdmin) {
-      applyBtn.addEventListener("click", function () {
-        self._handleApply();
+    var prevBtn = document.getElementById("p4-btn-prev");
+    if (prevBtn) {
+      prevBtn.addEventListener("click", function () {
+        self._prevStep();
       });
     }
 
-    // Edit tarifa button
-    var editBtn = document.getElementById("p4-btn-edit-tarifa");
-    if (editBtn) {
-      editBtn.addEventListener("click", function () {
-        self._showTarifaModal();
+    // Step 1: Mode card clicks
+    if (this._currentStep === 1) {
+      document.querySelectorAll(".p4-mode-card").forEach(function (card) {
+        card.addEventListener("click", function () {
+          self._selectedMode = card.dataset.mode;
+          self._renderStep();
+        });
       });
-    }
 
-    // Energy link
-    var energyLink = document.getElementById("p4-link-energy");
-    if (energyLink) {
-      energyLink.addEventListener("click", function (e) {
-        e.preventDefault();
-        navigateTo("energy");
-      });
-    }
-  },
-
-  // =========================================================
-  // BATCH DISPATCH LOGIC
-  // =========================================================
-
-  _getSelectedTargetMode: function () {
-    var checked = document.querySelector('input[name="target-mode"]:checked');
-    return checked ? checked.value : null;
-  },
-
-  _getFilteredDevices: function () {
-    var filtOrg = document.getElementById("p4-filter-integrador");
-    var filtHome = document.getElementById("p4-filter-home");
-    var filtType = document.getElementById("p4-filter-type");
-    var filtMode = document.getElementById("p4-filter-mode");
-
-    var orgVal = filtOrg ? filtOrg.value : "";
-    var homeVal = filtHome ? filtHome.value : "";
-    var typeVal = filtType ? filtType.value : "";
-    var modeVal = filtMode ? filtMode.value : "";
-
-    var devices = (this._devices || []).slice();
-
-    if (orgVal) {
-      devices = devices.filter(function (d) {
-        return d.orgId === orgVal;
-      });
-    }
-    if (homeVal) {
-      devices = devices.filter(function (d) {
-        return d.gatewayId === homeVal;
-      });
-    }
-    if (typeVal) {
-      devices = devices.filter(function (d) {
-        return d.type === typeVal;
-      });
-    }
-    // Mode filter: we simulate device modes by distributing across devices
-    // For demo, assign modes round-robin based on mode distribution
-    if (modeVal) {
-      var modeAssignment = this._getDeviceModeAssignment();
-      devices = devices.filter(function (d) {
-        return modeAssignment[d.deviceId] === modeVal;
-      });
-    }
-
-    return devices;
-  },
-
-  _getDeviceModeAssignment: function () {
-    // Assign modes to devices based on distribution
-    var dist =
-      DemoStore.get("targetModeDistribution") ||
-      (this._overview ? this._overview.modeDistribution : {});
-    var assignment = {};
-    var modes = [];
-
-    // Build flat array of modes matching distribution counts
-    var modeKeysList = [
-      "self_consumption",
-      "peak_valley_arbitrage",
-      "peak_shaving",
-    ];
-    modeKeysList.forEach(function (m) {
-      for (var i = 0; i < (dist[m] || 0); i++) {
-        modes.push(m);
+      // SoC sliders
+      var socMinSlider = document.getElementById("p4-soc-min");
+      if (socMinSlider) {
+        socMinSlider.addEventListener("input", function () {
+          self._socMinLimit = parseInt(this.value, 10);
+          var display = document.getElementById("p4-soc-min-val");
+          if (display) display.textContent = self._socMinLimit;
+        });
       }
-    });
 
-    // Assign to devices in order
-    (this._devices || []).forEach(function (d, idx) {
-      assignment[d.deviceId] = modes[idx % modes.length] || "self_consumption";
-    });
+      var socMaxSlider = document.getElementById("p4-soc-max");
+      if (socMaxSlider) {
+        socMaxSlider.addEventListener("input", function () {
+          self._socMaxLimit = parseInt(this.value, 10);
+          var display = document.getElementById("p4-soc-max-val");
+          if (display) display.textContent = self._socMaxLimit;
+        });
+      }
 
-    return assignment;
-  },
+      // Grid import limit
+      var gridLimitInput = document.getElementById("p4-grid-limit");
+      if (gridLimitInput) {
+        gridLimitInput.addEventListener("change", function () {
+          self._gridImportLimitKw = parseInt(this.value, 10) || 50;
+        });
+      }
 
-  _handlePreview: function () {
-    var targetMode = this._getSelectedTargetMode();
-    if (!targetMode) {
-      this._showToast(t("hems.toast.selectMode"), "warning");
-      return;
-    }
+      // Arb brush radio
+      document
+        .querySelectorAll('input[name="p4-brush"]')
+        .forEach(function (radio) {
+          radio.addEventListener("change", function () {
+            self._arbBrush = this.value;
+          });
+        });
 
-    var devices = this._getFilteredDevices();
-    if (devices.length === 0) {
-      this._showToast(t("hems.toast.noDevices"), "warning");
-      return;
-    }
-
-    // Group by gateway
-    var homeGroups = {};
-    devices.forEach(function (d) {
-      var key = d.gatewayName || d.gatewayId || "Unknown";
-      if (!homeGroups[key]) homeGroups[key] = 0;
-      homeGroups[key]++;
-    });
-
-    var offlineCount = devices.filter(function (d) {
-      return d.status === "offline";
-    }).length;
-
-    var targetTitle = t(this._modeKeys[targetMode].titleKey);
-
-    var html = [
-      '<div class="p4-preview-box">',
-      '<div class="p4-preview-summary">',
-      t("hems.previewWillChange") +
-        " <strong>" +
-        devices.length +
-        "</strong> " +
-        t("hems.previewDevicesTo") +
-        " <strong>" +
-        targetTitle +
-        "</strong>.",
-      "</div>",
-      '<div class="p4-preview-breakdown">',
-    ];
-
-    Object.keys(homeGroups).forEach(function (home) {
-      html.push(
-        "<div>" +
-          home +
-          ": <strong>" +
-          homeGroups[home] +
-          " " +
-          t("shared.devices") +
-          "</strong></div>",
-      );
-    });
-
-    html.push("</div>");
-
-    if (offlineCount > 0) {
-      html.push(
-        '<div class="p4-preview-warning">\u26A0\uFE0F ' +
-          offlineCount +
-          " " +
-          t("hems.previewOfflineWarn") +
-          "</div>",
-      );
-    }
-
-    html.push("</div>");
-
-    var resultEl = document.getElementById("p4-preview-result");
-    if (resultEl) resultEl.innerHTML = html.join("");
-
-    this._previewDone = true;
-    this._previewResult = { devices: devices, targetMode: targetMode };
-
-    var applyBtn = document.getElementById("p4-btn-apply");
-    if (applyBtn) applyBtn.disabled = false;
-  },
-
-  _handleApply: function () {
-    if (!this._previewDone || !this._previewResult) return;
-
-    var self = this;
-    var count = this._previewResult.devices.length;
-    var targetTitle = t(
-      this._modeKeys[this._previewResult.targetMode].titleKey,
-    );
-
-    // Show confirm dialog
-    this._showConfirmDialog(
-      t("hems.confirmTitle"),
-      t("hems.confirmMsg").replace("{n}", count).replace("{mode}", targetTitle),
-      function () {
-        // Mock 2s delay then success
-        self._showToast(t("hems.toast.dispatching"), "info");
-
-        var applyBtn = document.getElementById("p4-btn-apply");
-        if (applyBtn) {
-          applyBtn.disabled = true;
-          applyBtn.textContent = t("hems.applying");
+      // Arb grid cells — click to paint
+      var isMouseDown = false;
+      document.querySelectorAll(".p4-arb-cell").forEach(function (cell) {
+        cell.addEventListener("mousedown", function (e) {
+          e.preventDefault();
+          isMouseDown = true;
+          var h = parseInt(cell.dataset.hour, 10);
+          self._arbGrid[h] = self._arbBrush;
+          self._renderStep();
+        });
+        cell.addEventListener("mouseenter", function () {
+          if (!isMouseDown) return;
+          var h = parseInt(cell.dataset.hour, 10);
+          self._arbGrid[h] = self._arbBrush;
+          self._updateArbCellVisual(cell, self._arbBrush);
+        });
+      });
+      document.addEventListener("mouseup", function () {
+        if (isMouseDown) {
+          isMouseDown = false;
+          self._renderStep();
         }
+      });
 
-        setTimeout(function () {
-          // Update DemoStore distribution
-          var newDist = Object.assign(
-            {},
-            DemoStore.get("targetModeDistribution") ||
-              (self._overview ? self._overview.modeDistribution : {}),
-          );
-          // Move all filtered devices to target mode
-          var perMode = {};
-          var assignment = self._getDeviceModeAssignment();
-          self._previewResult.devices.forEach(function (d) {
-            var oldMode = assignment[d.deviceId];
-            if (!perMode[oldMode]) perMode[oldMode] = 0;
-            perMode[oldMode]++;
+      // Arb templates
+      document
+        .querySelectorAll("[data-template]")
+        .forEach(function (btn) {
+          btn.addEventListener("click", function () {
+            self._applyArbTemplate(btn.dataset.template);
           });
+        });
+    }
 
-          Object.keys(perMode).forEach(function (m) {
-            newDist[m] = Math.max(0, (newDist[m] || 0) - perMode[m]);
+    // Step 2: Gateway checkboxes
+    if (this._currentStep === 2) {
+      var allCheck = document.getElementById("p4-gw-all");
+      if (allCheck) {
+        allCheck.addEventListener("change", function () {
+          var checked = this.checked;
+          (self._gateways || []).forEach(function (gw) {
+            self._selectedGateways[gw.gatewayId] = checked;
           });
-          newDist[self._previewResult.targetMode] =
-            (newDist[self._previewResult.targetMode] || 0) + count;
+          self._renderStep();
+        });
+      }
 
-          DemoStore.set("targetModeDistribution", newDist);
+      document.querySelectorAll(".p4-gw-check").forEach(function (cb) {
+        cb.addEventListener("change", function () {
+          self._selectedGateways[cb.dataset.gw] = cb.checked;
+          // Update next button state
+          var nextBtn2 = document.getElementById("p4-btn-next");
+          if (nextBtn2) {
+            nextBtn2.disabled =
+              self._getSelectedGatewayIds().length === 0;
+          }
+        });
+      });
+    }
 
-          self._showToast(
-            t("hems.toast.success")
-              .replace("{mode}", targetTitle)
-              .replace("{n}", count),
-            "success",
-          );
+    // Step 3: Dispatch button
+    if (this._currentStep === 3) {
+      var dispatchBtn = document.getElementById("p4-btn-dispatch");
+      if (dispatchBtn) {
+        dispatchBtn.addEventListener("click", function () {
+          self._handleDispatch();
+        });
+      }
+    }
+  },
 
-          if (applyBtn) applyBtn.textContent = t("hems.apply");
+  _updateArbCellVisual: function (cell, action) {
+    cell.classList.remove("p4-arb-charge", "p4-arb-discharge");
+    if (action === "charge") cell.classList.add("p4-arb-charge");
+    if (action === "discharge") cell.classList.add("p4-arb-discharge");
+  },
 
-          // Reset preview
-          self._previewDone = false;
-          self._previewResult = null;
-          var resultEl = document.getElementById("p4-preview-result");
-          if (resultEl) resultEl.innerHTML = "";
+  // =========================================================
+  // DISPATCH
+  // =========================================================
 
-          // Re-render mode cards to show updated counts
-          self._refreshModeCards();
-        }, 2000);
+  _handleDispatch: function () {
+    var self = this;
+    var selectedIds = this._getSelectedGatewayIds();
+    if (selectedIds.length === 0) return;
+
+    var modeMeta = this._modeKeys[this._selectedMode] || {};
+    var modeTitle = t(modeMeta.titleKey) || this._selectedMode;
+
+    this._showConfirmDialog(
+      t("hems.confirmTitle") || "Confirmar Envio",
+      (t("hems.confirmMsg") || "Enviar {mode} para {n} gateways?")
+        .replace("{mode}", modeTitle)
+        .replace("{n}", selectedIds.length),
+      function () {
+        self._executeDispatch(selectedIds);
       },
     );
   },
 
-  _refreshModeCards: function () {
-    var isAdmin = typeof currentRole !== "undefined" && currentRole === "admin";
-    var container = document.querySelector(".p4-mode-cards");
-    if (!container) return;
-
-    var parent = container.closest(".section-card");
-    if (parent) {
-      parent.outerHTML = this._buildModeCards(isAdmin);
-      if (isAdmin) this._attachModeCardListeners();
-    }
-  },
-
-  // =========================================================
-  // TARIFA EDIT MODAL
-  // =========================================================
-
-  _showTarifaModal: function () {
-    var rates =
-      DemoStore.get("tarifaRates") ||
-      (this._overview ? this._overview.tarifaRates : {});
+  _executeDispatch: function (gatewayIds) {
     var self = this;
 
-    var modalHTML = [
-      '<div id="p4-tarifa-modal" class="modal-overlay active">',
-      '<div class="modal-content">',
-      "<h3>" + t("hems.editTarifaTitle") + "</h3>",
-      '<div class="p4-modal-form">',
+    var dispatchBtn = document.getElementById("p4-btn-dispatch");
+    if (dispatchBtn) {
+      dispatchBtn.disabled = true;
+      dispatchBtn.textContent = t("hems.dispatching") || "Enviando...";
+    }
 
-      '<div class="p4-form-group">',
-      "<label>" + t("hems.modal.disco") + "</label>",
-      '<input type="text" id="p4-edit-disco" value="' + rates.disco + '">',
-      "</div>",
+    self._showToast(t("hems.toast.dispatching") || "Enviando comandos...", "info");
 
-      '<div class="p4-form-group">',
-      "<label>" + t("hems.modal.peak") + "</label>",
-      '<input type="number" id="p4-edit-peak" step="0.01" value="' +
-        rates.peak +
-        '">',
-      "</div>",
+    var params = {
+      mode: self._selectedMode,
+      socMinLimit: self._socMinLimit,
+      socMaxLimit: self._socMaxLimit,
+      gatewayIds: gatewayIds,
+    };
 
-      '<div class="p4-form-group">',
-      "<label>" + t("hems.modal.inter") + "</label>",
-      '<input type="number" id="p4-edit-inter" step="0.01" value="' +
-        rates.intermediate +
-        '">',
-      "</div>",
+    if (self._selectedMode === "peak_shaving") {
+      params.gridImportLimitKw = self._gridImportLimitKw;
+    }
 
-      '<div class="p4-form-group">',
-      "<label>" + t("hems.modal.offpeak") + "</label>",
-      '<input type="number" id="p4-edit-offpeak" step="0.01" value="' +
-        rates.offPeak +
-        '">',
-      "</div>",
+    if (self._selectedMode === "peak_valley_arbitrage") {
+      params.arbSlots = self._buildArbSlots();
+    }
 
-      '<div class="p4-form-group">',
-      "<label>" + t("hems.modal.date") + "</label>",
-      '<input type="text" id="p4-edit-date" value="' +
-        rates.effectiveDate +
-        '">',
-      "</div>",
+    DataSource.hems
+      .batchDispatch(params)
+      .then(function (data) {
+        var summary = data.summary || { pending: 0, skipped: 0 };
+        self._showToast(
+          (t("hems.toast.dispatchDone") ||
+            "Enviado! {p} pendente(s), {s} ignorado(s)")
+            .replace("{p}", summary.pending)
+            .replace("{s}", summary.skipped),
+          summary.skipped > 0 ? "warning" : "success",
+        );
 
-      "</div>",
-
-      '<div class="modal-actions">',
-      '<button class="btn" id="p4-modal-cancel">' +
-        t("shared.cancel") +
-        "</button>",
-      '<button class="btn btn-primary" id="p4-modal-save">' +
-        t("shared.save") +
-        "</button>",
-      "</div>",
-      "</div>",
-      "</div>",
-    ].join("");
-
-    document.body.insertAdjacentHTML("beforeend", modalHTML);
-
-    document
-      .getElementById("p4-modal-cancel")
-      .addEventListener("click", function () {
-        self._closeTarifaModal();
-      });
-
-    document
-      .getElementById("p4-modal-save")
-      .addEventListener("click", function () {
-        var newRates = {
-          disco: document.getElementById("p4-edit-disco").value,
-          peak: parseFloat(document.getElementById("p4-edit-peak").value) || 0,
-          intermediate:
-            parseFloat(document.getElementById("p4-edit-inter").value) || 0,
-          offPeak:
-            parseFloat(document.getElementById("p4-edit-offpeak").value) || 0,
-          effectiveDate: document.getElementById("p4-edit-date").value,
-          peakHours: rates.peakHours,
-          intermediateHours: rates.intermediateHours,
-        };
-
-        DemoStore.set("tarifaRates", newRates);
-        self._closeTarifaModal();
-        self._showToast(t("hems.toast.tarifaUpdated"), "success");
-
-        // Re-render tarifa card
-        self._refreshTarifaCard();
-      });
-
-    // Close on overlay click
-    document
-      .getElementById("p4-tarifa-modal")
-      .addEventListener("click", function (e) {
-        if (e.target.id === "p4-tarifa-modal") {
-          self._closeTarifaModal();
+        // Refresh history
+        DataSource.hems
+          .batchHistory(20)
+          .then(function (histData) {
+            self._batchHistory = histData ? histData.batches || [] : [];
+            self._renderStep();
+          })
+          .catch(function () {
+            self._renderStep();
+          });
+      })
+      .catch(function (err) {
+        self._showToast(
+          (t("hems.toast.dispatchError") || "Erro: ") +
+            (err.message || "falha no envio"),
+          "error",
+        );
+        if (dispatchBtn) {
+          dispatchBtn.disabled = false;
+          dispatchBtn.textContent = t("hems.dispatch") || "Enviar";
         }
       });
-  },
-
-  _closeTarifaModal: function () {
-    var modal = document.getElementById("p4-tarifa-modal");
-    if (modal) modal.remove();
-  },
-
-  _refreshTarifaCard: function () {
-    var isAdmin = typeof currentRole !== "undefined" && currentRole === "admin";
-    // Find the tarifa section card in the two-col layout
-    var twoCols = document.querySelectorAll(
-      "#hems-content .two-col .section-card",
-    );
-    if (twoCols.length > 0) {
-      twoCols[0].outerHTML = this._buildTarifaCard(isAdmin);
-      // Re-attach edit button listener
-      var editBtn = document.getElementById("p4-btn-edit-tarifa");
-      if (editBtn) {
-        var self = this;
-        editBtn.addEventListener("click", function () {
-          self._showTarifaModal();
-        });
-      }
-    }
   },
 
   // =========================================================
@@ -850,10 +899,10 @@ var HEMSPage = {
       "<p>" + message + "</p>",
       '<div class="modal-actions">',
       '<button class="btn" id="p4-confirm-cancel">' +
-        t("shared.cancel") +
+        (t("shared.cancel") || "Cancelar") +
         "</button>",
       '<button class="btn btn-primary" id="p4-confirm-ok">' +
-        t("shared.confirm") +
+        (t("shared.confirm") || "Confirmar") +
         "</button>",
       "</div>",
       "</div>",
@@ -877,7 +926,6 @@ var HEMSPage = {
         if (onConfirm) onConfirm();
       });
 
-    // Close on overlay click
     document
       .getElementById("p4-confirm-modal")
       .addEventListener("click", function (e) {
@@ -915,12 +963,10 @@ var HEMSPage = {
 
     document.body.appendChild(toast);
 
-    // Trigger animation
     requestAnimationFrame(function () {
       toast.classList.add("p4-toast-show");
     });
 
-    // Auto-remove after 3s
     setTimeout(function () {
       toast.classList.remove("p4-toast-show");
       setTimeout(function () {

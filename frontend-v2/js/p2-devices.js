@@ -773,6 +773,7 @@ var DevicesPage = {
 
   _pendingConfig: null,
   _currentGatewayId: null,
+  _ratedMaxPowerKw: null,
 
   _openLayer3GW: async function (gatewayId) {
     var self = this;
@@ -789,6 +790,10 @@ var DevicesPage = {
     try {
       var detail = await DataSource.devices.gatewayDetail(gatewayId);
       self._currentDetail = detail;
+      self._ratedMaxPowerKw =
+        detail && detail.config && detail.config.ratedMaxPowerKw != null
+          ? detail.config.ratedMaxPowerKw
+          : null;
 
       // Fetch schedule from dedicated endpoint (v5.21)
       var schedData = null;
@@ -1384,6 +1389,24 @@ var DevicesPage = {
     var dischargeCurrent = parseInt(cfg.maxDischargeCurrent, 10);
     if (!Number.isInteger(dischargeCurrent) || dischargeCurrent < 0) {
       return "Corrente de descarga deve ser \u2265 0";
+    }
+
+    // Phase 2: Hardware rated capacity validation
+    if (this._ratedMaxPowerKw != null) {
+      if (chargeCurrent > this._ratedMaxPowerKw) {
+        return (
+          "Corrente de carga excede capacidade do equipamento (" +
+          this._ratedMaxPowerKw +
+          " kW)"
+        );
+      }
+      if (dischargeCurrent > this._ratedMaxPowerKw) {
+        return (
+          "Corrente de descarga excede capacidade do equipamento (" +
+          this._ratedMaxPowerKw +
+          " kW)"
+        );
+      }
     }
     var gridLimit = parseInt(cfg.gridImportLimitKw, 10);
     if (!Number.isInteger(gridLimit) || gridLimit < 0) {
