@@ -53,7 +53,7 @@ services:
     environment:
       NODE_ENV: production
       SERVICE_DATABASE_URL: postgresql://solfacil_service:solfacil_service_2026@127.0.0.1:5433/solfacil_vpp
-      MQTT_CLIENT_SUFFIX: local
+      MQTT_CLIENT_SUFFIX: ${MQTT_CLIENT_SUFFIX}  # avoids MQTT clientId collision between local and EC2
     depends_on:
       solfacil-db:
         condition: service_healthy
