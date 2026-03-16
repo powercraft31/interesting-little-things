@@ -25,6 +25,8 @@ function createMockPool() {
 }
 
 // ─── Test Fixtures ──────────────────────────────────────────────────────────
+// All raw values use Protocol v1.8 integer format.
+// Scaling: voltage ×0.1, current ×0.1, temp ×0.1, freq ×0.01, energy ×0.1, power W→kW (/1000)
 const CLIENT_ID = "WKRD24070202100144F";
 const TIMESTAMP = "1772681002103";
 
@@ -79,11 +81,11 @@ const MSG3_METER_SINGLE = makeEnvelope({
       properties: {
         connectStatus: "online",
         grid_activePowerA: "500",
-        grid_currentA: "2.2",
+        grid_currentA: "22",
         grid_factorA: "0.99",
-        grid_frequency: "60",
+        grid_frequency: "6000",
         grid_reactivePowerA: "10",
-        grid_voltA: "228",
+        grid_voltA: "2280",
       },
     },
   ],
@@ -98,17 +100,17 @@ const MSG4_METER_THREE = makeEnvelope({
       deviceBrand: "Meter-Chint-DTSU666Three",
       properties: {
         connectStatus: "online",
-        grid_voltA: "230",
-        grid_voltB: "231",
-        grid_voltC: "229",
-        grid_currentA: "10",
-        grid_currentB: "10",
-        grid_currentC: "10",
+        grid_voltA: "2300",
+        grid_voltB: "2310",
+        grid_voltC: "2290",
+        grid_currentA: "100",
+        grid_currentB: "100",
+        grid_currentC: "100",
         grid_totalActivePower: "6900",
         grid_activePowerA: "2300",
         grid_activePowerB: "2300",
         grid_activePowerC: "2300",
-        grid_frequency: "50",
+        grid_frequency: "5000",
         grid_factor: "0.99",
         grid_factorA: "0.99",
         grid_factorB: "0.99",
@@ -127,17 +129,17 @@ const MSG5_CORE = makeEnvelope({
       properties: {
         total_bat_soc: "75.5",
         total_bat_power: "-3200",
-        total_bat_dailyChargedEnergy: "12.5",
-        total_bat_dailyDischargedEnergy: "8.3",
+        total_bat_dailyChargedEnergy: "125",
+        total_bat_dailyDischargedEnergy: "83",
         total_bat_soh: "98.2",
-        total_bat_vlotage: "51.6",
-        total_bat_current: "-6.2",
-        total_bat_temperature: "28.5",
-        total_bat_maxChargeVoltage: "57.6",
-        total_bat_maxChargeCurrent: "25.0",
-        total_bat_maxDischargeCurrent: "25.0",
-        total_bat_totalChargedEnergy: "1250.8",
-        total_bat_totalDischargedEnergy: "1180.3",
+        total_bat_vlotage: "516",
+        total_bat_current: "-62",
+        total_bat_temperature: "285",
+        total_bat_maxChargeVoltage: "576",
+        total_bat_maxChargeCurrent: "250",
+        total_bat_maxDischargeCurrent: "250",
+        total_bat_totalChargedEnergy: "12508",
+        total_bat_totalDischargedEnergy: "11803",
       },
       subDevId: "battery",
     },
@@ -148,13 +150,13 @@ const MSG5_CORE = makeEnvelope({
       fatherSn: CLIENT_ID,
       name: "grid",
       properties: {
-        grid_voltA: "230",
-        grid_voltB: "231",
-        grid_voltC: "229",
+        grid_voltA: "2300",
+        grid_voltB: "2310",
+        grid_voltC: "2290",
         grid_totalActivePower: "3450",
-        grid_dailyBuyEnergy: "15.3",
-        grid_dailySellEnergy: "2.1",
-        grid_temp: "42.5",
+        grid_dailyBuyEnergy: "153",
+        grid_dailySellEnergy: "21",
+        grid_temp: "425",
       },
       subDevId: "grid",
     },
@@ -166,8 +168,8 @@ const MSG5_CORE = makeEnvelope({
       name: "pv",
       properties: {
         pv_totalPower: "6342",
-        pv_totalEnergy: "12345",
-        pv_dailyEnergy: "18.5",
+        pv_totalEnergy: "123450",
+        pv_dailyEnergy: "185",
       },
       subDevId: "pv",
     },
@@ -175,14 +177,14 @@ const MSG5_CORE = makeEnvelope({
       deviceSn: "pv1_inv1",
       fatherSn: CLIENT_ID,
       name: "pv1",
-      properties: { pv1_voltage: "380", pv1_current: "8.5", pv1_power: "3230" },
+      properties: { pv1_voltage: "3800", pv1_current: "85", pv1_power: "3230" },
       subDevId: "pv1",
     },
     {
       deviceSn: "pv2_inv1",
       fatherSn: CLIENT_ID,
       name: "pv2",
-      properties: { pv2_voltage: "375", pv2_current: "8.3", pv2_power: "3112" },
+      properties: { pv2_voltage: "3750", pv2_current: "83", pv2_power: "3112" },
       subDevId: "pv2",
     },
   ],
@@ -248,19 +250,19 @@ describe("FragmentAssembler", () => {
       expect(mockEnqueue).toHaveBeenCalledTimes(1);
       const parsed: ParsedTelemetry = mockEnqueue.mock.calls[0][1];
 
-      // Battery from MSG#5
+      // Battery from MSG#5 (SOC ×1, power W→kW)
       expect(parsed.batterySoc).toBe(75.5);
-      expect(parsed.batteryPowerKw).toBe(-3200);
+      expect(parsed.batteryPowerKw).toBe(-3.2);
 
       // DO0/DO1 from MSG#2 (not hardcoded false!)
       expect(parsed.do0Active).toBe(true);
       expect(parsed.do1Active).toBe(false);
 
-      // Grid from MSG#5
-      expect(parsed.gridPowerKw).toBe(3450);
+      // Grid from MSG#5 (W→kW)
+      expect(parsed.gridPowerKw).toBe(3.45);
 
-      // PV from MSG#5
-      expect(parsed.pvPowerKw).toBe(6342);
+      // PV from MSG#5 (W→kW)
+      expect(parsed.pvPowerKw).toBe(6.342);
     });
 
     it("includes meter_single and meter_three in telemetryExtra", async () => {
@@ -273,7 +275,7 @@ describe("FragmentAssembler", () => {
       const parsed: ParsedTelemetry = mockEnqueue.mock.calls[0][1];
       const extra = parsed.telemetryExtra!;
 
-      // meter_single from MSG#3
+      // meter_single from MSG#3 (voltage ×0.1, power W via scalePowerW)
       expect(extra.meter_single).toBeDefined();
       expect(extra.meter_single.volt_a).toBe(228);
       expect(extra.meter_single.active_power_a).toBe(500);

@@ -37,7 +37,6 @@ import type { SolfacilMessage } from "../../src/shared/types/solfacil-protocol";
 const GATEWAY_ID = "gw-integration-001";
 const CLIENT_ID = "WKRD24070202100144F";
 const ORG_ID = "org-solfacil";
-const HOME_ID = "home-1";
 
 const DEVICE_SN_METER =
   "Meter-Chint-DTSU666Three1772421079_WKRD24070202100144F";
@@ -57,16 +56,13 @@ interface MockQuery {
 }
 
 function createMockPool(opts?: {
-  gatewayLookup?: { org_id: string; home_id: string | null } | null;
+  gatewayLookup?: { org_id: string } | null;
   activeAssets?: Array<{ serial_number: string }>;
   assetResolve?: Array<{ serial_number: string; asset_id: string }>;
   pendingUpdateRowCount?: number;
 }) {
   const queries: MockQuery[] = [];
-  const gatewayRow = opts?.gatewayLookup ?? {
-    org_id: ORG_ID,
-    home_id: HOME_ID,
-  };
+  const gatewayRow = opts?.gatewayLookup ?? { org_id: ORG_ID };
   const activeAssets = opts?.activeAssets ?? [];
   const assetResolve = opts?.assetResolve ?? [];
   const pendingRowCount = opts?.pendingUpdateRowCount ?? 1;
@@ -99,10 +95,10 @@ function createMockPool(opts?: {
       return { rows: assetResolve, rowCount: assetResolve.length };
     }
 
-    // set_reply UPDATE matching pending
+    // set_reply UPDATE matching dispatched/accepted
     if (
       sql.includes("UPDATE device_command_logs") &&
-      sql.includes("result = 'pending'")
+      sql.includes("result IN")
     ) {
       return { rows: [], rowCount: pendingRowCount };
     }
@@ -114,6 +110,7 @@ function createMockPool(opts?: {
 }
 
 // ─── Payload Factories ─────────────────────────────────────────────────────
+// All raw values use Protocol v1.8 integer format.
 
 function makeHeartbeat(timeStamp: string): SolfacilMessage {
   return {
@@ -186,17 +183,17 @@ function makeDataPayload(timeStamp: string): SolfacilMessage {
           properties: {
             total_bat_soc: "85",
             total_bat_power: "1200",
-            total_bat_dailyChargedEnergy: "5.5",
-            total_bat_dailyDischargedEnergy: "3.2",
+            total_bat_dailyChargedEnergy: "55",
+            total_bat_dailyDischargedEnergy: "32",
             total_bat_soh: "98",
-            total_bat_vlotage: "48.5",
-            total_bat_current: "25",
-            total_bat_temperature: "32",
-            total_bat_maxChargeVoltage: "54",
-            total_bat_maxChargeCurrent: "100",
-            total_bat_maxDischargeCurrent: "100",
-            total_bat_totalChargedEnergy: "1500",
-            total_bat_totalDischargedEnergy: "1200",
+            total_bat_vlotage: "485",
+            total_bat_current: "250",
+            total_bat_temperature: "320",
+            total_bat_maxChargeVoltage: "540",
+            total_bat_maxChargeCurrent: "1000",
+            total_bat_maxDischargeCurrent: "1000",
+            total_bat_totalChargedEnergy: "15000",
+            total_bat_totalDischargedEnergy: "12000",
           },
           subDevId: "battery",
         },
@@ -207,12 +204,12 @@ function makeDataPayload(timeStamp: string): SolfacilMessage {
           fatherSn: CLIENT_ID,
           name: "grid",
           properties: {
-            grid_voltA: "230",
-            grid_voltB: "231",
-            grid_voltC: "229",
-            grid_currentA: "10",
-            grid_currentB: "11",
-            grid_currentC: "9",
+            grid_voltA: "2300",
+            grid_voltB: "2310",
+            grid_voltC: "2290",
+            grid_currentA: "100",
+            grid_currentB: "110",
+            grid_currentC: "90",
             grid_activePowerA: "2300",
             grid_activePowerB: "2541",
             grid_activePowerC: "2061",
@@ -228,12 +225,12 @@ function makeDataPayload(timeStamp: string): SolfacilMessage {
             grid_factorA: "1",
             grid_factorB: "0.99",
             grid_factorC: "0.98",
-            grid_frequency: "50",
-            grid_dailyBuyEnergy: "12.5",
-            grid_dailySellEnergy: "3.2",
-            grid_totalBuyEnergy: "5000",
-            grid_totalSellEnergy: "1200",
-            grid_temp: "42",
+            grid_frequency: "5000",
+            grid_dailyBuyEnergy: "125",
+            grid_dailySellEnergy: "32",
+            grid_totalBuyEnergy: "50000",
+            grid_totalSellEnergy: "12000",
+            grid_temp: "420",
           },
           subDevId: "grid",
         },
@@ -245,8 +242,8 @@ function makeDataPayload(timeStamp: string): SolfacilMessage {
           name: "pv",
           properties: {
             pv_totalPower: "4500",
-            pv_totalEnergy: "12000",
-            pv_dailyEnergy: "18.5",
+            pv_totalEnergy: "120000",
+            pv_dailyEnergy: "185",
           },
           subDevId: "pv",
         },
@@ -255,8 +252,8 @@ function makeDataPayload(timeStamp: string): SolfacilMessage {
           fatherSn: CLIENT_ID,
           name: "pv1",
           properties: {
-            pv1_voltage: "380",
-            pv1_current: "12",
+            pv1_voltage: "3800",
+            pv1_current: "120",
             pv1_power: "4560",
           },
           subDevId: "pv1",
@@ -266,8 +263,8 @@ function makeDataPayload(timeStamp: string): SolfacilMessage {
           fatherSn: CLIENT_ID,
           name: "pv2",
           properties: {
-            pv2_voltage: "375",
-            pv2_current: "11",
+            pv2_voltage: "3750",
+            pv2_current: "110",
             pv2_power: "4125",
           },
           subDevId: "pv2",
@@ -279,18 +276,18 @@ function makeDataPayload(timeStamp: string): SolfacilMessage {
           fatherSn: CLIENT_ID,
           name: "load1",
           properties: {
-            load1_voltA: "230",
-            load1_voltB: "231",
-            load1_voltC: "229",
-            load1_currentA: "5",
-            load1_currentB: "6",
-            load1_currentC: "4",
+            load1_voltA: "2300",
+            load1_voltB: "2310",
+            load1_voltC: "2290",
+            load1_currentA: "50",
+            load1_currentB: "60",
+            load1_currentC: "40",
             load1_activePowerA: "1150",
             load1_activePowerB: "1386",
             load1_activePowerC: "916",
-            load1_frequencyA: "50",
-            load1_frequencyB: "50",
-            load1_frequencyC: "50",
+            load1_frequencyA: "5000",
+            load1_frequencyB: "5000",
+            load1_frequencyC: "5000",
             load1_totalPower: "3452",
           },
           subDevId: "load1",
@@ -306,7 +303,7 @@ function makeDataPayload(timeStamp: string): SolfacilMessage {
             flload_activePowerB: "900",
             flload_activePowerC: "700",
             flload_totalPower: "2400",
-            flload_dailyEnergy: "15.3",
+            flload_dailyEnergy: "153",
           },
           subDevId: "flload",
         },
@@ -317,15 +314,15 @@ function makeDataPayload(timeStamp: string): SolfacilMessage {
           fatherSn: CLIENT_ID,
           name: "Chint-three-1",
           properties: {
-            grid_voltA: "230",
-            grid_voltB: "231",
-            grid_voltC: "229",
-            grid_lineABVolt: "399",
-            grid_lineBCVolt: "400",
-            grid_lineCAVolt: "398",
-            grid_currentA: "10",
-            grid_currentB: "11",
-            grid_currentC: "9",
+            grid_voltA: "2300",
+            grid_voltB: "2310",
+            grid_voltC: "2290",
+            grid_lineABVolt: "3990",
+            grid_lineBCVolt: "4000",
+            grid_lineCAVolt: "3980",
+            grid_currentA: "100",
+            grid_currentB: "110",
+            grid_currentC: "90",
             grid_totalActivePower: "6900",
             grid_activePowerA: "2300",
             grid_activePowerB: "2541",
@@ -338,16 +335,16 @@ function makeDataPayload(timeStamp: string): SolfacilMessage {
             grid_factorA: "1",
             grid_factorB: "0.99",
             grid_factorC: "0.98",
-            grid_frequency: "50",
-            grid_positiveEnergy: "5000",
-            grid_positiveEnergyA: "1700",
-            grid_positiveEnergyB: "1700",
-            grid_positiveEnergyC: "1600",
-            grid_netForwardActiveEnergy: "3800",
-            grid_negativeEnergyA: "400",
-            grid_negativeEnergyB: "400",
-            grid_negativeEnergyC: "400",
-            grid_netReverseActiveEnergy: "1200",
+            grid_frequency: "5000",
+            grid_positiveEnergy: "50000",
+            grid_positiveEnergyA: "17000",
+            grid_positiveEnergyB: "17000",
+            grid_positiveEnergyC: "16000",
+            grid_netForwardActiveEnergy: "38000",
+            grid_negativeEnergyA: "4000",
+            grid_negativeEnergyB: "4000",
+            grid_negativeEnergyC: "4000",
+            grid_netReverseActiveEnergy: "12000",
           },
           subDevId: "Meter-Chint-DTSU666Three1772421079",
         },
@@ -464,13 +461,14 @@ describe("Scenario 1: Full Lifecycle", () => {
       makeHeartbeat(NOW_TS),
     );
 
-    expect(pool.queries).toHaveLength(1);
+    // heartbeat: UPDATE gateways + pg_notify('gateway_health')
+    expect(pool.queries.length).toBeGreaterThanOrEqual(2);
     const q = pool.queries[0];
     expect(q.sql).toContain("UPDATE gateways");
     expect(q.sql).toContain("to_timestamp");
     expect(q.sql).toContain("status = 'online'");
     expect(q.params[0]).toBe(1773021874882);
-    expect(q.params[1]).toBe(CLIENT_ID);
+    expect(q.params[1]).toBe(GATEWAY_ID);
   });
 
   it("Step 2: deviceList → creates sub-devices via UPSERT", async () => {
@@ -499,11 +497,10 @@ describe("Scenario 1: Full Lifecycle", () => {
     );
     expect(inserts).toHaveLength(2);
 
-    // Meter → SMART_METER
+    // Meter → SMART_METER; params: [deviceSn, name, vendor, deviceBrand, assetType, gatewayId, orgId, ...]
     expect(inserts[0].params[4]).toBe("SMART_METER");
     expect(inserts[0].params[5]).toBe(GATEWAY_ID);
-    expect(inserts[0].params[6]).toBe(HOME_ID);
-    expect(inserts[0].params[7]).toBe(ORG_ID);
+    expect(inserts[0].params[6]).toBe(ORG_ID);
 
     // Inverter → INVERTER_BATTERY
     expect(inserts[1].params[4]).toBe("INVERTER_BATTERY");
@@ -535,16 +532,16 @@ describe("Scenario 1: Full Lifecycle", () => {
     );
     expect(deviceStateQ).toBeDefined();
     expect(deviceStateQ!.params[0]).toBe("asset-bat-001");
-    // battery_soc = 85
+    // battery_soc = 85 (×1, no scaling)
     expect(deviceStateQ!.params[1]).toBe(85);
-    // battery_power = 1200
-    expect(deviceStateQ!.params[2]).toBe(1200);
-    // pv_power = 4500
-    expect(deviceStateQ!.params[3]).toBe(4500);
-    // grid_power = 6902
-    expect(deviceStateQ!.params[4]).toBe(6902);
-    // load_power = 3452
-    expect(deviceStateQ!.params[5]).toBe(3452);
+    // battery_power = 1200W → 1.2 kW (scalePowerKw)
+    expect(deviceStateQ!.params[2]).toBe(1.2);
+    // pv_power = 4500W → 4.5 kW
+    expect(deviceStateQ!.params[3]).toBe(4.5);
+    // grid_power = 6902W → 6.902 kW
+    expect(deviceStateQ!.params[4]).toBe(6.902);
+    // load_power = 3452W → 3.452 kW
+    expect(deviceStateQ!.params[5]).toBe(3.452);
 
     _destroyAssembler(asPool(pool));
     jest.useRealTimers();
@@ -658,9 +655,9 @@ describe("Scenario 2: Device Topology Changes", () => {
     );
     expect(inserts).toHaveLength(3);
 
-    // Every UPSERT includes is_active = true on conflict
+    // Every UPSERT includes is_active = true on conflict (whitespace-robust check)
     for (const q of inserts) {
-      expect(q.sql).toContain("is_active  = true");
+      expect(q.sql).toMatch(/is_active\s+=\s*true/);
     }
   });
 });
@@ -716,6 +713,7 @@ describe("Scenario 3: Config Command Closed Loop", () => {
     );
 
     // Should insert get_reply into device_command_logs
+    // Handler params: [gatewayId, configName, messageId, payloadJson, deviceTimestamp]
     const insertQ = pool.queries.find(
       (q) =>
         q.sql.includes("INSERT INTO device_command_logs") &&
@@ -723,17 +721,17 @@ describe("Scenario 3: Config Command Closed Loop", () => {
     );
     expect(insertQ).toBeDefined();
     expect(insertQ!.params[0]).toBe(GATEWAY_ID);
-    expect(insertQ!.params[1]).toBe(CLIENT_ID);
-    expect(insertQ!.params[2]).toBe("battery_schedule");
+    expect(insertQ!.params[1]).toBe("battery_schedule");
+    expect(insertQ!.params[2]).toBe("376915278899");
 
-    // payload_json should contain battery_schedule
-    const payloadJson = insertQ!.params[4] as string;
+    // payload_json should contain battery_schedule (params[3])
+    const payloadJson = insertQ!.params[3] as string;
     const parsed = JSON.parse(payloadJson);
     expect(parsed.soc_min_limit).toBe("10");
     expect(parsed.slots).toHaveLength(4);
 
-    // device_timestamp should be from payload.timeStamp
-    const deviceTs = insertQ!.params[5] as Date;
+    // device_timestamp should be from payload.timeStamp (params[4])
+    const deviceTs = insertQ!.params[4] as Date;
     expect(deviceTs).toBeInstanceOf(Date);
     expect(deviceTs.getTime()).toBe(1773023237691);
   });
@@ -951,7 +949,8 @@ describe("Scenario 5: Historical Backfill", () => {
     const insertQ = pool.queries.find((q) =>
       q.sql.includes("INSERT INTO device_command_logs"),
     );
-    const deviceTs = insertQ!.params[5] as Date;
+    // Handler params: [gatewayId, configName, messageId, payloadJson, deviceTimestamp]
+    const deviceTs = insertQ!.params[4] as Date;
     expect(deviceTs).toBeInstanceOf(Date);
     expect(deviceTs.getTime()).toBe(1609459200000);
   });

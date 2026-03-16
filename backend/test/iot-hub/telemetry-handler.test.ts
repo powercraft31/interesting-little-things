@@ -28,6 +28,8 @@ function createMockPool() {
 }
 
 // ─── Fixtures ───────────────────────────────────────────────────────────────
+// All raw values use Protocol v1.8 integer format.
+// Scaling: voltage ×0.1, current ×0.1, temp ×0.1, freq ×0.01, energy ×0.1, power W→kW (/1000)
 const FULL_TELEMETRY_PAYLOAD: SolfacilMessage = {
   DS: 0,
   ackFlag: 0,
@@ -45,17 +47,17 @@ const FULL_TELEMETRY_PAYLOAD: SolfacilMessage = {
         properties: {
           total_bat_soc: "75.5",
           total_bat_power: "-3200",
-          total_bat_dailyChargedEnergy: "12.5",
-          total_bat_dailyDischargedEnergy: "8.3",
+          total_bat_dailyChargedEnergy: "125",
+          total_bat_dailyDischargedEnergy: "83",
           total_bat_soh: "98.2",
-          total_bat_vlotage: "51.6", // typo in protocol
-          total_bat_current: "-6.2",
-          total_bat_temperature: "28.5",
-          total_bat_maxChargeVoltage: "57.6",
-          total_bat_maxChargeCurrent: "25.0",
-          total_bat_maxDischargeCurrent: "25.0",
-          total_bat_totalChargedEnergy: "1250.8",
-          total_bat_totalDischargedEnergy: "1180.3",
+          total_bat_vlotage: "516", // typo in protocol
+          total_bat_current: "-62",
+          total_bat_temperature: "285",
+          total_bat_maxChargeVoltage: "576",
+          total_bat_maxChargeCurrent: "250",
+          total_bat_maxDischargeCurrent: "250",
+          total_bat_totalChargedEnergy: "12508",
+          total_bat_totalDischargedEnergy: "11803",
         },
         subDevId: "battery",
       },
@@ -66,12 +68,12 @@ const FULL_TELEMETRY_PAYLOAD: SolfacilMessage = {
         fatherSn: "WKRD24070202100144F",
         name: "grid",
         properties: {
-          grid_voltA: "230",
-          grid_voltB: "231",
-          grid_voltC: "229",
-          grid_currentA: "5.1",
-          grid_currentB: "5.2",
-          grid_currentC: "4.9",
+          grid_voltA: "2300",
+          grid_voltB: "2310",
+          grid_voltC: "2290",
+          grid_currentA: "51",
+          grid_currentB: "52",
+          grid_currentC: "49",
           grid_activePowerA: "1150",
           grid_activePowerB: "1200",
           grid_activePowerC: "1100",
@@ -87,12 +89,12 @@ const FULL_TELEMETRY_PAYLOAD: SolfacilMessage = {
           grid_factorA: "0.99",
           grid_factorB: "0.98",
           grid_factorC: "0.99",
-          grid_frequency: "60",
-          grid_dailyBuyEnergy: "15.3",
-          grid_dailySellEnergy: "2.1",
-          grid_totalBuyEnergy: "5000",
-          grid_totalSellEnergy: "200",
-          grid_temp: "42.5",
+          grid_frequency: "6000",
+          grid_dailyBuyEnergy: "153",
+          grid_dailySellEnergy: "21",
+          grid_totalBuyEnergy: "50000",
+          grid_totalSellEnergy: "2000",
+          grid_temp: "425",
         },
         subDevId: "grid",
       },
@@ -104,8 +106,8 @@ const FULL_TELEMETRY_PAYLOAD: SolfacilMessage = {
         name: "pv",
         properties: {
           pv_totalPower: "6342",
-          pv_totalEnergy: "12345",
-          pv_dailyEnergy: "18.5",
+          pv_totalEnergy: "123450",
+          pv_dailyEnergy: "185",
         },
         subDevId: "pv",
       },
@@ -114,8 +116,8 @@ const FULL_TELEMETRY_PAYLOAD: SolfacilMessage = {
         fatherSn: "WKRD24070202100144F",
         name: "pv1",
         properties: {
-          pv1_voltage: "380",
-          pv1_current: "8.5",
+          pv1_voltage: "3800",
+          pv1_current: "85",
           pv1_power: "3230",
         },
         subDevId: "pv1",
@@ -125,8 +127,8 @@ const FULL_TELEMETRY_PAYLOAD: SolfacilMessage = {
         fatherSn: "WKRD24070202100144F",
         name: "pv2",
         properties: {
-          pv2_voltage: "375",
-          pv2_current: "8.3",
+          pv2_voltage: "3750",
+          pv2_current: "83",
           pv2_power: "3112",
         },
         subDevId: "pv2",
@@ -138,18 +140,18 @@ const FULL_TELEMETRY_PAYLOAD: SolfacilMessage = {
         fatherSn: "WKRD24070202100144F",
         name: "load1",
         properties: {
-          load1_voltA: "230",
-          load1_voltB: "231",
-          load1_voltC: "229",
-          load1_currentA: "3.0",
-          load1_currentB: "3.1",
-          load1_currentC: "2.9",
+          load1_voltA: "2300",
+          load1_voltB: "2310",
+          load1_voltC: "2290",
+          load1_currentA: "30",
+          load1_currentB: "31",
+          load1_currentC: "29",
           load1_activePowerA: "690",
           load1_activePowerB: "710",
           load1_activePowerC: "670",
-          load1_frequencyA: "60",
-          load1_frequencyB: "60",
-          load1_frequencyC: "60",
+          load1_frequencyA: "6000",
+          load1_frequencyB: "6000",
+          load1_frequencyC: "6000",
           load1_totalPower: "2070",
         },
         subDevId: "load1",
@@ -162,7 +164,7 @@ const FULL_TELEMETRY_PAYLOAD: SolfacilMessage = {
         name: "flload",
         properties: {
           flload_totalPower: "5200",
-          flload_dailyEnergy: "18.5",
+          flload_dailyEnergy: "185",
           flload_activePowerA: "1800",
           flload_activePowerB: "1700",
           flload_activePowerC: "1700",
@@ -177,17 +179,17 @@ const FULL_TELEMETRY_PAYLOAD: SolfacilMessage = {
         name: "Chint-three-1",
         deviceBrand: "Meter-Chint-DTSU666Three",
         properties: {
-          grid_voltA: "230",
-          grid_voltB: "230",
-          grid_voltC: "230",
-          grid_currentA: "10",
-          grid_currentB: "10",
-          grid_currentC: "10",
+          grid_voltA: "2300",
+          grid_voltB: "2300",
+          grid_voltC: "2300",
+          grid_currentA: "100",
+          grid_currentB: "100",
+          grid_currentC: "100",
           grid_totalActivePower: "6900",
           grid_activePowerA: "2300",
           grid_activePowerB: "2300",
           grid_activePowerC: "2300",
-          grid_frequency: "50",
+          grid_frequency: "5000",
           grid_factor: "0.99",
           grid_factorA: "0.99",
           grid_factorB: "0.99",
@@ -233,15 +235,15 @@ describe("TelemetryHandler", () => {
     expect(typeof parsed.batterySoc).toBe("number");
     expect(parsed.batterySoc).toBe(75.5);
     expect(typeof parsed.batteryPowerKw).toBe("number");
-    expect(parsed.batteryPowerKw).toBe(-3200);
+    expect(parsed.batteryPowerKw).toBe(-3.2);
     expect(typeof parsed.gridPowerKw).toBe("number");
-    expect(parsed.gridPowerKw).toBe(3450);
+    expect(parsed.gridPowerKw).toBe(3.45);
     expect(typeof parsed.pvPowerKw).toBe("number");
-    expect(parsed.pvPowerKw).toBe(6342);
+    expect(parsed.pvPowerKw).toBe(6.342);
     expect(typeof parsed.loadPowerKw).toBe("number");
-    expect(parsed.loadPowerKw).toBe(2070);
+    expect(parsed.loadPowerKw).toBe(2.07);
     expect(typeof parsed.flloadPowerKw).toBe("number");
-    expect(parsed.flloadPowerKw).toBe(5200);
+    expect(parsed.flloadPowerKw).toBe(5.2);
   });
 
   it("handles total_bat_vlotage typo -> batteryVoltage", async () => {
@@ -249,7 +251,7 @@ describe("TelemetryHandler", () => {
     await jest.advanceTimersByTimeAsync(100);
 
     const parsed = mockEnqueue.mock.calls[0][1];
-    expect(parsed.batteryVoltage).toBe(51.6);
+    expect(parsed.batteryVoltage).toBeCloseTo(51.6, 5);
   });
 
   it("builds telemetry_extra JSONB with per-phase fields", async () => {
@@ -261,10 +263,10 @@ describe("TelemetryHandler", () => {
 
     expect(extra).not.toBeNull();
 
-    // Grid per-phase
+    // Grid per-phase (voltages/currents scaled ×0.1, power W stays W via scalePowerW)
     expect(extra.grid.volt_a).toBe(230);
     expect(extra.grid.volt_b).toBe(231);
-    expect(extra.grid.current_a).toBe(5.1);
+    expect(extra.grid.current_a).toBeCloseTo(5.1, 5);
     expect(extra.grid.total_reactive_power).toBe(150);
     expect(extra.grid.total_apparent_power).toBe(3465);
     expect(extra.grid.frequency).toBe(60);
@@ -282,11 +284,11 @@ describe("TelemetryHandler", () => {
 
     // Flload per-phase
     expect(extra.flload.active_power_a).toBe(1800);
-    expect(extra.flload.daily_energy_kwh).toBe(18.5);
+    expect(extra.flload.daily_energy_kwh).toBeCloseTo(18.5, 5);
 
-    // PV MPPT
+    // PV MPPT (voltages/currents scaled ×0.1, power W via scalePowerW)
     expect(extra.pv.pv1_voltage).toBe(380);
-    expect(extra.pv.pv1_current).toBe(8.5);
+    expect(extra.pv.pv1_current).toBeCloseTo(8.5, 5);
     expect(extra.pv.pv2_power).toBe(3112);
   });
 
@@ -296,12 +298,12 @@ describe("TelemetryHandler", () => {
 
     const parsed = mockEnqueue.mock.calls[0][1];
     expect(parsed.pv1Voltage).toBe(380);
-    expect(parsed.pv1Current).toBe(8.5);
-    expect(parsed.pv1Power).toBe(3230);
+    expect(parsed.pv1Current).toBeCloseTo(8.5, 5);
+    expect(parsed.pv1Power).toBe(3.23);
     expect(parsed.pv2Voltage).toBe(375);
-    expect(parsed.pv2Current).toBe(8.3);
-    expect(parsed.pv2Power).toBe(3112);
-    expect(parsed.inverterTemp).toBe(42.5);
+    expect(parsed.pv2Current).toBeCloseTo(8.3, 5);
+    expect(parsed.pv2Power).toBe(3.112);
+    expect(parsed.inverterTemp).toBeCloseTo(42.5, 5);
   });
 
   it("handles missing Lists gracefully (null -> 0)", async () => {
@@ -315,8 +317,8 @@ describe("TelemetryHandler", () => {
             properties: {
               total_bat_soc: "50",
               total_bat_power: "1000",
-              total_bat_dailyChargedEnergy: "5",
-              total_bat_dailyDischargedEnergy: "3",
+              total_bat_dailyChargedEnergy: "50",
+              total_bat_dailyDischargedEnergy: "30",
             },
             subDevId: "battery",
           },
@@ -367,7 +369,7 @@ describe("TelemetryHandler", () => {
     const parsed = mockEnqueue.mock.calls[0][1];
     expect(parsed.maxChargeCurrent).toBe(25.0);
     expect(parsed.maxDischargeCurrent).toBe(25.0);
-    expect(parsed.maxChargeVoltage).toBe(57.6);
+    expect(parsed.maxChargeVoltage).toBeCloseTo(57.6, 5);
   });
 
   // ─── PR3 new tests: classification paths ──────────────────────────────────
@@ -442,7 +444,7 @@ describe("TelemetryHandler", () => {
             deviceSn: "Meter-Single",
             name: "Chint-single-1",
             deviceBrand: "Meter-Chint-DTSU666Single",
-            properties: { grid_voltA: "228", grid_activePowerA: "500" },
+            properties: { grid_voltA: "2280", grid_activePowerA: "500" },
           },
         ],
       },
@@ -483,8 +485,8 @@ describe("TelemetryHandler", () => {
 
     const parsed = mockEnqueue.mock.calls[0][1];
     expect(parsed.batterySoc).toBe(75.5);
-    expect(parsed.gridPowerKw).toBe(3450);
-    expect(parsed.pvPowerKw).toBe(6342);
+    expect(parsed.gridPowerKw).toBe(3.45);
+    expect(parsed.pvPowerKw).toBe(6.342);
     // DO defaults to false when no dido fragment present
     expect(parsed.do0Active).toBe(false);
     expect(parsed.do1Active).toBe(false);
