@@ -130,7 +130,8 @@ export class GatewayConnectionManager {
     const mqtt = require("mqtt");
 
     const brokerUrl = `mqtt://${gw.mqtt_broker_host}:${gw.mqtt_broker_port}`;
-    const mqttClientId = `solfacil-m1-${gw.gateway_id}-${process.pid}`;
+    const clientSuffix = process.env.MQTT_CLIENT_SUFFIX ?? process.pid;
+    const mqttClientId = `solfacil-m1-${gw.gateway_id}-${clientSuffix}`;
 
     const client = mqtt.connect(brokerUrl, {
       clientId: mqttClientId,
