@@ -680,17 +680,16 @@ describe("Scenario 3: Config Command Closed Loop", () => {
     const messageId = await publishConfigGet(
       asPool(pool),
       GATEWAY_ID,
-      CLIENT_ID,
       publishFn,
     );
 
     // Should have published to correct topic
     expect(published).toHaveLength(1);
-    expect(published[0].topic).toBe(`platform/ems/${CLIENT_ID}/config/get`);
+    expect(published[0].topic).toBe(`platform/ems/${GATEWAY_ID}/config/get`);
 
     // Published message should be valid JSON with correct structure
     const msg = JSON.parse(published[0].message);
-    expect(msg.clientId).toBe(CLIENT_ID);
+    expect(msg.clientId).toBe(GATEWAY_ID);
     expect(msg.data.configname).toBe("battery_schedule");
     expect(msg.messageId).toBe(messageId);
 
@@ -702,7 +701,7 @@ describe("Scenario 3: Config Command Closed Loop", () => {
     expect(logInsert!.sql).toContain("'get'");
     expect(logInsert!.sql).toContain("'pending'");
     expect(logInsert!.params[0]).toBe(GATEWAY_ID);
-    expect(logInsert!.params[1]).toBe(CLIENT_ID);
+    expect(logInsert!.params[1]).toBe(messageId);
   });
 
   it("Step 2: config/get_reply → CommandTracker logs schedule", async () => {
@@ -749,14 +748,13 @@ describe("Scenario 3: Config Command Closed Loop", () => {
     const messageId = await publishConfigSet(
       asPool(pool),
       GATEWAY_ID,
-      CLIENT_ID,
       VALID_SCHEDULE,
       publishFn,
     );
 
     // Should publish to config/set topic
     expect(published).toHaveLength(1);
-    expect(published[0].topic).toBe(`platform/ems/${CLIENT_ID}/config/set`);
+    expect(published[0].topic).toBe(`platform/ems/${GATEWAY_ID}/config/set`);
 
     // Published message should have protocol format (all strings)
     const msg = JSON.parse(published[0].message);
@@ -773,7 +771,7 @@ describe("Scenario 3: Config Command Closed Loop", () => {
     expect(logInsert).toBeDefined();
     expect(logInsert!.sql).toContain("'set'");
     expect(logInsert!.sql).toContain("'pending'");
-    expect(logInsert!.params[2]).toBe(messageId);
+    expect(logInsert!.params[1]).toBe(messageId);
   });
 
   it("Step 4: config/set_reply (success) → resolves pending command", async () => {
@@ -876,13 +874,7 @@ describe("Scenario 4: ScheduleTranslator Boundary Validation", () => {
     };
 
     await expect(
-      publishConfigSet(
-        asPool(pool),
-        GATEWAY_ID,
-        CLIENT_ID,
-        badSchedule,
-        publishFn,
-      ),
+      publishConfigSet(asPool(pool), GATEWAY_ID, badSchedule, publishFn),
     ).rejects.toThrow(ScheduleValidationError);
 
     // ABSOLUTELY NO publish happened
