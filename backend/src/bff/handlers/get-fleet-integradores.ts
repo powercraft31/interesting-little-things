@@ -22,7 +22,12 @@ export async function handler(
   let ctx;
   try {
     ctx = extractTenantContext(event);
-    requireRole(ctx, [Role.SOLFACIL_ADMIN, Role.ORG_MANAGER, Role.ORG_OPERATOR, Role.ORG_VIEWER]);
+    requireRole(ctx, [
+      Role.SOLFACIL_ADMIN,
+      Role.ORG_MANAGER,
+      Role.ORG_OPERATOR,
+      Role.ORG_VIEWER,
+    ]);
   } catch (err: unknown) {
     const e = err as { statusCode?: number; message?: string };
     return apiError(e.statusCode ?? 500, e.message ?? "Error");
@@ -39,9 +44,10 @@ export async function handler(
      FROM organizations o
      LEFT JOIN assets a ON o.org_id = a.org_id AND a.is_active = true
      LEFT JOIN gateways g ON a.gateway_id = g.gateway_id
+     WHERE o.org_id = $1
      GROUP BY o.org_id, o.name
      ORDER BY o.name`,
-    [],
+    [ctx.orgId],
     ctx.orgId,
   );
 
@@ -49,7 +55,8 @@ export async function handler(
     orgId: r.org_id as string,
     name: r.name as string,
     deviceCount: Number(r.device_count),
-    onlineRate: r.online_rate != null ? parseFloat(String(r.online_rate)) : null,
+    onlineRate:
+      r.online_rate != null ? parseFloat(String(r.online_rate)) : null,
     lastCommission: r.last_commission
       ? new Date(r.last_commission as string).toISOString()
       : null,

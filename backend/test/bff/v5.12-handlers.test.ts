@@ -207,6 +207,28 @@ describe("GET /api/fleet/integradores", () => {
     const body = parseBody(result);
     expect(body.data).toHaveProperty("integradores");
   });
+
+  it("scopes organizations query with WHERE o.org_id = $1 to prevent zero-shell foreign rows", async () => {
+    mockQueryWithOrg.mockResolvedValueOnce({ rows: [] });
+
+    const event = makeEvent(
+      "GET",
+      "/api/fleet/integradores",
+      orgToken("ORG_DEMO_002"),
+    );
+    await fleetIntegradoresHandler(event);
+
+    const sql = mockQueryWithOrg.mock.calls[0][0] as string;
+    const params = mockQueryWithOrg.mock.calls[0][1] as unknown[];
+    const orgIdArg = mockQueryWithOrg.mock.calls[0][2] as string;
+
+    // SQL must filter organizations table by org_id
+    expect(sql).toContain("WHERE o.org_id = $1");
+    // org_id must be passed as a query parameter
+    expect(params).toEqual(["ORG_DEMO_002"]);
+    // org_id must also be passed as RLS context
+    expect(orgIdArg).toBe("ORG_DEMO_002");
+  });
 });
 
 // ---------------------------------------------------------------------------
