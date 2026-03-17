@@ -58,7 +58,7 @@ function makeEvent(
 function adminToken(): string {
   return JSON.stringify({
     userId: "admin",
-    orgId: "SOLFACIL",
+    orgId: "ORG_ENERGIA_001",
     role: "SOLFACIL_ADMIN",
   });
 }
@@ -178,14 +178,14 @@ describe("GET /api/hems/batch-history", () => {
     expect(params[1]).toBe("ORG_ENERGIA_001");
   });
 
-  it("org filtering — admin passes null", async () => {
+  it("org filtering — admin is tenant-scoped (no bypass)", async () => {
     mockQueryWithOrg.mockResolvedValueOnce({ rows: [] });
 
     const event = makeEvent(adminToken());
     await handler(event);
 
     const params = mockQueryWithOrg.mock.calls[0][1] as unknown[];
-    expect(params[1]).toBeNull();
+    expect(params[1]).toBe("ORG_ENERGIA_001");
   });
 
   it("401 — empty auth header", async () => {

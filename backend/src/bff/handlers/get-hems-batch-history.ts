@@ -5,7 +5,6 @@ import type {
 import { ok } from "../../shared/types/api";
 import { extractTenantContext, apiError } from "../middleware/auth";
 import { queryWithOrg } from "../../shared/db";
-import { Role } from "../../shared/types/auth";
 
 // ── Types ────────────────────────────────────────────────────────────────
 
@@ -40,8 +39,7 @@ export async function handler(
     return apiError(e.statusCode ?? 500, e.message ?? "Error");
   }
 
-  const isAdmin = ctx.role === Role.SOLFACIL_ADMIN;
-  const rlsOrgId = isAdmin ? null : ctx.orgId;
+  const rlsOrgId = ctx.orgId;
 
   // 2. Parse query params
   const qs = event.queryStringParameters ?? {};

@@ -14,8 +14,8 @@ const SEED_USERS = [
     userId: "USER_ALAN_001",
     email: "alan@xuheng.com",
     name: "Alan Xu",
-    orgId: "ORG_ENERGIA_001",
-    role: "SOLFACIL_ADMIN",
+    orgId: "ORG_DEMO_001",
+    role: "ORG_MANAGER",
     password: "solfacil2026",
   },
 ] as const;

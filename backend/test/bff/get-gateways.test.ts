@@ -53,7 +53,7 @@ function makeEvent(
 }
 
 function adminToken(): string {
-  return JSON.stringify({ userId: "admin", orgId: "SOLFACIL", role: "SOLFACIL_ADMIN" });
+  return JSON.stringify({ userId: "admin", orgId: "ORG_ENERGIA_001", role: "SOLFACIL_ADMIN" });
 }
 
 function orgToken(orgId = "ORG_ENERGIA_001", role = "ORG_MANAGER"): string {

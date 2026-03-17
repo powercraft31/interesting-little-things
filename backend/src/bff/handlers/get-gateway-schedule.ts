@@ -37,8 +37,7 @@ export async function handler(
     return apiError(e.statusCode ?? 500, e.message ?? "Error");
   }
 
-  const isAdmin = ctx.role === Role.SOLFACIL_ADMIN;
-  const rlsOrgId = isAdmin ? null : ctx.orgId;
+  const rlsOrgId = ctx.orgId;
 
   // Extract gatewayId from path: /api/gateways/:gatewayId/schedule
   const pathParts = event.rawPath.split("/");

@@ -72,7 +72,9 @@ describe("POST /api/users", () => {
     expect(res.statusCode).toBe(201);
     expect(res.body.success).toBe(true);
     expect((res.body.data as { userId: string }).userId).toMatch(/^USER_/);
-    expect((res.body.data as { email: string }).email).toBe("operator@solar.com");
+    expect((res.body.data as { email: string }).email).toBe(
+      "operator@solar.com",
+    );
   });
 
   it("non-ADMIN returns 403", async () => {
@@ -112,6 +114,19 @@ describe("POST /api/users", () => {
     // Verify ROLLBACK was called
     expect(client.query).toHaveBeenCalledWith("ROLLBACK");
     expect(client.release).toHaveBeenCalled();
+  });
+
+  it("cross-org user creation returns 403", async () => {
+    const handler = createAdminUsersHandler(mockPool());
+    const req = mockReq({ ...validBody, orgId: "ORG_DEMO_001" });
+    const res = mockRes();
+
+    await handler(req, res);
+
+    expect(res.statusCode).toBe(403);
+    expect(res.body.error).toContain(
+      "Cannot create users outside your own organization",
+    );
   });
 
   it("missing fields returns 400", async () => {

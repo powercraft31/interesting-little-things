@@ -78,7 +78,7 @@ function makeEvent(
 function adminToken(): string {
   return JSON.stringify({
     userId: "admin",
-    orgId: "SOLFACIL",
+    orgId: "ORG_ENERGIA_001",
     role: "SOLFACIL_ADMIN",
   });
 }
@@ -185,12 +185,27 @@ describe("GET /api/fleet/integradores", () => {
     expect(integradores[0]).toHaveProperty("deviceCount");
   });
 
-  it("returns 403 for non-admin", async () => {
+  it("returns integrador list for org user (org-scoped)", async () => {
+    mockQueryWithOrg.mockResolvedValueOnce({
+      rows: [
+        {
+          org_id: "ORG_ENERGIA_001",
+          name: "Solar São Paulo",
+          device_count: 26,
+          online_rate: 96.2,
+          last_commission: "2024-11-15T10:00:00Z",
+        },
+      ],
+    });
+
     const event = makeEvent("GET", "/api/fleet/integradores", orgToken());
     const result = (await fleetIntegradoresHandler(
       event,
     )) as APIGatewayProxyStructuredResultV2;
-    expect(result.statusCode).toBe(403);
+
+    expect(result.statusCode).toBe(200);
+    const body = parseBody(result);
+    expect(body.data).toHaveProperty("integradores");
   });
 });
 

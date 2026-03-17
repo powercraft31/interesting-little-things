@@ -32,8 +32,7 @@ export async function handler(
     return apiError(e.statusCode ?? 500, e.message ?? "Error");
   }
 
-  const isAdmin = ctx.role === Role.SOLFACIL_ADMIN;
-  const rlsOrgId = isAdmin ? null : ctx.orgId;
+  const rlsOrgId = ctx.orgId;
 
   const { rows } = await queryWithOrg(
     `SELECT g.gateway_id, g.name, g.org_id, o.name AS org_name,

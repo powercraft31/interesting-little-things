@@ -55,7 +55,7 @@ function makeEvent(authHeader: string, body?: string): APIGatewayProxyEventV2 {
 function adminToken(): string {
   return JSON.stringify({
     userId: "admin",
-    orgId: "SOLFACIL",
+    orgId: "ORG_ENERGIA_001",
     role: "SOLFACIL_ADMIN",
   });
 }

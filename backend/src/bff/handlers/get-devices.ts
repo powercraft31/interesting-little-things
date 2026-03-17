@@ -33,8 +33,7 @@ export async function handler(
     return apiError(e.statusCode ?? 500, e.message ?? "Error");
   }
 
-  const isAdmin = ctx.role === Role.SOLFACIL_ADMIN;
-  const rlsOrgId = isAdmin ? null : ctx.orgId;
+  const rlsOrgId = ctx.orgId;
 
   const typeFilter = event.queryStringParameters?.type ?? "all";
   const statusFilter = event.queryStringParameters?.status ?? "all";

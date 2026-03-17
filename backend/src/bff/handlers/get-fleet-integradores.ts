@@ -42,7 +42,7 @@ export async function handler(
      GROUP BY o.org_id, o.name
      ORDER BY o.name`,
     [],
-    ctx.role === 'SOLFACIL_ADMIN' ? null : ctx.orgId,
+    ctx.orgId,
   );
 
   const integradores = rows.map((r: Record<string, unknown>) => ({

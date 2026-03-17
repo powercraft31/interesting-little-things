@@ -48,7 +48,7 @@ export async function handler(
      GROUP BY date
      ORDER BY date ASC`,
     [],
-    ctx.role === Role.SOLFACIL_ADMIN ? null : ctx.orgId,
+    ctx.orgId,
   );
 
   const revenueTrend = {

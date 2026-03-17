@@ -49,7 +49,7 @@ export async function handler(
      ORDER BY ts.planned_time ASC
      LIMIT 20`,
     [],
-    ctx.role === Role.SOLFACIL_ADMIN ? null : ctx.orgId,
+    ctx.orgId,
   );
 
   const trades = rows.map((row) => {

@@ -108,8 +108,7 @@ export async function handler(
 
   // ── 從 DB 查詢（assets JOIN device_state）──────────────────────
   // RLS handles org isolation: admin sees all, org users see only their org
-  const isAdmin = ctx.role === Role.SOLFACIL_ADMIN;
-  const rlsOrgId = isAdmin ? null : ctx.orgId;
+  const rlsOrgId = ctx.orgId;
 
   const { rows } = await queryWithOrg(
     `SELECT

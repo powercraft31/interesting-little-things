@@ -1,14 +1,18 @@
 /**
  * POST /api/users — Admin user creation handler (v5.23)
  *
- * SOLFACIL_ADMIN only. Uses Service Pool (needs cross-org writes).
+ * SOLFACIL_ADMIN only. Scoped to admin's own org (no cross-tenant).
+ * Uses Service Pool because user_org_roles may lack RLS insert policy.
  */
 import type { Request, Response } from "express";
 import { Pool } from "pg";
 import bcrypt from "bcryptjs";
 import { ok, fail } from "../../shared/types/api";
 import { Role } from "../../shared/types/auth";
-import { verifyTenantToken, requireRole } from "../../shared/middleware/tenant-context";
+import {
+  verifyTenantToken,
+  requireRole,
+} from "../../shared/middleware/tenant-context";
 
 interface CreateUserRequest {
   readonly email: string;
@@ -26,14 +30,27 @@ export function createAdminUsersHandler(servicePool: Pool) {
       const ctx = verifyTenantToken(token);
       requireRole(ctx, [Role.SOLFACIL_ADMIN]);
 
-      const { email, password, name, orgId, role } = req.body as CreateUserRequest;
+      const { email, password, name, orgId, role } =
+        req.body as CreateUserRequest;
       if (!email || !password || !name || !orgId || !role) {
-        res.status(400).json(fail("All fields required: email, password, name, orgId, role"));
+        res
+          .status(400)
+          .json(
+            fail("All fields required: email, password, name, orgId, role"),
+          );
         return;
       }
 
       if (!Object.values(Role).includes(role as Role)) {
         res.status(400).json(fail(`Invalid role: ${role}`));
+        return;
+      }
+
+      // Enforce tenant scope: admin can only create users in their own org
+      if (orgId !== ctx.orgId) {
+        res
+          .status(403)
+          .json(fail("Cannot create users outside your own organization"));
         return;
       }
 

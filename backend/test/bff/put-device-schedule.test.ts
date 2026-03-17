@@ -59,7 +59,7 @@ function makeEvent(
 function adminToken(): string {
   return JSON.stringify({
     userId: "admin",
-    orgId: "SOLFACIL",
+    orgId: "ORG_ENERGIA_001",
     role: "SOLFACIL_ADMIN",
   });
 }

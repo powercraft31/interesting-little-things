@@ -33,8 +33,7 @@ export async function handler(
     return apiError(e.statusCode ?? 500, e.message ?? "Error");
   }
 
-  const isAdmin = ctx.role === Role.SOLFACIL_ADMIN;
-  const rlsOrgId = isAdmin ? null : ctx.orgId;
+  const rlsOrgId = ctx.orgId;
 
   const limitParam = event.queryStringParameters?.limit;
   const limit = Math.min(Math.max(parseInt(limitParam ?? "20", 10) || 20, 1), 100);

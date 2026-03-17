@@ -1,9 +1,12 @@
 import type { APIGatewayProxyEventV2 } from "aws-lambda";
+import jwt from "jsonwebtoken";
 import {
   extractTenantContext,
   requireRole,
 } from "../../src/bff/middleware/auth";
 import { Role } from "../../src/shared/types/auth";
+
+const JWT_SECRET = process.env.JWT_SECRET || "solfacil-dev-secret";
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -58,17 +61,14 @@ describe("extractTenantContext", () => {
     });
   });
 
-  it("parses JWT-style token (Base64 payload)", () => {
-    const payload = Buffer.from(
-      JSON.stringify({
-        userId: "u2",
-        orgId: "ORG_SOLARBR_002",
-        role: "ORG_OPERATOR",
-      }),
-    ).toString("base64");
-    const jwt = `eyJhbGciOiJIUzI1NiJ9.${payload}.fake-sig`;
+  it("parses JWT-style token (signed with HS256)", () => {
+    const token = jwt.sign(
+      { userId: "u2", orgId: "ORG_SOLARBR_002", role: "ORG_OPERATOR" },
+      JWT_SECRET,
+      { algorithm: "HS256" },
+    );
 
-    const ctx = extractTenantContext(makeEvent(jwt));
+    const ctx = extractTenantContext(makeEvent(token));
 
     expect(ctx).toEqual({
       userId: "u2",
@@ -78,16 +78,13 @@ describe("extractTenantContext", () => {
   });
 
   it("parses JWT-style token with Bearer prefix", () => {
-    const payload = Buffer.from(
-      JSON.stringify({
-        userId: "u3",
-        orgId: "ORG_ENERGIA_001",
-        role: "SOLFACIL_ADMIN",
-      }),
-    ).toString("base64");
-    const jwt = `Bearer eyJhbGciOiJIUzI1NiJ9.${payload}.fake-sig`;
+    const token = jwt.sign(
+      { userId: "u3", orgId: "ORG_ENERGIA_001", role: "SOLFACIL_ADMIN" },
+      JWT_SECRET,
+      { algorithm: "HS256" },
+    );
 
-    const ctx = extractTenantContext(makeEvent(jwt));
+    const ctx = extractTenantContext(makeEvent(`Bearer ${token}`));
 
     expect(ctx).toEqual({
       userId: "u3",
@@ -155,7 +152,7 @@ describe("requireRole", () => {
   it("SOLFACIL_ADMIN bypasses all role checks", () => {
     const ctx = {
       userId: "admin",
-      orgId: "SOLFACIL",
+      orgId: "ORG_ENERGIA_001",
       role: Role.SOLFACIL_ADMIN,
     };
     // Even with an empty allowed list, admin should pass
