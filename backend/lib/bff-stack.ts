@@ -38,6 +38,7 @@ export class BffStack extends cdk.Stack {
           apigateway.CorsHttpMethod.GET,
           apigateway.CorsHttpMethod.POST,
           apigateway.CorsHttpMethod.PUT,
+          apigateway.CorsHttpMethod.PATCH,
           apigateway.CorsHttpMethod.OPTIONS,
         ],
         allowHeaders: ["Content-Type", "Authorization"],
@@ -69,6 +70,20 @@ export class BffStack extends cdk.Stack {
       "GetRevenueTrend",
       handlersDir,
       "get-revenue-trend.handler",
+      stage,
+    );
+
+    // v6.2: gateway list + home-alias handlers
+    const getGateways = this.createHandler(
+      "GetGateways",
+      handlersDir,
+      "get-gateways.handler",
+      stage,
+    );
+    const patchGatewayHomeAlias = this.createHandler(
+      "PatchGatewayHomeAlias",
+      handlersDir,
+      "patch-gateway-home-alias.handler",
       stage,
     );
 
@@ -137,6 +152,14 @@ export class BffStack extends cdk.Stack {
     this.addRoute(httpApi, "GET", "/assets", getAssets);
     this.addRoute(httpApi, "GET", "/trades", getTrades);
     this.addRoute(httpApi, "GET", "/revenue-trend", getRevenueTrend);
+    // v6.2: gateway list + home-alias
+    this.addRoute(httpApi, "GET", "/api/gateways", getGateways);
+    this.addRoute(
+      httpApi,
+      "PATCH",
+      "/api/gateways/{gatewayId}/home-alias",
+      patchGatewayHomeAlias,
+    );
     // v5.20: gateway-level detail + schedule
     this.addRoute(
       httpApi,
@@ -229,6 +252,7 @@ export class BffStack extends cdk.Stack {
       GET: apigateway.HttpMethod.GET,
       POST: apigateway.HttpMethod.POST,
       PUT: apigateway.HttpMethod.PUT,
+      PATCH: apigateway.HttpMethod.PATCH,
     };
     const httpMethod = methodMap[method] ?? apigateway.HttpMethod.GET;
 

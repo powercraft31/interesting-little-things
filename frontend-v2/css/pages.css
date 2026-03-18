@@ -228,7 +228,7 @@
 }
 
 .panel-info-label {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   color: var(--muted);
   text-transform: uppercase;
   letter-spacing: 0.05em;
@@ -275,7 +275,7 @@
 }
 
 .panel-telemetry-label {
-  font-size: 0.72rem;
+  font-size: 0.75rem;
   color: var(--muted);
   margin-top: 2px;
 }
@@ -392,7 +392,7 @@
 @media (min-width: 769px) {
   .wizard-step-label {
     display: block;
-    font-size: 0.72rem;
+    font-size: 0.75rem;
     color: var(--muted);
     margin-top: 4px;
     text-align: center;
@@ -2439,7 +2439,7 @@
   font-size: 0.82rem;
 }
 .config-default {
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   margin-left: var(--space-sm);
 }
@@ -2475,7 +2475,7 @@
   display: flex;
   align-items: center;
   justify-content: center;
-  font-size: 0.65rem;
+  font-size: 0.7rem;
   font-weight: 600;
   color: rgba(255,255,255,0.85);
   overflow: hidden;
@@ -2489,7 +2489,7 @@
 .schedule-markers {
   display: flex;
   justify-content: space-between;
-  font-size: 0.7rem;
+  font-size: 0.75rem;
   color: var(--text-muted);
   font-family: var(--font-mono);
   margin-bottom: var(--space-md);
@@ -2515,7 +2515,7 @@
   border-bottom: 1px solid rgba(255,255,255,0.04);
   color: var(--text-primary);
 }
-.schedule-table td:first-child { font-family: var(--font-mono); }
+.schedule-table td:first-child { font-family: var(--font-mono); font-variant-numeric: tabular-nums; }
 
 .schedule-mode-dot {
   display: inline-block;
@@ -2536,11 +2536,28 @@
 }
 
 .schedule-mode-select {
-  background: transparent !important;
-  border: none !important;
-  color: inherit;
-  font-size: 0.75rem;
+  background: rgba(0, 0, 0, 0.25) !important;
+  border: 1px solid rgba(255, 255, 255, 0.15) !important;
+  border-radius: 3px;
+  color: #fff;
+  font-size: 0.8rem;
   cursor: pointer;
+  padding: 3px 4px;
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.5);
+}
+.schedule-mode-select option {
+  background: var(--card, #1e1e2e);
+  color: var(--text, #e0e0e0);
+}
+[data-theme="light"] .schedule-mode-select {
+  background: rgba(255, 255, 255, 0.35) !important;
+  border: 1px solid rgba(0, 0, 0, 0.15) !important;
+  color: #1a1a2e;
+  text-shadow: none;
+}
+[data-theme="light"] .schedule-mode-select option {
+  background: #fff;
+  color: #1a1a2e;
 }
 
 .btn-delete-slot {
@@ -2555,6 +2572,53 @@
 }
 .btn-delete-slot:hover {
   background: rgba(239, 68, 68, 0.15);
+}
+
+/* v6.2 Phase 3A: Split/Merge slot action buttons */
+.btn-split-slot,
+.btn-merge-slot {
+  background: none;
+  border: none;
+  cursor: pointer;
+  font-size: 0.95rem;
+  padding: 2px 6px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.btn-split-slot {
+  color: var(--accent);
+}
+.btn-split-slot .split-icon {
+  display: inline-flex;
+  align-items: center;
+  gap: 1px;
+  font-size: 0.7rem;
+  line-height: 1;
+  letter-spacing: -2px;
+}
+.btn-split-slot:hover {
+  background: rgba(59, 130, 246, 0.12);
+}
+.btn-merge-slot {
+  color: var(--negative);
+  font-size: 1.1rem;
+  font-weight: bold;
+}
+.btn-merge-slot:hover {
+  background: rgba(239, 68, 68, 0.12);
+}
+.slot-actions {
+  white-space: nowrap;
+}
+.slot-time-fixed {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  padding: 2px 4px;
+  display: inline-block;
+  min-width: 3.2em;
+  text-align: center;
 }
 
 #schedule-add-slot {
@@ -2603,15 +2667,22 @@
   overflow-x: auto;
 }
 
+/* Schedule table: horizontal scroll when control lane is narrow */
+.schedule-section {
+  overflow-x: auto;
+  -webkit-overflow-scrolling: touch;
+}
+
 .schedule-section .schedule-table {
-  table-layout: fixed;
-  min-width: 420px;
+  table-layout: auto;
+  min-width: 400px;
+  width: 100%;
 }
 
 .schedule-section .schedule-table th,
 .schedule-section .schedule-table td {
-  padding: 4px 4px;
-  font-size: 0.78rem;
+  padding: 5px 4px;
+  font-size: 0.8rem;
   white-space: nowrap;
 }
 
@@ -2619,24 +2690,33 @@
 .schedule-section .schedule-table th:nth-child(1),
 .schedule-section .schedule-table td:nth-child(1),
 .schedule-section .schedule-table th:nth-child(2),
-.schedule-section .schedule-table td:nth-child(2) { width: 65px; }
+.schedule-section .schedule-table td:nth-child(2) { width: 54px; min-width: 54px; text-align: center; }
 
 .schedule-section .schedule-table th:nth-child(3),
-.schedule-section .schedule-table td:nth-child(3) { width: 120px; }
+.schedule-section .schedule-table td:nth-child(3) { width: 100px; }
 
 .schedule-section .schedule-table th:nth-child(4),
-.schedule-section .schedule-table td:nth-child(4) { width: 80px; }
+.schedule-section .schedule-table td:nth-child(4) { width: 72px; }
 
 .schedule-section .schedule-table th:nth-child(5),
-.schedule-section .schedule-table td:nth-child(5) { width: 70px; }
+.schedule-section .schedule-table td:nth-child(5) { width: 64px; }
 
 .schedule-section .schedule-table th:nth-child(6),
-.schedule-section .schedule-table td:nth-child(6) { width: 30px; }
+.schedule-section .schedule-table td:nth-child(6) { width: 28px; }
 
 .schedule-section .schedule-table select.config-input {
   max-width: 100%;
-  font-size: 0.75rem;
-  padding: 2px 2px;
+  font-size: 0.78rem;
+  padding: 3px 2px;
+}
+
+/* Time selects: monospace + tabular numerals for uniform digit width */
+.schedule-section .schedule-table select.slot-end {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+  min-width: 54px;
+  text-align: center;
+  text-align-last: center;
 }
 
 .slot-na {
@@ -3131,4 +3211,624 @@
   border-color: #3b82f6;
   color: #3b82f6;
   background: rgba(59, 130, 246, 0.1);
+}
+
+/* ============================================
+   P2 v6.2: Devices — Home-first Workbench Layout
+   ============================================ */
+
+/* ---- Three-segment layout ---- */
+.devices-layout {
+  display: flex;
+  gap: var(--space-lg);
+  min-height: calc(100vh - 80px);
+}
+
+/* ---- Object Locator (left panel) ---- */
+.devices-locator {
+  width: 280px;
+  min-width: 280px;
+  flex-shrink: 0;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-sm);
+  overflow-y: auto;
+  max-height: calc(100vh - 80px);
+  position: sticky;
+  top: 0;
+}
+
+.locator-search {
+  margin-bottom: var(--space-xs);
+}
+
+.locator-search-input {
+  width: 100%;
+  padding: 8px 12px;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  background: var(--card-bg);
+  color: var(--text-primary);
+  font-size: 0.85rem;
+  outline: none;
+  transition: border-color 0.2s;
+  box-sizing: border-box;
+}
+.locator-search-input:focus {
+  border-color: var(--accent);
+}
+.locator-search-input::placeholder {
+  color: var(--text-muted);
+}
+
+.locator-count {
+  font-size: 0.8rem;
+  color: var(--text-muted);
+  padding: 0 4px;
+  margin-bottom: var(--space-xs);
+}
+
+.locator-list {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.locator-item {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 10px 12px;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.15s, border-color 0.15s;
+  border: 1px solid transparent;
+  background: var(--card-bg);
+}
+.locator-item:hover {
+  border-color: var(--border);
+  background: rgba(255, 255, 255, 0.04);
+}
+.locator-item.selected {
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.08);
+}
+
+.locator-status {
+  width: 8px;
+  height: 8px;
+  border-radius: 50%;
+  flex-shrink: 0;
+}
+.locator-status.online {
+  background: var(--positive);
+  box-shadow: 0 0 4px var(--positive);
+}
+.locator-status.offline {
+  background: var(--negative);
+}
+
+.locator-info {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.locator-home {
+  font-weight: 600;
+  font-size: 0.88rem;
+  color: var(--text-primary);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.locator-gw-id {
+  font-family: var(--font-mono);
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  margin-top: 1px;
+}
+
+.locator-badges {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  flex-shrink: 0;
+}
+
+.locator-soc {
+  font-family: var(--font-mono);
+  font-size: 0.78rem;
+  font-weight: 600;
+  color: var(--positive);
+}
+
+.locator-status-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+.locator-status-label.online {
+  color: var(--positive);
+}
+.locator-status-label.offline {
+  color: var(--text-muted);
+}
+
+/* ---- Workbench (right panel) ---- */
+.devices-workbench {
+  flex: 1;
+  min-width: 0;
+}
+
+/* ---- Workbench empty state ---- */
+.workbench-empty {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  min-height: 400px;
+  color: var(--text-muted);
+  text-align: center;
+  padding: var(--space-xl);
+}
+
+.workbench-empty-icon {
+  font-size: 3rem;
+  margin-bottom: var(--space-md);
+  opacity: 0.4;
+}
+
+.workbench-empty-title {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: var(--space-sm);
+}
+
+.workbench-empty-detail {
+  font-size: 0.88rem;
+  max-width: 320px;
+}
+
+/* ---- Workbench content: 50/50 two-lane layout ---- */
+.workbench-content {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: var(--space-lg);
+  align-items: start;
+}
+
+.workbench-data-lane,
+.workbench-control-lane {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-md);
+}
+
+/* ---- Device composition (Data Lane) ---- */
+.device-comp-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+}
+
+.device-comp-row {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 6px 8px;
+  border-radius: 4px;
+  transition: background 0.15s;
+}
+.device-comp-row:hover {
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.device-comp-info {
+  flex: 1;
+  min-width: 0;
+}
+
+.device-comp-name {
+  font-size: 0.85rem;
+  color: var(--text-primary);
+  display: block;
+}
+
+.device-comp-type {
+  font-size: 0.75rem;
+  color: var(--text-muted);
+  display: block;
+}
+
+.device-comp-status {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  flex-shrink: 0;
+}
+
+/* ---- Responsive: narrow screens stack vertically ---- */
+@media (max-width: 1023px) {
+  .devices-layout {
+    flex-direction: column;
+  }
+  .devices-locator {
+    width: 100%;
+    min-width: unset;
+    max-height: 300px;
+    position: static;
+  }
+  .workbench-content {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 1279px) and (min-width: 1024px) {
+  .devices-locator {
+    width: 240px;
+    min-width: 240px;
+  }
+}
+
+/* ---- Light theme overrides ---- */
+[data-theme="light"] .locator-item {
+  border-color: transparent;
+}
+[data-theme="light"] .locator-item:hover {
+  border-color: var(--border);
+  background: rgba(0, 0, 0, 0.02);
+}
+[data-theme="light"] .locator-item.selected {
+  border-color: var(--accent);
+  background: rgba(59, 130, 246, 0.06);
+}
+[data-theme="light"] .device-comp-row:hover {
+  background: rgba(0, 0, 0, 0.02);
+}
+
+/* ---- v6.2: Control Lane state notices ---- */
+.control-state-notice {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+.control-state-notice.pending {
+  background: rgba(251, 191, 36, 0.1);
+  border: 1px solid rgba(251, 191, 36, 0.3);
+  color: var(--amber, #fbbf24);
+}
+.control-state-notice.readonly {
+  background: rgba(148, 163, 184, 0.1);
+  border: 1px solid rgba(148, 163, 184, 0.3);
+  color: var(--text-muted);
+}
+.control-state-notice.unavailable {
+  background: rgba(239, 68, 68, 0.08);
+  border: 1px solid rgba(239, 68, 68, 0.2);
+  color: var(--negative, #ef4444);
+}
+.control-state-icon {
+  font-size: 1.1rem;
+  flex-shrink: 0;
+}
+
+/* ---- v6.2: Mode summary ---- */
+.control-mode-summary {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 14px;
+  background: var(--card-bg);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  font-size: 0.85rem;
+}
+.control-mode-label {
+  color: var(--text-muted);
+  font-weight: 500;
+}
+.control-mode-value {
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+/* ---- v6.2: Confirmation area ---- */
+.confirmation-card {
+  padding: 12px 14px;
+  background: rgba(59, 130, 246, 0.06);
+  border: 1px solid rgba(59, 130, 246, 0.2);
+  border-radius: 8px;
+}
+.confirmation-header {
+  font-size: 0.82rem;
+  font-weight: 600;
+  color: var(--text-primary);
+  margin-bottom: 6px;
+}
+.confirmation-target {
+  font-size: 0.78rem;
+  color: var(--text-muted);
+  font-family: var(--font-mono);
+  margin-bottom: 8px;
+}
+.confirmation-diffs {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+.confirmation-diff-row {
+  font-size: 0.8rem;
+  color: var(--text-primary);
+  font-family: var(--font-mono);
+  padding: 2px 0;
+}
+
+/* ---- v6.2: Locator anomaly badges ---- */
+.locator-badge {
+  font-size: 0.7rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  padding: 2px 6px;
+  border-radius: 3px;
+}
+.badge-pending {
+  background: rgba(251, 191, 36, 0.15);
+  color: var(--amber, #fbbf24);
+}
+.badge-failed {
+  background: rgba(239, 68, 68, 0.15);
+  color: var(--negative, #ef4444);
+}
+
+/* ---- v6.2: Config defaults note ---- */
+.config-defaults-note {
+  font-size: 0.82rem;
+  color: var(--amber, #fbbf24);
+  padding: 8px 12px;
+  background: rgba(251, 191, 36, 0.08);
+  border-radius: 6px;
+  margin-bottom: var(--space-sm);
+}
+.config-value-ro {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  color: var(--text-primary);
+}
+.schedule-empty {
+  font-size: 0.85rem;
+  color: var(--text-muted);
+  text-align: center;
+  padding: var(--space-md);
+}
+
+/* ---- v6.2: Disabled controls in readonly/pending state ---- */
+[data-control-state="readonly"] .config-input,
+[data-control-state="pending"] .config-input,
+[data-control-state="unavailable"] .config-input {
+  opacity: 0.5;
+  pointer-events: none;
+}
+[data-control-state="readonly"] .btn-delete-slot,
+[data-control-state="pending"] .btn-delete-slot,
+[data-control-state="unavailable"] .btn-delete-slot,
+[data-control-state="readonly"] #schedule-add-slot,
+[data-control-state="pending"] #schedule-add-slot,
+[data-control-state="unavailable"] #schedule-add-slot,
+[data-control-state="readonly"] .btn-split-slot,
+[data-control-state="pending"] .btn-split-slot,
+[data-control-state="unavailable"] .btn-split-slot,
+[data-control-state="readonly"] .btn-merge-slot,
+[data-control-state="pending"] .btn-merge-slot,
+[data-control-state="unavailable"] .btn-merge-slot {
+  display: none;
+}
+
+/* Light theme overrides for v6.2 */
+[data-theme="light"] .control-state-notice.pending {
+  background: rgba(251, 191, 36, 0.08);
+}
+[data-theme="light"] .confirmation-card {
+  background: rgba(59, 130, 246, 0.04);
+}
+
+/* ---- v6.2: Enhanced schedule select contrast ---- */
+/* Use a native-dropdown-safe palette: many mobile browsers render popup menus
+   with a system white surface and ignore dark option backgrounds. */
+.schedule-section .schedule-table select.config-input,
+.schedule-section .schedule-table .slot-end,
+.schedule-section .schedule-table .slot-direction,
+.schedule-section .schedule-table .slot-export,
+.schedule-section .schedule-table .schedule-mode-select {
+  background: #ffffff !important;
+  border: 1px solid #cbd5e1 !important;
+  border-radius: var(--radius-sm);
+  color: #111827 !important;
+  -webkit-text-fill-color: #111827;
+  text-shadow: none !important;
+  color-scheme: light;
+  font-weight: 500;
+}
+
+/* Time dropdown: enforce monospace + tabular-nums for even digit widths */
+.schedule-section .schedule-table .slot-end {
+  font-family: var(--font-mono);
+  font-variant-numeric: tabular-nums;
+}
+
+.schedule-section .schedule-table select.config-input option,
+.schedule-section .schedule-table select.config-input optgroup,
+.schedule-section .schedule-table .slot-end option,
+.schedule-section .schedule-table .slot-direction option,
+.schedule-section .schedule-table .slot-export option,
+.schedule-section .schedule-table .schedule-mode-select option {
+  background: #ffffff !important;
+  color: #111827 !important;
+}
+
+[data-theme="light"] .schedule-section .schedule-table select.config-input,
+[data-theme="light"] .schedule-section .schedule-table .slot-end,
+[data-theme="light"] .schedule-section .schedule-table .slot-direction,
+[data-theme="light"] .schedule-section .schedule-table .slot-export,
+[data-theme="light"] .schedule-section .schedule-table .schedule-mode-select {
+  background: #ffffff !important;
+  color: #111827 !important;
+  border-color: #cbd5e1 !important;
+}
+
+/* ---- v6.2: Responsive improvements for Devices page ---- */
+
+/* Medium screens: tighter locator + workbench */
+@media (max-width: 1023px) {
+  .devices-layout {
+    gap: var(--space-md);
+  }
+
+  .schedule-apply-row {
+    flex-wrap: wrap;
+  }
+
+  /* Ensure schedule table scrolls horizontally */
+  .schedule-section {
+    overflow-x: auto;
+    -webkit-overflow-scrolling: touch;
+  }
+
+  .schedule-section .schedule-table {
+    min-width: 360px;
+  }
+}
+
+/* Small screens: stack everything, ensure usability */
+@media (max-width: 768px) {
+  .devices-layout {
+    flex-direction: column;
+    gap: var(--space-md);
+  }
+
+  .devices-locator {
+    width: 100%;
+    min-width: unset;
+    max-height: 220px;
+    position: static;
+  }
+
+  .workbench-content {
+    grid-template-columns: 1fr;
+    gap: var(--space-md);
+  }
+
+  /* Control lane needs full width */
+  .workbench-control-lane {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Schedule table: compact for narrow screens but still readable */
+  .schedule-section .schedule-table {
+    min-width: 320px;
+    font-size: 0.78rem;
+  }
+
+  .schedule-section .schedule-table th,
+  .schedule-section .schedule-table td {
+    padding: 4px 3px;
+    font-size: 0.78rem;
+  }
+
+  /* Apply button: full width on mobile */
+  .schedule-apply-row {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .schedule-apply-row button {
+    width: 100%;
+    min-height: 44px;
+  }
+
+  /* Config params: stack on mobile */
+  .config-params-section .p4-param-row {
+    flex-wrap: wrap;
+  }
+
+  .config-params-section .p4-param-row label {
+    min-width: auto;
+    width: 100%;
+  }
+
+  /* Confirmation card: wrap diffs */
+  .confirmation-diff-row {
+    word-break: break-all;
+  }
+
+  /* EMS Health grid: 2 columns on mobile */
+  .ems-health-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* Data lane also needs full width */
+  .workbench-data-lane {
+    width: 100%;
+    min-width: 0;
+  }
+
+  /* Schedule selects: ensure touch-friendly sizing on mobile */
+  .schedule-section .schedule-table select.config-input,
+  .schedule-section .schedule-table .slot-end,
+  .schedule-section .schedule-table .slot-direction,
+  .schedule-section .schedule-table .slot-export,
+  .schedule-section .schedule-table .schedule-mode-select {
+    font-size: 0.8rem !important;
+    padding: 4px 3px !important;
+    min-height: 32px;
+  }
+
+  /* Section card headers: don't shrink below readable size */
+  .section-card-header h3 {
+    font-size: 0.88rem;
+  }
+}
+
+/* Extra small screens */
+@media (max-width: 480px) {
+  .devices-locator {
+    max-height: 180px;
+  }
+
+  .schedule-section .schedule-table {
+    min-width: 280px;
+  }
+
+  /* Hide less critical schedule columns on very narrow screens */
+  .schedule-section .schedule-table th:nth-child(5),
+  .schedule-section .schedule-table td:nth-child(5) {
+    display: none;
+  }
+
+  .locator-badges {
+    display: none;
+  }
+
+  .workbench-empty {
+    min-height: 200px;
+    padding: var(--space-md);
+  }
+
+  .control-mode-summary {
+    flex-direction: column;
+    gap: 4px;
+    align-items: flex-start;
+  }
 }

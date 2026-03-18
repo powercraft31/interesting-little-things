@@ -109,6 +109,9 @@ var I18n = (function () {
       "devices.allTypes": "All Types",
       "devices.allStatus": "All Status",
       "devices.searchPlaceholder": "Search device ID or home...",
+      "devices.selectGateway": "Select a Home",
+      "devices.selectGatewayHint":
+        "Choose a Home from the list on the left to view its energy data and control settings.",
       "devices.commission": "+ Commission",
       "devices.list": "Device List",
       "devices.showing": "Showing {0} of {1} devices",
@@ -196,9 +199,12 @@ var I18n = (function () {
       "devices.ef.importing": "Importing",
       "devices.ef.exporting": "Exporting",
       "devices.ef.idle": "Idle",
+      "devices.ef.title": "Energy Flow",
       "devices.dailySchedule": "Daily Schedule",
       "devices.addSlot": "+ Add Slot",
       "devices.deleteSlot": "Delete",
+      "devices.splitSlot": "Split",
+      "devices.mergeSlot": "Merge",
       "devices.gatewayHealth": "Gateway Health",
       "devices.gatewayDetail": "Gateway Configuration",
       "devices.invalidSchedule": "Invalid schedule: check start/end hours",
@@ -272,6 +278,41 @@ var I18n = (function () {
       "devices.schedule.exportPolicy": "Export Policy",
       "devices.schedule.allow": "Allow",
       "devices.schedule.forbid": "Forbid",
+
+      // ---- P2: v6.2 Workbench ----
+      "devices.wb.pendingNotice":
+        "A command is in progress. Controls are locked until the gateway responds.",
+      "devices.wb.offlineReadonly":
+        "Gateway is offline. Showing last known settings (read-only).",
+      "devices.wb.offlineNoSnapshot":
+        "Gateway is offline and has no historical settings data.",
+      "devices.wb.modeMixed": "Mixed",
+      "devices.wb.synced": "Synced",
+      "devices.wb.syncPending": "Pending",
+      "devices.wb.syncFailed": "Failed",
+      "devices.wb.waiting": "Waiting...",
+      "devices.wb.submitting": "Submitting...",
+      "devices.wb.inflightInfo": "Configuration in progress...",
+      "devices.wb.conflictError":
+        "A command is already in progress for this gateway.",
+      "devices.wb.defaultValues": "Default values (no schedule history)",
+      "devices.wb.noScheduleData": "No schedule data available.",
+      "devices.wb.slotCount": "Slots",
+      "devices.wb.confirmTitle": "Confirm Changes",
+
+      // ---- P2: v6.2 Validation messages ----
+      "devices.val.socRange": "SOC must be between 0 and 100",
+      "devices.val.socMinLtMax": "SOC Min must be less than SOC Max",
+      "devices.val.chargeNonNeg": "Charge current must be >= 0",
+      "devices.val.dischargeNonNeg": "Discharge current must be >= 0",
+      "devices.val.exceedsCapacity": "Exceeds equipment rated capacity",
+      "devices.val.gridLimitNonNeg": "Grid import limit must be >= 0",
+      "devices.val.cover24h": "Schedule must cover full 24h (00:00-24:00)",
+      "devices.val.invalidStart": "Invalid start time in slot",
+      "devices.val.invalidEnd": "Invalid end time in slot",
+      "devices.val.endAfterStart": "End must be after start in slot",
+      "devices.val.overlap": "Overlap detected between slots",
+      "devices.val.gap": "Gap detected between slots",
 
       // ---- P3: Energy ----
       "energy.gatewayLabel": "Gateway",
@@ -657,6 +698,9 @@ var I18n = (function () {
       "devices.allStatus": "Todos os Status",
       "devices.searchPlaceholder":
         "Buscar ID do dispositivo ou resid\u00eancia...",
+      "devices.selectGateway": "Selecione uma Resid\u00eancia",
+      "devices.selectGatewayHint":
+        "Escolha uma resid\u00eancia na lista \u00e0 esquerda para ver os dados de energia e configura\u00e7\u00f5es de controle.",
       "devices.commission": "+ Comissionar",
       "devices.list": "Lista de Dispositivos",
       "devices.showing": "Exibindo {0} de {1} dispositivos",
@@ -745,9 +789,12 @@ var I18n = (function () {
       "devices.ef.importing": "Importando",
       "devices.ef.exporting": "Exportando",
       "devices.ef.idle": "Inativo",
+      "devices.ef.title": "Fluxo de Energia",
       "devices.dailySchedule": "Hor\u00e1rio Di\u00e1rio",
       "devices.addSlot": "+ Adicionar Slot",
       "devices.deleteSlot": "Remover",
+      "devices.splitSlot": "Dividir",
+      "devices.mergeSlot": "Mesclar",
       "devices.gatewayHealth": "Sa\u00fade do Gateway",
       "devices.gatewayDetail": "Configura\u00e7\u00e3o do Gateway",
       "devices.invalidSchedule":
@@ -822,6 +869,47 @@ var I18n = (function () {
       "devices.schedule.exportPolicy": "Pol\u00edtica Exporta\u00e7\u00e3o",
       "devices.schedule.allow": "Permitir",
       "devices.schedule.forbid": "Proibir",
+
+      // ---- P2: v6.2 Workbench ----
+      "devices.wb.pendingNotice":
+        "Um comando est\u00e1 em andamento. Controles bloqueados at\u00e9 a resposta do gateway.",
+      "devices.wb.offlineReadonly":
+        "Gateway offline. Exibindo \u00faltimas configura\u00e7\u00f5es conhecidas (somente leitura).",
+      "devices.wb.offlineNoSnapshot":
+        "Gateway offline e sem hist\u00f3rico de configura\u00e7\u00f5es.",
+      "devices.wb.modeMixed": "Misto",
+      "devices.wb.synced": "Sincronizado",
+      "devices.wb.syncPending": "Pendente",
+      "devices.wb.syncFailed": "Falhou",
+      "devices.wb.waiting": "Aguardando...",
+      "devices.wb.submitting": "Enviando...",
+      "devices.wb.inflightInfo": "Configura\u00e7\u00e3o em andamento...",
+      "devices.wb.conflictError":
+        "J\u00e1 existe um comando em andamento para este gateway.",
+      "devices.wb.defaultValues": "Valores padr\u00e3o (sem hist\u00f3rico)",
+      "devices.wb.noScheduleData":
+        "Nenhum dado de agendamento dispon\u00edvel.",
+      "devices.wb.slotCount": "Hor\u00e1rios",
+      "devices.wb.confirmTitle": "Confirmar Altera\u00e7\u00f5es",
+
+      // ---- P2: v6.2 Validation messages ----
+      "devices.val.socRange": "SOC deve ser entre 0 e 100",
+      "devices.val.socMinLtMax": "SOC Min deve ser menor que SOC Max",
+      "devices.val.chargeNonNeg": "Corrente de carga deve ser \u2265 0",
+      "devices.val.dischargeNonNeg": "Corrente de descarga deve ser \u2265 0",
+      "devices.val.exceedsCapacity": "Excede capacidade nominal do equipamento",
+      "devices.val.gridLimitNonNeg":
+        "Limite de importa\u00e7\u00e3o deve ser \u2265 0",
+      "devices.val.cover24h":
+        "Os hor\u00e1rios devem cobrir 24h completas (00:00\u201324:00)",
+      "devices.val.invalidStart":
+        "Hor\u00e1rio de in\u00edcio inv\u00e1lido no slot",
+      "devices.val.invalidEnd": "Hor\u00e1rio de fim inv\u00e1lido no slot",
+      "devices.val.endAfterStart":
+        "Fim deve ser posterior ao in\u00edcio no slot",
+      "devices.val.overlap":
+        "Sobreposi\u00e7\u00e3o detectada entre hor\u00e1rios",
+      "devices.val.gap": "Intervalo detectado entre hor\u00e1rios",
 
       // ---- P3: Energy ----
       "energy.gatewayLabel": "Gateway",
@@ -1213,6 +1301,9 @@ var I18n = (function () {
       "devices.allStatus": "\u6240\u6709\u72b6\u6001",
       "devices.searchPlaceholder":
         "\u641c\u7d22\u8bbe\u5907 ID \u6216\u4f4f\u5b85...",
+      "devices.selectGateway": "\u9009\u62e9\u4f4f\u5b85",
+      "devices.selectGatewayHint":
+        "\u4ece\u5de6\u4fa7\u5217\u8868\u4e2d\u9009\u62e9\u4e00\u4e2a\u4f4f\u5b85\uff0c\u67e5\u770b\u5176\u80fd\u6e90\u6570\u636e\u548c\u63a7\u5236\u8bbe\u7f6e\u3002",
       "devices.commission": "+ \u8c03\u8bd5\u5165\u7f51",
       "devices.list": "\u8bbe\u5907\u5217\u8868",
       "devices.showing": "\u663e\u793a {0} / {1} \u53f0\u8bbe\u5907",
@@ -1303,9 +1394,12 @@ var I18n = (function () {
       "devices.ef.importing": "\u8f38\u5165\u4e2d",
       "devices.ef.exporting": "\u8f38\u51fa\u4e2d",
       "devices.ef.idle": "\u9592\u7f6e",
+      "devices.ef.title": "\u80fd\u91cf\u6d41\u5411",
       "devices.dailySchedule": "\u6bcf\u65e5\u6392\u7a0b",
       "devices.addSlot": "+ \u6dfb\u52a0\u65f6\u6bb5",
       "devices.deleteSlot": "\u5220\u9664",
+      "devices.splitSlot": "\u62c6\u5206",
+      "devices.mergeSlot": "\u5408\u5e76",
       "devices.gatewayHealth": "\u7f51\u5173\u5065\u5eb7",
       "devices.gatewayDetail": "\u7f51\u5173\u914d\u7f6e",
       "devices.invalidSchedule":
@@ -1382,6 +1476,52 @@ var I18n = (function () {
       "devices.schedule.exportPolicy": "\u8ce3\u96fb\u7b56\u7565",
       "devices.schedule.allow": "\u5141\u8a31",
       "devices.schedule.forbid": "\u7981\u6b62",
+
+      // ---- P2: v6.2 Workbench ----
+      "devices.wb.pendingNotice":
+        "\u547d\u4ee4\u57f7\u884c\u4e2d\u3002\u63a7\u5236\u5340\u5df2\u9396\u5b9a\uff0c\u7b49\u5f85\u7db2\u95dc\u56de\u61c9\u3002",
+      "devices.wb.offlineReadonly":
+        "\u7db2\u95dc\u96e2\u7dda\u3002\u986f\u793a\u6700\u8fd1\u5df2\u77e5\u8a2d\u5b9a\uff08\u552f\u8b80\uff09\u3002",
+      "devices.wb.offlineNoSnapshot":
+        "\u7db2\u95dc\u96e2\u7dda\u4e14\u7121\u6b77\u53f2\u8a2d\u5b9a\u6578\u64da\u3002",
+      "devices.wb.modeMixed": "\u6df7\u5408",
+      "devices.wb.synced": "\u5df2\u540c\u6b65",
+      "devices.wb.syncPending": "\u5f85\u8655\u7406",
+      "devices.wb.syncFailed": "\u5931\u6557",
+      "devices.wb.waiting": "\u7b49\u5f85\u4e2d...",
+      "devices.wb.submitting": "\u63d0\u4ea4\u4e2d...",
+      "devices.wb.inflightInfo": "\u914d\u7f6e\u57f7\u884c\u4e2d...",
+      "devices.wb.conflictError":
+        "\u8a72\u7db2\u95dc\u5df2\u6709\u547d\u4ee4\u5728\u57f7\u884c\u4e2d\u3002",
+      "devices.wb.defaultValues":
+        "\u9810\u8a2d\u503c\uff08\u7121\u6b77\u53f2\u8a18\u9304\uff09",
+      "devices.wb.noScheduleData":
+        "\u7121\u53ef\u7528\u7684\u6392\u7a0b\u6578\u64da\u3002",
+      "devices.wb.slotCount": "\u6642\u6bb5",
+      "devices.wb.confirmTitle": "\u78ba\u8a8d\u8b8a\u66f4",
+
+      // ---- P2: v6.2 Validation messages ----
+      "devices.val.socRange":
+        "SOC \u5fc5\u9808\u5728 0 \u5230 100 \u4e4b\u9593",
+      "devices.val.socMinLtMax": "SOC Min \u5fc5\u9808\u5c0f\u65bc SOC Max",
+      "devices.val.chargeNonNeg":
+        "\u5145\u96fb\u96fb\u6d41\u5fc5\u9808 \u2265 0",
+      "devices.val.dischargeNonNeg":
+        "\u653e\u96fb\u96fb\u6d41\u5fc5\u9808 \u2265 0",
+      "devices.val.exceedsCapacity":
+        "\u8d85\u904e\u8a2d\u5099\u984d\u5b9a\u5bb9\u91cf",
+      "devices.val.gridLimitNonNeg":
+        "\u96fb\u7db2\u5c0e\u5165\u9650\u5236\u5fc5\u9808 \u2265 0",
+      "devices.val.cover24h":
+        "\u6392\u7a0b\u5fc5\u9808\u8986\u84cb\u5b8c\u6574 24h\uff0800:00\u201324:00\uff09",
+      "devices.val.invalidStart":
+        "\u7121\u6548\u7684\u958b\u59cb\u6642\u9593\uff0c\u6642\u6bb5",
+      "devices.val.invalidEnd":
+        "\u7121\u6548\u7684\u7d50\u675f\u6642\u9593\uff0c\u6642\u6bb5",
+      "devices.val.endAfterStart":
+        "\u7d50\u675f\u5fc5\u9808\u665a\u65bc\u958b\u59cb\uff0c\u6642\u6bb5",
+      "devices.val.overlap": "\u6642\u6bb5\u4e4b\u9593\u5b58\u5728\u91cd\u758a",
+      "devices.val.gap": "\u6642\u6bb5\u4e4b\u9593\u5b58\u5728\u7a7a\u6a94",
 
       // ---- P3: Energy ----
       "energy.gatewayLabel": "\u7db2\u95dc",

@@ -1,8 +1,8 @@
 /* ============================================
-   SOLFACIL Admin Portal — P2: Device Management (v5.19)
-   Gateway-first architecture:
-   Layer 1 — Gateway card list with expandable device rows
-   Layer 3 — Device detail (energy flow + telemetry + config + schedule)
+   SOLFACIL Admin Portal — P2: Device Management (v6.2)
+   Home-first workbench architecture:
+   Left  — Object Locator (always visible, gateway list with Home alias)
+   Right — Workbench: Data Lane (50%) + Control Lane (50%)
    ============================================ */
 
 function parseChineseRuntime(str) {
@@ -37,8 +37,12 @@ function parseFirmwareStatus(str) {
 
 var DevicesPage = {
   _gateways: null,
-  _expandedGw: null,
+  _selectedGwId: null,
   _currentDetail: null,
+  _currentSchedule: null,
+  _pendingConfig: null,
+  _currentGatewayId: null,
+  _ratedMaxPowerKw: null,
   _sseSource: null,
   _sseDebounceTimer: null,
 
@@ -70,13 +74,23 @@ var DevicesPage = {
       return;
     }
 
-    container.innerHTML = self._buildLayer1();
-    self._setupLayer1Events();
+    // v6.2: Three-segment layout — Locator (left) + Workbench (right)
+    container.innerHTML =
+      '<div class="devices-layout">' +
+      '<div class="devices-locator" id="devices-locator">' +
+      self._buildLocator() +
+      "</div>" +
+      '<div class="devices-workbench" id="devices-workbench">' +
+      self._buildWorkbenchEmpty() +
+      "</div>" +
+      "</div>";
 
-    // Restore Layer 3 if it was open before language switch
+    self._setupLocatorEvents();
+
+    // Restore workbench if it was open before language switch
     if (self._currentGatewayId) {
       setTimeout(function () {
-        self._openLayer3GW(self._currentGatewayId);
+        self._selectGateway(self._currentGatewayId);
       }, 100);
     }
 
@@ -85,8 +99,11 @@ var DevicesPage = {
   },
 
   onRoleChange: function () {
-    this._expandedGw = null;
+    this._selectedGwId = null;
     this._currentDetail = null;
+    this._currentSchedule = null;
+    this._pendingConfig = null;
+    this._currentGatewayId = null;
     this.init();
   },
 
@@ -372,423 +389,230 @@ var DevicesPage = {
 
   _buildSkeleton: function () {
     return (
-      '<div style="display:flex;flex-direction:column;gap:12px">' +
-      '<div class="skeleton" style="height:90px;border-radius:10px"></div>' +
-      '<div class="skeleton" style="height:90px;border-radius:10px"></div>' +
-      '<div class="skeleton" style="height:90px;border-radius:10px"></div>' +
-      '<div class="skeleton" style="height:90px;border-radius:10px"></div>' +
+      '<div class="devices-layout">' +
+      '<div class="devices-locator">' +
+      '<div class="skeleton" style="height:40px;border-radius:6px;margin-bottom:12px"></div>' +
+      '<div class="skeleton" style="height:60px;border-radius:8px;margin-bottom:8px"></div>' +
+      '<div class="skeleton" style="height:60px;border-radius:8px;margin-bottom:8px"></div>' +
+      '<div class="skeleton" style="height:60px;border-radius:8px;margin-bottom:8px"></div>' +
+      "</div>" +
+      '<div class="devices-workbench">' +
+      '<div class="skeleton" style="height:200px;border-radius:10px"></div>' +
+      "</div>" +
       "</div>"
     );
   },
 
   // =========================================================
-  // LAYER 1: Gateway List
+  // OBJECT LOCATOR (left panel, v6.2)
   // =========================================================
 
-  _buildLayer1: function () {
+  _buildLocator: function () {
     var gateways = this._gateways || [];
-    var totalDevices = gateways.reduce(function (sum, g) {
-      return sum + (g.deviceCount || 0);
-    }, 0);
 
-    var header =
-      '<div class="p2-header">' +
-      "<h2>" +
-      t("page.devices") +
-      "</h2>" +
-      '<div class="p2-summary">' +
-      gateways.length +
-      " " +
-      t("fleet.gateways") +
-      " \u00b7 " +
-      totalDevices +
-      " " +
-      t("shared.devices") +
-      "</div>" +
+    // Stable sort by Home alias
+    var sorted = gateways.slice().sort(function (a, b) {
+      var aLabel = (a.homeAlias || a.name || "").toLowerCase();
+      var bLabel = (b.homeAlias || b.name || "").toLowerCase();
+      return aLabel < bLabel ? -1 : aLabel > bLabel ? 1 : 0;
+    });
+
+    var searchHtml =
+      '<div class="locator-search">' +
+      '<input type="text" class="locator-search-input" id="locator-search"' +
+      ' placeholder="' +
+      t("devices.searchPlaceholder") +
+      '">' +
       "</div>";
 
-    var cards = gateways
+    var countHtml =
+      '<div class="locator-count">' +
+      sorted.length +
+      " " +
+      t("fleet.gateways") +
+      "</div>";
+
+    var self = this;
+    var items = sorted
       .map(function (gw) {
-        return DevicesPage._buildGwCard(gw);
+        return self._buildLocatorItem(gw);
       })
       .join("");
 
     return (
-      '<div id="layer1">' +
-      header +
-      '<div class="gw-list">' +
-      cards +
-      "</div></div>" +
-      '<div id="layer3" style="display:none"></div>'
+      searchHtml +
+      countHtml +
+      '<div class="locator-list" id="locator-list">' +
+      items +
+      "</div>"
     );
   },
 
-  _buildGwCard: function (gw) {
+  _buildLocatorItem: function (gw) {
     var statusClass = gw.status === "online" ? "online" : "offline";
-    var isExpanded = this._expandedGw === gw.gatewayId;
-    var health = gw.emsHealth || {};
-    var rssi = parseSignalStrength(
-      health.wifi_signal_strength || health.wifiSignalStrength || "",
-    );
-    var cpuTemp = health.CPU_temp || health.cpuTemp || "--";
-    var memUsage = health.memory_usage || health.memoryUsage || "--";
-    var uptime = parseChineseRuntime(
-      health.system_runtime || health.systemRuntime || "",
-    );
-    var lastSeen = gw.lastSeenAt ? formatISODateTime(gw.lastSeenAt) : "--";
+    var homeAlias = gw.homeAlias || gw.name || gw.gatewayId;
+    // Avoid duplicate: if homeAlias fell back to gw.name, show gatewayId as secondary
+    var gatewayIdentity =
+      gw.homeAlias && gw.homeAlias !== gw.name
+        ? gw.name || gw.gatewayId
+        : gw.gatewayId;
+    var isSelected = this._selectedGwId === gw.gatewayId;
+
+    // Only show battery SoC when gateway is online AND has battery data
+    var socHtml = "";
+    if (gw.status === "online" && gw.batterySoc != null) {
+      socHtml =
+        '<span class="locator-soc">SoC ' +
+        Math.round(gw.batterySoc) +
+        "%</span>";
+    }
+
+    // Anomaly badge: pending/failed/warning (DESIGN §3.3)
+    var badgeHtml = "";
+    if (gw.syncStatus === "pending") {
+      badgeHtml =
+        '<span class="locator-badge badge-pending">' +
+        t("devices.wb.syncPending") +
+        "</span>";
+    } else if (gw.syncStatus === "failed") {
+      badgeHtml =
+        '<span class="locator-badge badge-failed">' +
+        t("devices.wb.syncFailed") +
+        "</span>";
+    }
+
+    var statusLabel =
+      gw.status === "online" ? t("devices.online") : t("devices.offline");
 
     return (
-      '<div class="gw-card" data-gw-id="' +
+      '<div class="locator-item' +
+      (isSelected ? " selected" : "") +
+      '" data-gw-id="' +
       gw.gatewayId +
+      '" data-home-alias="' +
+      (homeAlias || "").replace(/"/g, "&quot;") +
+      '" data-gw-name="' +
+      (gw.name || "").replace(/"/g, "&quot;") +
       '">' +
-      '<div class="gw-header">' +
-      '<div class="gw-status ' +
+      '<div class="locator-status ' +
       statusClass +
       '"></div>' +
-      '<div class="gw-name-block">' +
-      '<a href="#" class="gw-detail-link" data-gw-id="' +
-      gw.gatewayId +
+      '<div class="locator-info">' +
+      '<div class="locator-home">' +
+      homeAlias +
+      "</div>" +
+      '<div class="locator-gw-id">' +
+      gatewayIdentity +
+      "</div>" +
+      "</div>" +
+      '<div class="locator-badges">' +
+      socHtml +
+      badgeHtml +
+      '<span class="locator-status-label ' +
+      statusClass +
       '">' +
-      '<div class="gw-name-primary">' +
-      gw.name +
-      " &#8250;</div>" +
-      "</a>" +
-      '<div class="gw-sn">' +
-      gw.gatewayId +
-      "</div>" +
-      "</div>" +
-      '<div class="gw-meta">' +
-      "<span>" +
-      (gw.deviceCount || 0) +
-      " " +
-      t("shared.devices") +
+      statusLabel +
       "</span>" +
-      "<span>" +
-      t("devices.wifi") +
-      " " +
-      rssi +
-      "</span>" +
-      "<span>CPU " +
-      cpuTemp +
-      "</span>" +
-      "<span>MEM " +
-      memUsage +
-      "</span>" +
-      "<span>" +
-      t("devices.uptime") +
-      " " +
-      uptime +
-      "</span>" +
-      "<span>" +
-      t("devices.lastSeen") +
-      " " +
-      lastSeen +
-      "</span>" +
-      "</div>" +
-      '<div class="gw-chevron' +
-      (isExpanded ? " expanded" : "") +
-      '">\u25B6</div>' +
-      "</div>" +
-      '<div class="device-list" id="gw-devices-' +
-      gw.gatewayId +
-      '" style="display:' +
-      (isExpanded ? "block" : "none") +
-      '">' +
-      (isExpanded ? "" : "") +
       "</div>" +
       "</div>"
     );
   },
 
-  _setupLayer1Events: function () {
+  _setupLocatorEvents: function () {
     var self = this;
 
-    // Chevron click → expand/collapse device list
-    document.querySelectorAll(".gw-chevron").forEach(function (chevron) {
-      chevron.addEventListener("click", function (e) {
-        e.stopPropagation();
-        var card = chevron.closest(".gw-card");
-        var gwId = card.dataset.gwId;
-        self._toggleGateway(gwId);
+    // Gateway item click → select and load workbench
+    document.querySelectorAll(".locator-item").forEach(function (item) {
+      item.addEventListener("click", function () {
+        var gwId = item.dataset.gwId;
+        self._selectGateway(gwId);
       });
     });
 
-    // Gateway name click → open Layer 3 (Gateway-level)
-    document.querySelectorAll(".gw-detail-link").forEach(function (link) {
-      link.addEventListener("click", function (e) {
-        e.preventDefault();
-        e.stopPropagation();
-        var gwId = link.dataset.gwId;
-        self._openLayer3GW(gwId);
+    // Search input → client-side filter
+    var searchInput = document.getElementById("locator-search");
+    if (searchInput) {
+      searchInput.addEventListener("input", function () {
+        self._filterLocator(searchInput.value);
       });
+    }
+  },
+
+  _filterLocator: function (query) {
+    var q = (query || "").toLowerCase().trim();
+    var items = document.querySelectorAll(".locator-item");
+    var visibleCount = 0;
+
+    items.forEach(function (item) {
+      var homeAlias = (item.dataset.homeAlias || "").toLowerCase();
+      var gwName = (item.dataset.gwName || "").toLowerCase();
+      var gwId = (item.dataset.gwId || "").toLowerCase();
+
+      var match =
+        !q ||
+        homeAlias.indexOf(q) >= 0 ||
+        gwName.indexOf(q) >= 0 ||
+        gwId.indexOf(q) >= 0;
+
+      item.style.display = match ? "" : "none";
+      if (match) visibleCount++;
+    });
+
+    // Update count
+    var countEl = document.querySelector(".locator-count");
+    if (countEl) {
+      var total = (this._gateways || []).length;
+      countEl.textContent = q
+        ? visibleCount + " / " + total + " " + t("fleet.gateways")
+        : total + " " + t("fleet.gateways");
+    }
+  },
+
+  _updateLocatorSelection: function (gwId) {
+    document.querySelectorAll(".locator-item").forEach(function (item) {
+      if (item.dataset.gwId === gwId) {
+        item.classList.add("selected");
+      } else {
+        item.classList.remove("selected");
+      }
     });
   },
 
-  _toggleGateway: async function (gwId) {
-    var self = this;
-    var deviceList = document.getElementById("gw-devices-" + gwId);
-    var chevron = document.querySelector(
-      '.gw-card[data-gw-id="' + gwId + '"] .gw-chevron',
-    );
+  // =========================================================
+  // WORKBENCH (right panel, v6.2)
+  // =========================================================
 
-    if (self._expandedGw === gwId) {
-      // Collapse
-      self._expandedGw = null;
-      if (deviceList) deviceList.style.display = "none";
-      if (chevron) chevron.classList.remove("expanded");
-      return;
-    }
-
-    // Collapse previous
-    if (self._expandedGw) {
-      var prev = document.getElementById("gw-devices-" + self._expandedGw);
-      var prevChev = document.querySelector(
-        '.gw-card[data-gw-id="' + self._expandedGw + '"] .gw-chevron',
-      );
-      if (prev) prev.style.display = "none";
-      if (prevChev) prevChev.classList.remove("expanded");
-    }
-
-    self._expandedGw = gwId;
-    if (chevron) chevron.classList.add("expanded");
-    if (deviceList) {
-      deviceList.style.display = "block";
-      deviceList.innerHTML =
-        '<div class="device-loading">' + t("devices.loadingDevices") + "</div>";
-    }
-
-    try {
-      var result = await DataSource.devices.gatewayDevices(gwId);
-      var devices = result.devices || [];
-      if (deviceList) {
-        if (devices.length === 0) {
-          deviceList.innerHTML =
-            '<div class="device-empty">' +
-            t("devices.noDevicesUnderGw") +
-            "</div>";
-        } else {
-          deviceList.innerHTML = devices
-            .map(function (dev) {
-              return self._buildDeviceRow(dev, gwId);
-            })
-            .join("");
-          self._attachDeviceRowListeners(deviceList);
-        }
-      }
-    } catch (err) {
-      if (deviceList) {
-        deviceList.innerHTML =
-          '<div class="device-error">' + t("devices.loadFailed") + "</div>";
-      }
-      console.error("[P2] gatewayDevices error:", err);
-    }
-  },
-
-  _buildDeviceRow: function (dev, gatewayId) {
-    var st = dev.state || {};
-
-    var typeIcons = {
-      "Inverter + Battery": "\ud83d\udd0b",
-      INVERTER_BATTERY: "\ud83d\udd0b",
-      "Smart Meter": "\ud83d\udcca",
-      SMART_METER: "\ud83d\udcca",
-      AC: "\u2744\ufe0f",
-      HVAC: "\u2744\ufe0f",
-      "EV Charger": "\ud83d\udd0c",
-      EV_CHARGER: "\ud83d\udd0c",
-      SOLAR_PANEL: "\u2600\ufe0f",
-    };
-    var icon = typeIcons[dev.assetType] || "\ud83d\udd0c";
-
-    var statsHtml = "";
-    if (dev.assetType === "INVERTER_BATTERY") {
-      var socText = st.batterySoc != null ? st.batterySoc + "%" : "--";
-      var bp = st.batteryPower != null ? st.batteryPower : 0;
-      var batStatus =
-        bp > 0.05
-          ? t("devices.ef.charging")
-          : bp < -0.05
-            ? t("devices.ef.discharging")
-            : t("devices.ef.idle");
-      var batPowerText = Math.abs(bp).toFixed(1) + " kW";
-      var pvText =
-        st.pvPower != null ? formatNumber(st.pvPower, 1) + " kW" : "--";
-      statsHtml =
-        '<span class="dev-stat">SoC ' +
-        socText +
-        "</span>" +
-        '<span class="dev-stat">' +
-        batStatus +
-        "</span>" +
-        '<span class="dev-stat">Bat ' +
-        batPowerText +
-        "</span>" +
-        '<span class="dev-stat">PV ' +
-        pvText +
-        "</span>";
-    } else if (dev.assetType === "SMART_METER") {
-      var gridText =
-        st.gridPowerKw != null ? formatNumber(st.gridPowerKw, 1) + " kW" : "--";
-      statsHtml = '<span class="dev-stat">Grid ' + gridText + "</span>";
-    }
-
+  _buildWorkbenchEmpty: function () {
     return (
-      '<div class="device-row" data-asset-id="' +
-      dev.assetId +
-      '">' +
-      '<div class="dev-icon">' +
-      icon +
+      '<div class="workbench-empty">' +
+      '<div class="workbench-empty-icon">&#9776;</div>' +
+      '<div class="workbench-empty-title">' +
+      t("devices.selectGateway") +
       "</div>" +
-      '<div class="dev-id-block">' +
-      '<div class="dev-id">' +
-      (dev.name || dev.assetId) +
+      '<div class="workbench-empty-detail">' +
+      t("devices.selectGatewayHint") +
       "</div>" +
-      '<div class="dev-type">' +
-      (dev.brand || "") +
-      " " +
-      (dev.model || "") +
-      "</div>" +
-      "</div>" +
-      '<div class="dev-stats">' +
-      statsHtml +
-      "</div>" +
-      (dev.assetType === "INVERTER_BATTERY"
-        ? '<a class="p2-asset-energy-link" data-gw="' +
-          (gatewayId || "") +
-          '" href="#energy?gw=' +
-          encodeURIComponent(gatewayId || "") +
-          '&tab=energy">' +
-          t("p3ae.viewEnergy") +
-          " \u2192</a>" +
-          '<a class="p2-asset-health-link" data-gw="' +
-          (gatewayId || "") +
-          '" href="#energy?gw=' +
-          encodeURIComponent(gatewayId || "") +
-          '&tab=health">' +
-          t("p3ah.viewHealth") +
-          " \u2192</a>"
-        : "") +
       "</div>"
     );
   },
 
-  _attachDeviceRowListeners: function (container) {
-    // Energy link click handlers for INVERTER_BATTERY devices
-    container
-      .querySelectorAll(".p2-asset-energy-link")
-      .forEach(function (link) {
-        link.addEventListener("click", function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          var gwId = link.dataset.gw;
-          if (gwId) {
-            // Force re-init of energy page with this gateway
-            delete pageInitialized["energy"];
-            window.location.hash =
-              "#energy?gw=" + encodeURIComponent(gwId) + "&tab=energy";
-          }
-        });
-      });
-
-    // Health link click handlers for INVERTER_BATTERY devices
-    container
-      .querySelectorAll(".p2-asset-health-link")
-      .forEach(function (link) {
-        link.addEventListener("click", function (e) {
-          e.preventDefault();
-          e.stopPropagation();
-          var gwId = link.dataset.gw;
-          if (gwId) {
-            delete pageInitialized["energy"];
-            window.location.hash =
-              "#energy?gw=" + encodeURIComponent(gwId) + "&tab=health";
-          }
-        });
-      });
-  },
-
-  // =========================================================
-  // LAYER 3: Device Detail
-  // =========================================================
-
-  _openLayer3: async function (assetId) {
+  _selectGateway: async function (gatewayId) {
     var self = this;
-    var layer1 = document.getElementById("layer1");
-    var layer3 = document.getElementById("layer3");
-    if (!layer1 || !layer3) return;
+    var workbench = document.getElementById("devices-workbench");
+    if (!workbench) return;
 
-    layer1.style.display = "none";
-    layer3.style.display = "block";
-    layer3.innerHTML =
-      '<div class="detail-loading"><div class="skeleton" style="height:400px;border-radius:10px"></div></div>';
-
-    try {
-      var results = await Promise.all([
-        DataSource.devices.deviceDetail(assetId),
-        DataSource.devices.getSchedule(assetId),
-      ]);
-      self._currentDetail = results[0];
-      self._currentSchedule = results[1];
-    } catch (err) {
-      layer3.innerHTML =
-        '<div class="error-boundary"><div class="error-icon">&#9888;</div><div class="error-title">Error</div><div class="error-detail">' +
-        t("devices.loadFailed") +
-        '</div><button class="btn btn-secondary" onclick="DevicesPage._closeLayer3()">' +
-        t("shared.back") +
-        "</button></div>";
-      console.error("[P2] deviceDetail error:", err);
-      return;
-    }
-
-    if (!self._currentDetail || !self._currentDetail.device) {
-      layer3.innerHTML =
-        '<div class="empty-state"><div class="empty-state-icon">&#9888;</div><div class="empty-state-title">' +
-        t("shared.noData") +
-        '</div><div class="empty-state-detail">' +
-        t("devices.deviceNotFound") +
-        '</div><button class="btn btn-secondary" onclick="DevicesPage._closeLayer3()">' +
-        t("shared.back") +
-        "</button></div>";
-      return;
-    }
-
-    layer3.innerHTML = self._buildLayer3();
-    self._setupLayer3Events();
-  },
-
-  _closeLayer3: function () {
-    var layer1 = document.getElementById("layer1");
-    var layer3 = document.getElementById("layer3");
-    if (layer1) layer1.style.display = "block";
-    if (layer3) layer3.style.display = "none";
-    this._currentDetail = null;
-    this._currentSchedule = null;
-    this._pendingConfig = null;
-    this._currentGatewayId = null;
-  },
-
-  // =========================================================
-  // LAYER 3: Gateway-Level Detail (Fix #3)
-  // =========================================================
-
-  _pendingConfig: null,
-  _currentGatewayId: null,
-  _ratedMaxPowerKw: null,
-
-  _openLayer3GW: async function (gatewayId) {
-    var self = this;
-    var layer1 = document.getElementById("layer1");
-    var layer3 = document.getElementById("layer3");
-    if (!layer1 || !layer3) return;
-
+    self._selectedGwId = gatewayId;
     self._currentGatewayId = gatewayId;
-    layer1.style.display = "none";
-    layer3.style.display = "block";
-    layer3.innerHTML =
-      '<div class="detail-loading"><div class="skeleton" style="height:400px;border-radius:10px"></div></div>';
+    self._updateLocatorSelection(gatewayId);
 
+    workbench.innerHTML =
+      '<div class="detail-loading">' +
+      '<div class="skeleton" style="height:300px;border-radius:10px"></div>' +
+      "</div>";
+
+    var detail;
     try {
-      var detail = await DataSource.devices.gatewayDetail(gatewayId);
+      detail = await DataSource.devices.gatewayDetail(gatewayId);
       self._currentDetail = detail;
       self._ratedMaxPowerKw =
         detail && detail.config && detail.config.ratedMaxPowerKw != null
@@ -833,105 +657,309 @@ var DevicesPage = {
         }),
       };
     } catch (err) {
-      layer3.innerHTML =
+      workbench.innerHTML =
         '<div class="error-boundary"><div class="error-icon">&#9888;</div>' +
         '<div class="error-title">Error</div>' +
         '<div class="error-detail">' +
         t("devices.loadFailed") +
-        "</div>" +
-        '<button class="btn btn-secondary" onclick="DevicesPage._closeLayer3()">' +
-        t("shared.back") +
-        "</button></div>";
+        "</div></div>";
       console.error("[P2] gatewayDetail error:", err);
       return;
     }
 
     if (!detail || !detail.gateway) {
-      layer3.innerHTML =
+      workbench.innerHTML =
         '<div class="empty-state"><div class="empty-state-icon">&#9888;</div>' +
         '<div class="empty-state-title">' +
         t("shared.noData") +
-        "</div>" +
-        '<button class="btn btn-secondary" onclick="DevicesPage._closeLayer3()">' +
-        t("shared.back") +
-        "</button></div>";
+        "</div></div>";
       return;
     }
 
-    layer3.innerHTML = self._buildLayer3GW();
-    self._setupLayer3Events();
+    workbench.innerHTML = self._buildWorkbenchContent();
+    self._setupWorkbenchEvents();
   },
 
-  _buildLayer3GW: function () {
+  _buildWorkbenchContent: function () {
     var detail = this._currentDetail;
     var gw = detail.gateway;
     var state = detail.state || {};
     var extra = detail.telemetryExtra || {};
-    var config = detail.config || {};
     var devices = detail.devices || [];
-    var schedule = this._currentSchedule || {
-      syncStatus: "unknown",
-      slots: [],
-    };
 
-    var statusTag =
-      gw.status === "online"
-        ? '<span class="tag-online">' + t("devices.online") + "</span>"
-        : '<span class="tag-offline">' + t("devices.offline") + "</span>";
+    var schedule = this._currentSchedule || {};
+    var isOnline = gw.status === "online";
+    var syncStatus = schedule.syncStatus || "unknown";
+    var isPending = syncStatus === "pending";
+    var hasSchedule = schedule.batterySchedule != null;
+    var isOfflineNoSnapshot = !isOnline && !hasSchedule;
 
-    var devSummary = devices
-      .map(function (d) {
-        var icon = {
-          INVERTER_BATTERY: "\ud83d\udd0b",
-          SMART_METER: "\ud83d\udcca",
-        };
-        return (
-          (icon[d.assetType] || "\ud83d\udd0c") + " " + (d.name || d.assetId)
-        );
-      })
-      .join(" \u00b7 ");
+    // Determine control lane editability (DESIGN §6.1 state matrix)
+    // online+idle → editable, online+pending → locked, offline+snapshot → readonly, offline+no-snapshot → unavailable
+    var controlEditable = isOnline && !isPending;
+    var controlReadonly = (!isOnline && hasSchedule) || isPending;
+    var controlUnavailable = isOfflineNoSnapshot;
 
-    return (
-      '<div class="detail-header">' +
-      '<div class="breadcrumb">' +
-      '<a href="#" class="bc-link" id="bc-back">' +
-      t("nav.devices") +
-      "</a>" +
-      " \u203a <span>" +
-      gw.name +
-      "</span>" +
-      "</div>" +
-      "<h2>" +
-      gw.name +
-      " " +
-      statusTag +
-      "</h2>" +
-      '<div class="detail-subtitle">' +
-      gw.gatewayId +
-      " \u00b7 " +
-      devSummary +
-      "</div>" +
-      "</div>" +
-      '<div class="detail-page">' +
-      '<div class="left-col">' +
+    // Data Lane (left, 50%): energy flow → telemetry → device health → gateway health
+    var dataLane =
+      '<div class="workbench-data-lane">' +
       this._buildEnergyFlow(state) +
       this._buildBatteryStatus(state) +
       this._buildInverterGrid(state, extra) +
-      "</div>" +
-      '<div class="right-col">' +
-      this._buildBatteryScheduleCard(devices) +
+      this._buildDeviceComposition(devices) +
       this._buildGatewayHealth(gw.emsHealth) +
-      "</div>" +
-      "</div>"
+      "</div>";
+
+    // Control Lane (right, 50%): mode summary → config params → schedule → confirmation → apply
+    var controlLane =
+      '<div class="workbench-control-lane"' +
+      (controlReadonly ? ' data-control-state="readonly"' : "") +
+      (controlUnavailable ? ' data-control-state="unavailable"' : "") +
+      (isPending ? ' data-control-state="pending"' : "") +
+      ">" +
+      this._buildControlStateNotice(isOnline, isPending, hasSchedule) +
+      this._buildModeSummary() +
+      this._buildBatteryScheduleCard(devices, controlEditable) +
+      this._buildConfirmationArea() +
+      "</div>";
+
+    return (
+      '<div class="workbench-content">' + dataLane + controlLane + "</div>"
     );
+  },
+
+  // =========================================================
+  // DEVICE COMPOSITION (Data Lane, v6.2)
+  // =========================================================
+
+  _buildDeviceComposition: function (devices) {
+    if (!devices || devices.length === 0) {
+      return Components.sectionCard(
+        t("shared.devices"),
+        '<div class="config-empty">' + t("devices.noDevicesUnderGw") + "</div>",
+      );
+    }
+
+    var rows = devices
+      .map(function (dev) {
+        var st = dev.state || {};
+        var typeIcons = {
+          INVERTER_BATTERY: "\ud83d\udd0b",
+          SMART_METER: "\ud83d\udcca",
+          AC: "\u2744\ufe0f",
+          HVAC: "\u2744\ufe0f",
+          EV_CHARGER: "\ud83d\udd0c",
+          SOLAR_PANEL: "\u2600\ufe0f",
+        };
+        var icon = typeIcons[dev.assetType] || "\ud83d\udd0c";
+        var statusClass = st.isOnline ? "online" : "offline";
+
+        // Only show SoC for battery devices that actually have SoC data
+        var statsHtml = "";
+        if (dev.assetType === "INVERTER_BATTERY" && st.batterySoc != null) {
+          statsHtml =
+            '<span class="dev-stat">SoC ' + st.batterySoc + "%</span>";
+        } else if (dev.assetType === "SMART_METER" && st.gridPowerKw != null) {
+          statsHtml =
+            '<span class="dev-stat">Grid ' +
+            formatNumber(st.gridPowerKw, 1) +
+            " kW</span>";
+        }
+
+        return (
+          '<div class="device-comp-row">' +
+          '<span class="dev-icon">' +
+          icon +
+          "</span>" +
+          '<div class="dev-comp-info">' +
+          '<span class="dev-comp-name">' +
+          (dev.name || dev.assetId) +
+          "</span>" +
+          '<span class="dev-comp-type">' +
+          (dev.brand || "") +
+          " " +
+          (dev.model || "") +
+          "</span>" +
+          "</div>" +
+          '<div class="dev-comp-status">' +
+          '<span class="gw-status ' +
+          statusClass +
+          '"></span>' +
+          statsHtml +
+          "</div>" +
+          "</div>"
+        );
+      })
+      .join("");
+
+    return Components.sectionCard(
+      t("shared.devices") + " (" + devices.length + ")",
+      '<div class="device-comp-list">' + rows + "</div>",
+    );
+  },
+
+  // =========================================================
+  // CONTROL LANE: STATE NOTICE (v6.2)
+  // =========================================================
+
+  _buildControlStateNotice: function (isOnline, isPending, hasSchedule) {
+    if (isPending) {
+      return (
+        '<div class="control-state-notice pending">' +
+        '<span class="control-state-icon">&#9203;</span>' +
+        '<span class="control-state-text">' +
+        t("devices.wb.pendingNotice") +
+        "</span></div>"
+      );
+    }
+    if (!isOnline && hasSchedule) {
+      return (
+        '<div class="control-state-notice readonly">' +
+        '<span class="control-state-icon">&#128274;</span>' +
+        '<span class="control-state-text">' +
+        t("devices.wb.offlineReadonly") +
+        "</span></div>"
+      );
+    }
+    if (!isOnline && !hasSchedule) {
+      return (
+        '<div class="control-state-notice unavailable">' +
+        '<span class="control-state-icon">&#9888;</span>' +
+        '<span class="control-state-text">' +
+        t("devices.wb.offlineNoSnapshot") +
+        "</span></div>"
+      );
+    }
+    return "";
+  },
+
+  // =========================================================
+  // CONTROL LANE: MODE SUMMARY (v6.2, REQ §9.1)
+  // =========================================================
+
+  _buildModeSummary: function () {
+    var cfg = this._pendingConfig;
+    if (!cfg || !cfg.slots || cfg.slots.length === 0) return "";
+
+    // Determine mode: if all slots share the same purpose, show it; otherwise "Mixed"
+    var purposes = {};
+    cfg.slots.forEach(function (s) {
+      purposes[s.purpose] = true;
+    });
+    var uniquePurposes = Object.keys(purposes);
+    var modeLabels = {
+      self_consumption: t("devices.selfConsumption"),
+      peak_shaving: t("devices.peakShaving"),
+      tariff: t("devices.schedule.tariff"),
+    };
+    var modeDisplay =
+      uniquePurposes.length === 1
+        ? modeLabels[uniquePurposes[0]] || uniquePurposes[0]
+        : t("devices.wb.modeMixed");
+
+    return (
+      '<div class="control-mode-summary">' +
+      '<span class="control-mode-label">' +
+      t("devices.schedMode") +
+      '</span><span class="control-mode-value">' +
+      modeDisplay +
+      "</span></div>"
+    );
+  },
+
+  // =========================================================
+  // CONTROL LANE: CONFIRMATION AREA (v6.2, REQ §10)
+  // =========================================================
+
+  _buildConfirmationArea: function () {
+    // Container rendered always; populated dynamically when changes exist
+    return '<div class="confirmation-area" id="confirmation-area"></div>';
+  },
+
+  _updateConfirmationArea: function () {
+    var el = document.getElementById("confirmation-area");
+    if (!el) return;
+
+    var cfg = this._pendingConfig;
+    var schedule = this._currentSchedule;
+    if (!cfg || !schedule) {
+      el.innerHTML = "";
+      return;
+    }
+
+    var bs = schedule.batterySchedule;
+    var diffs = [];
+
+    // Compare top-level config values
+    var fields = [
+      { key: "socMinLimit", label: t("devices.schedule.socMin") },
+      { key: "socMaxLimit", label: t("devices.schedule.socMax") },
+      { key: "maxChargeCurrent", label: t("devices.schedule.maxCharge") },
+      {
+        key: "maxDischargeCurrent",
+        label: t("devices.schedule.maxDischarge"),
+      },
+      {
+        key: "gridImportLimitKw",
+        label: t("devices.schedule.gridImportLimit"),
+      },
+    ];
+    fields.forEach(function (f) {
+      var original = bs ? bs[f.key] : null;
+      var current = cfg[f.key];
+      if (original != null && current != null && original !== current) {
+        diffs.push(f.label + ": " + original + " → " + current);
+      }
+    });
+
+    // Compare slot count
+    var origSlotCount = bs && bs.slots ? bs.slots.length : 0;
+    if (cfg.slots.length !== origSlotCount) {
+      diffs.push(
+        t("devices.wb.slotCount") +
+          ": " +
+          origSlotCount +
+          " → " +
+          cfg.slots.length,
+      );
+    }
+
+    if (diffs.length === 0) {
+      el.innerHTML = "";
+      return;
+    }
+
+    // Show Home alias + Gateway ID + diffs
+    var gw = (this._currentDetail && this._currentDetail.gateway) || {};
+    var homeAlias = gw.homeAlias || gw.name || gw.gatewayId || "";
+    var gwId = this._currentGatewayId || "";
+
+    el.innerHTML =
+      '<div class="confirmation-card">' +
+      '<div class="confirmation-header">' +
+      t("devices.wb.confirmTitle") +
+      "</div>" +
+      '<div class="confirmation-target">' +
+      homeAlias +
+      " &middot; " +
+      gwId +
+      "</div>" +
+      '<div class="confirmation-diffs">' +
+      diffs
+        .map(function (d) {
+          return '<div class="confirmation-diff-row">' + d + "</div>";
+        })
+        .join("") +
+      "</div></div>";
   },
 
   // =========================================================
   // BATTERY SCHEDULE CARD (v5.21 — merged Config + Schedule)
   // =========================================================
 
-  _buildBatteryScheduleCard: function (devices) {
+  _buildBatteryScheduleCard: function (devices, editable) {
     var self = this;
+    var isEditable = editable !== false;
     var inverters = devices.filter(function (d) {
       return d.assetType === "INVERTER_BATTERY";
     });
@@ -947,6 +975,7 @@ var DevicesPage = {
 
     var cfg = self._pendingConfig || {};
     var schedule = self._currentSchedule || {};
+    var disabledAttr = isEditable ? "" : " disabled";
 
     // Sync status
     var syncBadgeClass =
@@ -959,15 +988,57 @@ var DevicesPage = {
             : "sync-unknown";
     var syncLabel =
       schedule.syncStatus === "synced"
-        ? "Synced"
+        ? t("devices.wb.synced")
         : schedule.syncStatus === "pending"
-          ? "Pending"
+          ? t("devices.wb.syncPending")
           : schedule.syncStatus === "failed"
-            ? "Failed"
+            ? t("devices.wb.syncFailed")
             : t("devices.unknown");
     var lastAck = schedule.lastAckAt
       ? formatISODateTime(schedule.lastAckAt)
       : "--";
+
+    // Check if schedule data is null (no historical snapshot)
+    if (!schedule.batterySchedule) {
+      var defaultNote =
+        '<div class="config-defaults-note">' +
+        t("devices.wb.defaultValues") +
+        "</div>";
+      var defaultCfg =
+        (self._currentDetail && self._currentDetail.config) || {};
+      var defaultRows = [
+        {
+          label: t("devices.schedule.socMin"),
+          value: defaultCfg.socMin != null ? defaultCfg.socMin + "%" : "--",
+        },
+        {
+          label: t("devices.schedule.socMax"),
+          value: defaultCfg.socMax != null ? defaultCfg.socMax + "%" : "--",
+        },
+      ];
+      var defaultHtml = defaultRows
+        .map(function (r) {
+          return (
+            '<div class="config-row"><span class="config-label">' +
+            r.label +
+            '</span><span class="config-value-ro">' +
+            r.value +
+            "</span></div>"
+          );
+        })
+        .join("");
+
+      return Components.sectionCard(
+        t("devices.schedule.title"),
+        defaultNote +
+          '<div class="config-params-section">' +
+          defaultHtml +
+          "</div>" +
+          '<div class="schedule-empty">' +
+          t("devices.wb.noScheduleData") +
+          "</div>",
+      );
+    }
 
     // Parameters section
     var configFields = [
@@ -1013,7 +1084,8 @@ var DevicesPage = {
           f.key +
           '" step="1" value="' +
           val +
-          '"';
+          '"' +
+          disabledAttr;
         if (f.min != null) attrs += ' min="' + f.min + '"';
         if (f.max != null) attrs += ' max="' + f.max + '"';
         return (
@@ -1027,6 +1099,12 @@ var DevicesPage = {
         );
       })
       .join("");
+
+    var applyDisabled = !isEditable || schedule.syncStatus === "pending";
+    var applyLabel =
+      schedule.syncStatus === "pending"
+        ? t("devices.wb.waiting")
+        : t("devices.applyToGateway");
 
     var body =
       '<div class="config-params-section">' +
@@ -1049,9 +1127,7 @@ var DevicesPage = {
       "</th><th></th></tr></thead>" +
       '<tbody id="schedule-rows"></tbody>' +
       "</table>" +
-      '<button class="btn btn-outline btn-sm" id="schedule-add-slot">' +
-      t("devices.addSlot") +
-      "</button>" +
+      "" + // v6.2: "Add Slot" removed — use Split on existing slots instead
       "</div>" +
       '<div class="sync-status ' +
       syncBadgeClass +
@@ -1066,21 +1142,25 @@ var DevicesPage = {
       "</div>" +
       '<div class="schedule-apply-row">' +
       '<button class="btn btn-primary" id="schedule-apply"' +
-      (schedule.syncStatus === "pending" ? " disabled" : "") +
+      (applyDisabled ? " disabled" : "") +
       ">" +
-      (schedule.syncStatus === "pending"
-        ? "Aguardando..."
-        : t("devices.applyToGateway")) +
+      applyLabel +
       "</button>" +
       '<div class="schedule-inflight-info" id="schedule-inflight-info"' +
       (schedule.syncStatus === "pending" ? "" : ' style="display:none"') +
-      ">Configura\u00e7\u00e3o em andamento...</div>" +
+      ">" +
+      t("devices.wb.inflightInfo") +
+      "</div>" +
       "</div>";
 
     return Components.sectionCard(t("devices.schedule.title"), body);
   },
 
-  _buildSlotRow: function (slot, index) {
+  // v6.2 Phase 3A: Structure-preserving slot row.
+  // Start is always read-only (derived from boundary chain).
+  // End is an editable boundary select (except last slot, locked at 24:00).
+  // "Add" replaced by Split; "Delete" replaced by Merge.
+  _buildSlotRow: function (slot, index, totalSlots) {
     var purposeOptions = ["self_consumption", "peak_shaving", "tariff"];
     var purposeLabels = {
       self_consumption: t("devices.selfConsumption"),
@@ -1094,32 +1174,37 @@ var DevicesPage = {
       tariff_discharge: "#f97316",
     };
 
-    // Start time: 00:00 to 23:00 (0..1380 step 60)
-    var startOptions = "";
-    for (var m = 0; m <= 1380; m += 60) {
-      var hh = String(Math.floor(m / 60)).padStart(2, "0");
-      startOptions +=
-        '<option value="' +
-        m +
-        '"' +
-        (slot.startMinute === m ? " selected" : "") +
-        ">" +
-        hh +
-        ":00</option>";
-    }
+    var slots = this._pendingConfig ? this._pendingConfig.slots : [];
+    var isLast = index === totalSlots - 1;
 
-    // End time: 01:00 to 24:00 (60..1440 step 60)
-    var endOptions = "";
-    for (var m2 = 60; m2 <= 1440; m2 += 60) {
-      var hh2 = String(Math.floor(m2 / 60)).padStart(2, "0");
-      endOptions +=
-        '<option value="' +
-        m2 +
-        '"' +
-        (slot.endMinute === m2 ? " selected" : "") +
-        ">" +
-        hh2 +
-        ":00</option>";
+    // Start: always read-only (first slot locked 00:00, others derived from prev boundary)
+    var startH = String(Math.floor(slot.startMinute / 60)).padStart(2, "0");
+    var startHtml = '<span class="slot-time-fixed">' + startH + ":00</span>";
+
+    // End: constrained boundary select or locked display
+    var endHtml = "";
+    if (isLast) {
+      // Last slot end is locked at 24:00
+      endHtml = '<span class="slot-time-fixed">24:00</span>';
+    } else {
+      // Editable boundary: min = start+60, max = nextSlot.end-60
+      var nextSlot = slots[index + 1];
+      var minEnd = slot.startMinute + 60;
+      var maxEnd = nextSlot ? nextSlot.endMinute - 60 : 1380;
+      var endOptions = "";
+      for (var m = minEnd; m <= maxEnd; m += 60) {
+        var hh = String(Math.floor(m / 60)).padStart(2, "0");
+        endOptions +=
+          '<option value="' +
+          m +
+          '"' +
+          (slot.endMinute === m ? " selected" : "") +
+          ">" +
+          hh +
+          ":00</option>";
+      }
+      endHtml =
+        '<select class="slot-end config-input">' + endOptions + "</select>";
     }
 
     // Purpose selector
@@ -1185,16 +1270,32 @@ var DevicesPage = {
       exportHtml = '<span class="slot-na">--</span>';
     }
 
+    // Split: only if slot duration >= 2h (each half needs >= 1h)
+    var canSplit = slot.endMinute - slot.startMinute >= 120;
+    var splitHtml = canSplit
+      ? '<button class="btn-icon btn-split-slot" title="' +
+        t("devices.splitSlot") +
+        '"><span class="split-icon" aria-hidden="true">&#x2759;&#x2795;</span></button>'
+      : "";
+
+    // Merge: only if more than 1 slot exists
+    var canMerge = totalSlots > 1;
+    var mergeHtml = canMerge
+      ? '<button class="btn-icon btn-merge-slot" title="' +
+        t("devices.mergeSlot") +
+        '">&times;</button>'
+      : "";
+
     return (
       '<tr data-slot-index="' +
       index +
       '">' +
-      '<td><select class="slot-start config-input">' +
-      startOptions +
-      "</select></td>" +
-      '<td><select class="slot-end config-input">' +
-      endOptions +
-      "</select></td>" +
+      "<td>" +
+      startHtml +
+      "</td>" +
+      "<td>" +
+      endHtml +
+      "</td>" +
       '<td><span class="schedule-mode-badge" style="background:' +
       color +
       '">' +
@@ -1208,9 +1309,10 @@ var DevicesPage = {
       "<td>" +
       exportHtml +
       "</td>" +
-      '<td><button class="btn-icon btn-delete-slot" title="' +
-      t("devices.deleteSlot") +
-      '">\ud83d\uddd1</button></td>' +
+      '<td class="slot-actions">' +
+      splitHtml +
+      mergeHtml +
+      "</td>" +
       "</tr>"
     );
   },
@@ -1219,9 +1321,10 @@ var DevicesPage = {
     var self = this;
     var tbody = document.getElementById("schedule-rows");
     if (!tbody || !self._pendingConfig) return;
+    var totalSlots = self._pendingConfig.slots.length;
     tbody.innerHTML = self._pendingConfig.slots
       .map(function (slot, i) {
-        return self._buildSlotRow(slot, i);
+        return self._buildSlotRow(slot, i, totalSlots);
       })
       .join("");
     self._renderTimelinePreview();
@@ -1235,6 +1338,11 @@ var DevicesPage = {
       peak_shaving: "#a855f7",
       tariff_charge: "#3b82f6",
       tariff_discharge: "#f97316",
+    };
+    var purposeLabels = {
+      self_consumption: t("devices.selfConsumption"),
+      peak_shaving: t("devices.peakShaving"),
+      tariff: t("devices.schedule.tariff"),
     };
     bar.innerHTML = this._pendingConfig.slots
       .map(function (slot) {
@@ -1251,6 +1359,7 @@ var DevicesPage = {
         var color = purposeColors[colorKey] || "#6b7280";
         var startH = String(Math.floor(slot.startMinute / 60)).padStart(2, "0");
         var endH = String(Math.floor(slot.endMinute / 60)).padStart(2, "0");
+        var modeLabel = purposeLabels[slot.purpose] || slot.purpose;
         return (
           '<div class="schedule-segment" style="width:' +
           widthPct +
@@ -1261,37 +1370,42 @@ var DevicesPage = {
           ":00-" +
           endH +
           ":00 " +
-          slot.purpose +
+          modeLabel +
           '"></div>'
         );
       })
       .join("");
   },
 
+  // v6.2 Phase 3A: Structure-preserving slot listeners.
+  // End select edits a shared boundary (this.end = next.start).
+  // Split/merge buttons replace add/delete.
   _attachSlotListeners: function () {
     var self = this;
     var tbody = document.getElementById("schedule-rows");
     if (!tbody || !self._pendingConfig) return;
 
-    // Delete buttons
-    tbody.querySelectorAll(".btn-delete-slot").forEach(function (btn) {
+    // Split buttons
+    tbody.querySelectorAll(".btn-split-slot").forEach(function (btn) {
       btn.addEventListener("click", function () {
         var row = btn.closest("tr");
         var idx = parseInt(row.dataset.slotIndex, 10);
-        self._pendingConfig = Object.assign({}, self._pendingConfig, {
-          slots: self._pendingConfig.slots.filter(function (_, i) {
-            return i !== idx;
-          }),
-        });
-        self._renderScheduleRows();
-        self._attachSlotListeners();
+        self._splitSlot(idx);
+      });
+    });
+
+    // Merge buttons
+    tbody.querySelectorAll(".btn-merge-slot").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        var row = btn.closest("tr");
+        var idx = parseInt(row.dataset.slotIndex, 10);
+        self._mergeSlot(idx);
       });
     });
 
     // Per-row change listeners
     tbody.querySelectorAll("tr").forEach(function (row) {
       var idx = parseInt(row.dataset.slotIndex, 10);
-      var startSel = row.querySelector(".slot-start");
       var endSel = row.querySelector(".slot-end");
       var purposeSel = row.querySelector(".slot-purpose");
       var dirSel = row.querySelector(".slot-direction");
@@ -1305,24 +1419,24 @@ var DevicesPage = {
         });
       }
 
-      if (startSel) {
-        startSel.addEventListener("change", function () {
-          updateSlot(function (s) {
-            return Object.assign({}, s, {
-              startMinute: parseInt(startSel.value, 10),
-            });
-          });
-          self._renderTimelinePreview();
-        });
-      }
+      // End select: shared boundary — updates this slot's end AND next slot's start
       if (endSel) {
         endSel.addEventListener("change", function () {
-          updateSlot(function (s) {
-            return Object.assign({}, s, {
-              endMinute: parseInt(endSel.value, 10),
-            });
+          var newEnd = parseInt(endSel.value, 10);
+          self._pendingConfig = Object.assign({}, self._pendingConfig, {
+            slots: self._pendingConfig.slots.map(function (s, i) {
+              if (i === idx) {
+                return Object.assign({}, s, { endMinute: newEnd });
+              }
+              if (i === idx + 1) {
+                return Object.assign({}, s, { startMinute: newEnd });
+              }
+              return s;
+            }),
           });
-          self._renderTimelinePreview();
+          self._renderScheduleRows();
+          self._attachSlotListeners();
+          self._updateConfirmationArea();
         });
       }
       if (purposeSel) {
@@ -1343,6 +1457,7 @@ var DevicesPage = {
           });
           self._renderScheduleRows();
           self._attachSlotListeners();
+          self._updateConfirmationArea();
         });
       }
       if (dirSel) {
@@ -1355,6 +1470,7 @@ var DevicesPage = {
           });
           self._renderScheduleRows();
           self._attachSlotListeners();
+          self._updateConfirmationArea();
         });
       }
       if (exportSel) {
@@ -1367,42 +1483,135 @@ var DevicesPage = {
     });
   },
 
+  // v6.2 Phase 3A: Split a slot into two at the midpoint (hour-snapped).
+  // Preserves 24h coverage: both halves inherit the original slot's properties.
+  _splitSlot: function (index) {
+    var self = this;
+    if (!self._pendingConfig) return;
+    var slots = self._pendingConfig.slots;
+    var slot = slots[index];
+    if (!slot) return;
+
+    var duration = slot.endMinute - slot.startMinute;
+    if (duration < 120) return; // Need at least 2h to split (1h each)
+
+    // Midpoint snapped to hour boundary
+    var mid = slot.startMinute + Math.floor(duration / 2 / 60) * 60;
+    if (mid <= slot.startMinute) mid = slot.startMinute + 60;
+    if (mid >= slot.endMinute) mid = slot.endMinute - 60;
+
+    var first = {
+      startMinute: slot.startMinute,
+      endMinute: mid,
+      purpose: slot.purpose,
+      direction: slot.direction,
+      exportPolicy: slot.exportPolicy,
+    };
+    var second = {
+      startMinute: mid,
+      endMinute: slot.endMinute,
+      purpose: slot.purpose,
+      direction: slot.direction,
+      exportPolicy: slot.exportPolicy,
+    };
+
+    var newSlots = slots
+      .slice(0, index)
+      .concat([first, second])
+      .concat(slots.slice(index + 1));
+    self._pendingConfig = Object.assign({}, self._pendingConfig, {
+      slots: newSlots,
+    });
+    self._renderScheduleRows();
+    self._attachSlotListeners();
+    self._updateConfirmationArea();
+  },
+
+  // v6.2 Phase 3A: Merge a slot into its neighbor.
+  // Prefers merging into previous slot; if first slot, merges into next.
+  // Preserves 24h coverage: neighbor expands to cover the removed slot's time range.
+  _mergeSlot: function (index) {
+    var self = this;
+    if (!self._pendingConfig) return;
+    var slots = self._pendingConfig.slots;
+    if (slots.length <= 1) return; // Must keep at least 1 slot
+
+    var slot = slots[index];
+    if (!slot) return;
+
+    var newSlots;
+    if (index > 0) {
+      // Merge into previous: extend prev's end to cover this slot
+      newSlots = slots
+        .map(function (s, i) {
+          if (i === index - 1) {
+            return Object.assign({}, s, { endMinute: slot.endMinute });
+          }
+          return s;
+        })
+        .filter(function (_, i) {
+          return i !== index;
+        });
+    } else {
+      // Merge into next: extend next's start to cover this slot
+      newSlots = slots
+        .map(function (s, i) {
+          if (i === index + 1) {
+            return Object.assign({}, s, { startMinute: slot.startMinute });
+          }
+          return s;
+        })
+        .filter(function (_, i) {
+          return i !== index;
+        });
+    }
+
+    self._pendingConfig = Object.assign({}, self._pendingConfig, {
+      slots: newSlots,
+    });
+    self._renderScheduleRows();
+    self._attachSlotListeners();
+    self._updateConfirmationArea();
+  },
+
   _validateSchedule: function (cfg) {
     // SOC range validation
     var socMin = parseInt(cfg.socMinLimit, 10);
     var socMax = parseInt(cfg.socMaxLimit, 10);
     if (!Number.isInteger(socMin) || socMin < 0 || socMin > 100) {
-      return "SOC Min deve ser entre 0 e 100";
+      return t("devices.val.socRange");
     }
     if (!Number.isInteger(socMax) || socMax < 0 || socMax > 100) {
-      return "SOC Max deve ser entre 0 e 100";
+      return t("devices.val.socRange");
     }
     if (socMin >= socMax) {
-      return "SOC Min deve ser menor que SOC Max";
+      return t("devices.val.socMinLtMax");
     }
 
     // Current/power limits
     var chargeCurrent = parseInt(cfg.maxChargeCurrent, 10);
     if (!Number.isInteger(chargeCurrent) || chargeCurrent < 0) {
-      return "Corrente de carga deve ser \u2265 0";
+      return t("devices.val.chargeNonNeg");
     }
     var dischargeCurrent = parseInt(cfg.maxDischargeCurrent, 10);
     if (!Number.isInteger(dischargeCurrent) || dischargeCurrent < 0) {
-      return "Corrente de descarga deve ser \u2265 0";
+      return t("devices.val.dischargeNonNeg");
     }
 
-    // Phase 2: Hardware rated capacity validation
+    // Hardware rated capacity validation
     if (this._ratedMaxPowerKw != null) {
       if (chargeCurrent > this._ratedMaxPowerKw) {
         return (
-          "Corrente de carga excede capacidade do equipamento (" +
+          t("devices.val.exceedsCapacity") +
+          " (" +
           this._ratedMaxPowerKw +
           " kW)"
         );
       }
       if (dischargeCurrent > this._ratedMaxPowerKw) {
         return (
-          "Corrente de descarga excede capacidade do equipamento (" +
+          t("devices.val.exceedsCapacity") +
+          " (" +
           this._ratedMaxPowerKw +
           " kW)"
         );
@@ -1410,12 +1619,12 @@ var DevicesPage = {
     }
     var gridLimit = parseInt(cfg.gridImportLimitKw, 10);
     if (!Number.isInteger(gridLimit) || gridLimit < 0) {
-      return "Limite de importa\u00e7\u00e3o deve ser \u2265 0";
+      return t("devices.val.gridLimitNonNeg");
     }
 
     // Slot validation
     if (!cfg.slots || cfg.slots.length === 0) {
-      return "Os hor\u00e1rios devem cobrir 24h completas (00:00\u201324:00)";
+      return t("devices.val.cover24h");
     }
 
     for (var i = 0; i < cfg.slots.length; i++) {
@@ -1426,7 +1635,7 @@ var DevicesPage = {
         slot.startMinute > 1380 ||
         slot.startMinute % 60 !== 0
       ) {
-        return "Hor\u00e1rio de in\u00edcio inv\u00e1lido no slot " + (i + 1);
+        return t("devices.val.invalidStart") + " " + (i + 1);
       }
       if (
         !Number.isInteger(slot.endMinute) ||
@@ -1434,10 +1643,10 @@ var DevicesPage = {
         slot.endMinute > 1440 ||
         slot.endMinute % 60 !== 0
       ) {
-        return "Hor\u00e1rio de fim inv\u00e1lido no slot " + (i + 1);
+        return t("devices.val.invalidEnd") + " " + (i + 1);
       }
       if (slot.endMinute <= slot.startMinute) {
-        return "Fim deve ser posterior ao in\u00edcio no slot " + (i + 1);
+        return t("devices.val.endAfterStart") + " " + (i + 1);
       }
     }
 
@@ -1450,15 +1659,15 @@ var DevicesPage = {
       sorted[0].startMinute !== 0 ||
       sorted[sorted.length - 1].endMinute !== 1440
     ) {
-      return "Os hor\u00e1rios devem cobrir 24h completas (00:00\u201324:00)";
+      return t("devices.val.cover24h");
     }
 
     for (var j = 1; j < sorted.length; j++) {
       if (sorted[j].startMinute < sorted[j - 1].endMinute) {
-        return "Sobreposi\u00e7\u00e3o detectada entre hor\u00e1rios";
+        return t("devices.val.overlap");
       }
       if (sorted[j].startMinute > sorted[j - 1].endMinute) {
-        return "Intervalo detectado entre hor\u00e1rios";
+        return t("devices.val.gap");
       }
     }
 
@@ -1480,7 +1689,7 @@ var DevicesPage = {
     var applyBtn = document.getElementById("schedule-apply");
     if (applyBtn) {
       applyBtn.disabled = true;
-      applyBtn.textContent = "Submitting...";
+      applyBtn.textContent = t("devices.wb.submitting");
     }
 
     try {
@@ -1488,7 +1697,7 @@ var DevicesPage = {
 
       // Keep button disabled — waiting for gateway confirmation via SSE
       if (applyBtn) {
-        applyBtn.textContent = "Aguardando...";
+        applyBtn.textContent = t("devices.wb.waiting");
         applyBtn.disabled = true;
       }
       var infoEl = document.getElementById("schedule-inflight-info");
@@ -1497,7 +1706,7 @@ var DevicesPage = {
     } catch (err) {
       console.error("[P2] putSchedule error:", err);
       if (err.status === 409) {
-        self._showToast("J\u00e1 existe um comando em andamento", "warning");
+        self._showToast(t("devices.wb.conflictError"), "warning");
       } else {
         self._showToast(t("devices.loadFailed"), "error");
       }
@@ -1509,7 +1718,7 @@ var DevicesPage = {
   },
 
   // =========================================================
-  // GATEWAY HEALTH (Fix #4)
+  // GATEWAY HEALTH
   // =========================================================
 
   _buildGatewayHealth: function (emsHealth) {
@@ -1595,73 +1804,8 @@ var DevicesPage = {
   },
 
   // =========================================================
-  // LAYER 3: Device Detail (deprecated — kept for reference)
+  // DATA LANE BUILDERS (reused from Layer 3, unchanged)
   // =========================================================
-
-  _buildLayer3: function () {
-    var detail = this._currentDetail;
-    var dev = detail.device;
-    var state = detail.state || {};
-    var extra = detail.telemetryExtra || {};
-    var config = detail.config || {};
-    var schedule = this._currentSchedule || {
-      syncStatus: "unknown",
-      slots: [],
-    };
-
-    var statusTag = state.isOnline
-      ? '<span class="tag-online">' + t("devices.online") + "</span>"
-      : '<span class="tag-offline">' + t("devices.offline") + "</span>";
-
-    var gwName = dev.gatewayName || dev.gatewayId || "--";
-
-    return (
-      '<div class="detail-header">' +
-      '<div class="breadcrumb">' +
-      '<a href="#" class="bc-link" id="bc-back">' +
-      t("nav.devices") +
-      "</a>" +
-      " \u203a <span>" +
-      gwName +
-      "</span>" +
-      " \u203a <span>" +
-      (dev.name || dev.assetId) +
-      "</span>" +
-      "</div>" +
-      "<h2>" +
-      (dev.name || dev.assetId) +
-      " " +
-      statusTag +
-      "</h2>" +
-      '<div class="detail-subtitle">' +
-      dev.brand +
-      " " +
-      dev.model +
-      " \u00b7 " +
-      dev.assetType +
-      "</div>" +
-      "</div>" +
-      '<div class="detail-page">' +
-      '<div class="left-col">' +
-      this._buildEnergyFlow(state) +
-      this._buildBatteryStatus(state) +
-      this._buildInverterGrid(state, extra) +
-      "</div>" +
-      '<div class="right-col">' +
-      this._buildDeviceConfig(dev, config) +
-      this._buildScheduleCard(schedule) +
-      "</div>" +
-      "</div>" +
-      '<div class="action-bar">' +
-      '<button class="btn btn-secondary" id="detail-back">' +
-      t("devices.backToList") +
-      "</button>" +
-      '<button class="btn btn-primary" id="detail-apply">' +
-      t("devices.applyToGateway") +
-      "</button>" +
-      "</div>"
-    );
-  },
 
   // ---- Energy Flow Diamond ----
   _buildEnergyFlow: function (state) {
@@ -1680,7 +1824,8 @@ var DevicesPage = {
         ? formatNumber(Math.abs(state.gridPowerKw), 1) + " kW"
         : "\u2014";
 
-    var batSub = "Idle";
+    var batSub =
+      "SoC " + (state.batterySoc || 0) + "% \u00b7 " + t("devices.ef.idle");
     if (state.batteryPower > 0.05)
       batSub =
         "SoC " +
@@ -1808,7 +1953,7 @@ var DevicesPage = {
       "</div></div>" +
       "</div>";
 
-    return Components.sectionCard("Energy Flow", body);
+    return Components.sectionCard(t("devices.ef.title"), body);
   },
 
   // ---- Battery Status ----
@@ -1972,259 +2117,12 @@ var DevicesPage = {
     return Components.sectionCard(t("devices.inverterGrid"), body);
   },
 
-  // ---- Device Configuration ----
-  _buildDeviceConfig: function (dev, config) {
-    var defaults = config.defaults || {};
-    var modeOptions = [
-      "self_consumption",
-      "peak_valley_arbitrage",
-      "peak_shaving",
-    ];
-    var modeLabels = {
-      self_consumption: "Self Consumption",
-      peak_valley_arbitrage: "Peak Valley Arbitrage",
-      peak_shaving: "Peak Shaving",
-    };
-
-    var modeSelect =
-      '<select id="cfg-mode" class="config-input">' +
-      modeOptions
-        .map(function (m) {
-          return (
-            '<option value="' +
-            m +
-            '"' +
-            (dev.operationMode === m ? " selected" : "") +
-            ">" +
-            modeLabels[m] +
-            "</option>"
-          );
-        })
-        .join("") +
-      "</select>";
-
-    var rows = [
-      { label: "Operation Mode", input: modeSelect },
-      {
-        label: "Capacity (kW)",
-        input:
-          '<input type="number" id="cfg-cap-kw" class="config-input" step="0.1" value="' +
-          (dev.capacidadeKw || 5) +
-          '">',
-      },
-      {
-        label: "Capacity (kWh)",
-        input:
-          '<input type="number" id="cfg-cap-kwh" class="config-input" step="0.1" value="' +
-          (dev.capacityKwh || 10) +
-          '">',
-      },
-      {
-        label: t("devices.socMin"),
-        input:
-          '<input type="number" id="cfg-soc-min" class="config-input" min="0" max="100" value="' +
-          (config.socMin != null ? config.socMin : 10) +
-          '">' +
-          (defaults.socMin != null
-            ? ' <span class="config-default">\u2190 Default ' +
-              defaults.socMin +
-              "</span>"
-            : ""),
-      },
-      {
-        label: t("devices.socMax"),
-        input:
-          '<input type="number" id="cfg-soc-max" class="config-input" min="0" max="100" value="' +
-          (config.socMax != null ? config.socMax : 95) +
-          '">' +
-          (defaults.socMax != null
-            ? ' <span class="config-default">\u2190 Default ' +
-              defaults.socMax +
-              "</span>"
-            : ""),
-      },
-      {
-        label: t("devices.maxChargeRateKw"),
-        input:
-          '<input type="number" id="cfg-charge" class="config-input" step="0.1" value="' +
-          (config.maxChargeRateKw || 5) +
-          '">',
-      },
-      {
-        label: t("devices.maxDischargeRateKw"),
-        input:
-          '<input type="number" id="cfg-discharge" class="config-input" step="0.1" value="' +
-          (config.maxDischargeRateKw || 5) +
-          '">',
-      },
-      {
-        label: "Allow Export",
-        input:
-          '<select id="cfg-export" class="config-input"><option value="false"' +
-          (!dev.allowExport ? " selected" : "") +
-          '>No</option><option value="true"' +
-          (dev.allowExport ? " selected" : "") +
-          ">Yes</option></select>",
-      },
-      {
-        label: t("devices.gridImportLimitKw"),
-        input:
-          '<input type="number" id="cfg-grid-limit" class="config-input" step="0.1" min="0" value="' +
-          (config.gridImportLimitKw || 3) +
-          '">',
-      },
-    ];
-
-    var body = rows
-      .map(function (r) {
-        return (
-          '<div class="config-row"><span class="config-label">' +
-          r.label +
-          '</span><div class="config-field">' +
-          r.input +
-          "</div></div>"
-        );
-      })
-      .join("");
-
-    return Components.sectionCard(t("devices.gatewayDetail"), body);
-  },
-
-  // ---- Daily Schedule ----
-  _buildScheduleCard: function (schedule) {
-    var syncBadgeClass =
-      schedule.syncStatus === "synced"
-        ? "synced"
-        : schedule.syncStatus === "pending"
-          ? "sync-pending"
-          : "sync-unknown";
-    var syncLabel =
-      schedule.syncStatus === "synced"
-        ? "Synced"
-        : schedule.syncStatus === "pending"
-          ? "Pending"
-          : t("devices.unknown");
-    var lastAck = schedule.lastAckAt
-      ? formatISODateTime(schedule.lastAckAt)
-      : "--";
-
-    var modeColors = {
-      self_consumption: "#22c55e",
-      peak_valley_arbitrage: "#3b82f6",
-      peak_shaving: "#a855f7",
-    };
-    var modeLabels = {
-      self_consumption: "Self Consumption",
-      peak_valley_arbitrage: "Peak Valley Arb.",
-      peak_shaving: "Peak Shaving",
-    };
-
-    // Timeline bar
-    var barSegments = (schedule.slots || [])
-      .map(function (slot) {
-        var widthPct = (((slot.endHour - slot.startHour) / 24) * 100).toFixed(
-          2,
-        );
-        var color = modeColors[slot.mode] || "#6b7280";
-        return (
-          '<div class="schedule-segment" style="width:' +
-          widthPct +
-          "%;background:" +
-          color +
-          '" title="' +
-          slot.startHour +
-          ":00-" +
-          slot.endHour +
-          ":00 " +
-          (modeLabels[slot.mode] || slot.mode) +
-          '"></div>'
-        );
-      })
-      .join("");
-
-    var timeMarkers =
-      '<div class="schedule-markers"><span>0h</span><span>6h</span><span>12h</span><span>18h</span><span>24h</span></div>';
-
-    // Table
-    var tableRows = (schedule.slots || [])
-      .map(function (slot, i) {
-        var color = modeColors[slot.mode] || "#6b7280";
-        return (
-          "<tr>" +
-          "<td>" +
-          String(slot.startHour).padStart(2, "0") +
-          ":00</td>" +
-          "<td>" +
-          String(slot.endHour).padStart(2, "0") +
-          ":00</td>" +
-          '<td><span class="schedule-mode-badge" style="background:' +
-          color +
-          '">' +
-          (modeLabels[slot.mode] || slot.mode) +
-          "</span></td>" +
-          "</tr>"
-        );
-      })
-      .join("");
-
-    var body =
-      '<div class="sync-status ' +
-      syncBadgeClass +
-      '">' +
-      '<span class="sync-dot"></span> ' +
-      syncLabel +
-      '<span class="sync-ack">' +
-      t("devices.syncedLastAck") +
-      ": " +
-      lastAck +
-      "</span>" +
-      "</div>" +
-      '<div class="schedule-bar">' +
-      barSegments +
-      "</div>" +
-      timeMarkers +
-      '<table class="schedule-table"><thead><tr><th>' +
-      t("devices.schedStart") +
-      "</th><th>" +
-      t("devices.schedEnd") +
-      "</th><th>" +
-      t("devices.schedMode") +
-      "</th></tr></thead><tbody>" +
-      tableRows +
-      "</tbody></table>";
-
-    return Components.sectionCard(t("devices.dailySchedule"), body);
-  },
-
   // =========================================================
-  // LAYER 3 EVENTS
+  // WORKBENCH EVENTS (adapted from Layer 3 events)
   // =========================================================
 
-  _setupLayer3Events: function () {
+  _setupWorkbenchEvents: function () {
     var self = this;
-
-    // Back navigation
-    var bcBack = document.getElementById("bc-back");
-    var detailBack = document.getElementById("detail-back");
-    if (bcBack) {
-      bcBack.addEventListener("click", function (e) {
-        e.preventDefault();
-        self._closeLayer3();
-      });
-    }
-    if (detailBack) {
-      detailBack.addEventListener("click", function () {
-        self._closeLayer3();
-      });
-    }
-
-    // Old device-level apply (deprecated path)
-    var oldApplyBtn = document.getElementById("detail-apply");
-    if (oldApplyBtn) {
-      oldApplyBtn.addEventListener("click", function () {
-        self._handleApply();
-      });
-    }
 
     // --- Battery schedule editor events (v5.21 merged card) ---
     self._renderScheduleRows();
@@ -2238,31 +2136,12 @@ var DevicesPage = {
           if (key && self._pendingConfig) {
             self._pendingConfig = Object.assign({}, self._pendingConfig);
             self._pendingConfig[key] = parseInt(input.value, 10) || 0;
+            self._updateConfirmationArea();
           }
         });
       });
 
-    var addBtn = document.getElementById("schedule-add-slot");
-    if (addBtn) {
-      addBtn.addEventListener("click", function () {
-        if (!self._pendingConfig) return;
-        var slots = self._pendingConfig.slots;
-        var lastEnd = slots.length > 0 ? slots[slots.length - 1].endMinute : 0;
-        if (lastEnd >= 1440) lastEnd = 0;
-        var newSlot = {
-          startMinute: lastEnd,
-          endMinute: Math.min(lastEnd + 360, 1440),
-          purpose: "self_consumption",
-          direction: null,
-          exportPolicy: null,
-        };
-        self._pendingConfig = Object.assign({}, self._pendingConfig, {
-          slots: slots.concat([newSlot]),
-        });
-        self._renderScheduleRows();
-        self._attachSlotListeners();
-      });
-    }
+    // v6.2: "Add Slot" button removed — split/merge handled in _attachSlotListeners
 
     var scheduleApplyBtn = document.getElementById("schedule-apply");
     if (scheduleApplyBtn) {
@@ -2272,51 +2151,12 @@ var DevicesPage = {
     }
 
     self._attachSlotListeners();
+    self._updateConfirmationArea();
   },
 
-  _handleApply: async function () {
-    var self = this;
-    var dev = self._currentDetail ? self._currentDetail.device : null;
-    if (!dev) return;
-
-    var applyBtn = document.getElementById("detail-apply");
-    if (applyBtn) {
-      applyBtn.disabled = true;
-      applyBtn.textContent = "Submitting...";
-    }
-
-    try {
-      // Gather schedule from current state
-      var schedule = self._currentSchedule || { slots: [] };
-      await DataSource.devices.putSchedule(dev.assetId, schedule.slots || []);
-
-      if (applyBtn) {
-        applyBtn.textContent = "Submitted \u2713";
-        applyBtn.classList.add("btn-success");
-      }
-
-      // Show toast
-      self._showToast(
-        "Schedule submitted. Waiting for gateway confirmation.",
-        "success",
-      );
-
-      setTimeout(function () {
-        if (applyBtn) {
-          applyBtn.textContent = t("devices.applyToGateway");
-          applyBtn.disabled = false;
-          applyBtn.classList.remove("btn-success");
-        }
-      }, 3000);
-    } catch (err) {
-      console.error("[P2] putSchedule error:", err);
-      self._showToast(t("devices.loadFailed"), "error");
-      if (applyBtn) {
-        applyBtn.textContent = t("devices.applyToGateway");
-        applyBtn.disabled = false;
-      }
-    }
-  },
+  // =========================================================
+  // TOAST
+  // =========================================================
 
   _showToast: function (message, type) {
     type = type || "info";

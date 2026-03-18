@@ -253,9 +253,14 @@ export async function handler(
       syncStatus:
         result === "success"
           ? "synced"
-          : result === "pending" || result === "pending_dispatch"
+          : result === "pending" ||
+              result === "pending_dispatch" ||
+              result === "dispatched" ||
+              result === "accepted"
             ? "pending"
-            : "unknown",
+            : result === "failed" || result === "timeout"
+              ? "failed"
+              : "unknown",
       lastAckAt: cmd.resolved_at
         ? new Date(cmd.resolved_at as string).toISOString()
         : null,

@@ -29,9 +29,10 @@ describe("CDK Stacks", () => {
     // Should have an HTTP API
     template.resourceCountIs("AWS::ApiGatewayV2::Api", 1);
 
-    // Should have 13 Lambda functions (dashboard, assets, trades, revenue-trend,
+    // Should have 15 Lambda functions (dashboard, assets, trades, revenue-trend,
+    // get-gateways, patch-gateway-home-alias,
     // gateway detail/schedule/put-schedule, hems batch-dispatch/history, fleet overview/integradores/offline-events/charts)
-    template.resourceCountIs("AWS::Lambda::Function", 13);
+    template.resourceCountIs("AWS::Lambda::Function", 15);
   });
 
   test("MarketBillingStack creates Lambda functions", () => {

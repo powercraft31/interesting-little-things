@@ -4176,6 +4176,14 @@ CREATE POLICY rls_gateway_outage_events_tenant ON public.gateway_outage_events
     USING (((org_id)::text = current_setting('app.current_org_id'::text, true)));
 
 --
+-- v6.2 Devices: Add home_alias to gateways
+--
+
+ALTER TABLE public.gateways ADD COLUMN IF NOT EXISTS home_alias character varying(100);
+
+COMMENT ON COLUMN public.gateways.home_alias IS 'Human-readable alias for the Home site this gateway belongs to. Nullable — fallback to gateway name.';
+
+--
 -- PostgreSQL database dump complete
 --
 
