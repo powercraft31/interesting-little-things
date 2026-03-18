@@ -4118,6 +4118,64 @@ ALTER TABLE public.trade_schedules ENABLE ROW LEVEL SECURITY;
 ALTER TABLE public.vpp_strategies ENABLE ROW LEVEL SECURITY;
 
 --
+-- Name: gateway_outage_events; Type: TABLE; Schema: public; Owner: -
+--
+
+CREATE TABLE IF NOT EXISTS public.gateway_outage_events (
+    id bigint NOT NULL,
+    gateway_id character varying(50) NOT NULL,
+    org_id character varying(50) NOT NULL,
+    started_at timestamp with time zone NOT NULL,
+    ended_at timestamp with time zone,
+    created_at timestamp with time zone DEFAULT now() NOT NULL
+);
+
+COMMENT ON TABLE public.gateway_outage_events IS 'Gateway-level outage events for Fleet v6.1. Consolidates flaps < 5 min into single event.';
+
+--
+-- Name: gateway_outage_events_id_seq; Type: SEQUENCE; Schema: public; Owner: -
+--
+
+CREATE SEQUENCE IF NOT EXISTS public.gateway_outage_events_id_seq
+    START WITH 1
+    INCREMENT BY 1
+    NO MINVALUE
+    NO MAXVALUE
+    CACHE 1;
+
+ALTER SEQUENCE public.gateway_outage_events_id_seq OWNED BY public.gateway_outage_events.id;
+
+ALTER TABLE ONLY public.gateway_outage_events ALTER COLUMN id SET DEFAULT nextval('public.gateway_outage_events_id_seq'::regclass);
+
+ALTER TABLE ONLY public.gateway_outage_events
+    ADD CONSTRAINT gateway_outage_events_pkey PRIMARY KEY (id);
+
+ALTER TABLE ONLY public.gateway_outage_events
+    ADD CONSTRAINT gateway_outage_events_gateway_id_fkey FOREIGN KEY (gateway_id) REFERENCES public.gateways(gateway_id);
+
+ALTER TABLE ONLY public.gateway_outage_events
+    ADD CONSTRAINT gateway_outage_events_org_id_fkey FOREIGN KEY (org_id) REFERENCES public.organizations(org_id);
+
+CREATE INDEX IF NOT EXISTS idx_goe_gateway_started
+    ON public.gateway_outage_events (gateway_id, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_goe_org_started
+    ON public.gateway_outage_events (org_id, started_at DESC);
+
+CREATE INDEX IF NOT EXISTS idx_goe_open
+    ON public.gateway_outage_events (gateway_id)
+    WHERE ended_at IS NULL;
+
+--
+-- Name: gateway_outage_events; Type: ROW SECURITY; Schema: public; Owner: -
+--
+
+ALTER TABLE public.gateway_outage_events ENABLE ROW LEVEL SECURITY;
+
+CREATE POLICY rls_gateway_outage_events_tenant ON public.gateway_outage_events
+    USING (((org_id)::text = current_setting('app.current_org_id'::text, true)));
+
+--
 -- PostgreSQL database dump complete
 --
 

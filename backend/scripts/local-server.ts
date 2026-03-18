@@ -16,6 +16,7 @@ import { handler as fleetOverviewHandler } from "../src/bff/handlers/get-fleet-o
 import { handler as fleetIntegradoresHandler } from "../src/bff/handlers/get-fleet-integradores";
 import { handler as fleetOfflineEventsHandler } from "../src/bff/handlers/get-fleet-offline-events";
 import { handler as fleetUptimeTrendHandler } from "../src/bff/handlers/get-fleet-uptime-trend";
+import { handler as fleetChartsHandler } from "../src/bff/handlers/get-fleet-charts";
 import { handler as devicesHandler } from "../src/bff/handlers/get-devices";
 import { handler as gatewaysHandler } from "../src/bff/handlers/get-gateways";
 import { handler as gatewayEnergyHandler } from "../src/bff/handlers/get-gateway-energy";
@@ -146,7 +147,9 @@ app.use(
     origin: (origin, callback) => {
       if (
         !origin ||
-        /^https?:\/\/(localhost|152\.42\.235\.155|solfacil\.alwayscontrol\.net)(:\d+)?$/.test(origin)
+        /^https?:\/\/(localhost|152\.42\.235\.155|solfacil\.alwayscontrol\.net)(:\d+)?$/.test(
+          origin,
+        )
       ) {
         callback(null, true);
       } else {
@@ -181,6 +184,10 @@ app.get(
 app.get(
   "/api/fleet/uptime-trend",
   wrapHandler(fleetUptimeTrendHandler, "GET", "/api/fleet/uptime-trend"),
+);
+app.get(
+  "/api/fleet/charts",
+  wrapHandler(fleetChartsHandler, "GET", "/api/fleet/charts"),
 );
 // Devices & Gateways (v5.19: homes → gateways)
 app.get("/api/devices", wrapHandler(devicesHandler, "GET", "/api/devices"));

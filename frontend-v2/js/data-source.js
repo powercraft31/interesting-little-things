@@ -117,7 +117,7 @@ var DataSource = (function () {
     return apiCall();
   }
 
-  // ── Fleet (P1) ────────────────────────────────────────────
+  // ── Fleet (P1 → v6.1 gateway-first) ─────────────────────
   var fleet = {
     overview: function () {
       return withFallback(
@@ -125,6 +125,17 @@ var DataSource = (function () {
           return apiGet("/api/fleet/overview");
         },
         typeof FLEET !== "undefined" ? FLEET : {},
+      );
+    },
+    charts: function () {
+      return withFallback(
+        function () {
+          return apiGet("/api/fleet/charts");
+        },
+        {
+          gatewayStatus: { online: 0, offline: 0 },
+          inverterBrandDistribution: [],
+        },
       );
     },
     integradores: function () {
@@ -137,10 +148,11 @@ var DataSource = (function () {
         typeof INTEGRADORES !== "undefined" ? INTEGRADORES : [],
       );
     },
-    offlineEvents: function () {
+    offlineEvents: function (limit) {
       return withFallback(
         function () {
-          return apiGet("/api/fleet/offline-events").then(function (d) {
+          var qs = limit ? "?limit=" + limit : "";
+          return apiGet("/api/fleet/offline-events" + qs).then(function (d) {
             return d.events;
           });
         },

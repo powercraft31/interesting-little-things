@@ -37,7 +37,7 @@ interface GatewayClient {
 }
 
 const POLL_INTERVAL_MS = 60_000;
-const OFFLINE_THRESHOLD_MS = 600_000; // 10 minutes
+const OFFLINE_THRESHOLD_MS = 900_000; // 15 minutes (REQ v6.1)
 const HOURLY_POLL_MS = 3_600_000;
 
 export class GatewayConnectionManager {
@@ -275,18 +275,68 @@ export class GatewayConnectionManager {
     }
   }
 
-  /** Mark gateways offline if no heartbeat for >10min. */
+  /** Mark gateways offline if no heartbeat for >15min. Write outage events. */
   private async heartbeatWatchdog(): Promise<void> {
     try {
-      await this.pool.query(
+      // Find gateways that just went offline and update their status
+      const result = await this.pool.query(
         `UPDATE gateways
          SET status = 'offline', updated_at = NOW()
          WHERE status = 'online'
            AND last_seen_at IS NOT NULL
-           AND last_seen_at < NOW() - INTERVAL '${OFFLINE_THRESHOLD_MS} milliseconds'`,
+           AND last_seen_at < NOW() - INTERVAL '${OFFLINE_THRESHOLD_MS} milliseconds'
+         RETURNING gateway_id, org_id`,
       );
+
+      // Write outage events for each newly-offline gateway
+      for (const row of result.rows) {
+        await this.writeOutageEvent(row.gateway_id, row.org_id);
+      }
     } catch (err) {
       console.error("[GatewayConnectionManager] Watchdog error:", err);
+    }
+  }
+
+  /**
+   * Write a gateway outage event with 5-min flap consolidation.
+   * If a recent outage ended < 5 min ago, reopen it instead of creating a new one.
+   */
+  private async writeOutageEvent(
+    gatewayId: string,
+    orgId: string,
+  ): Promise<void> {
+    const FLAP_WINDOW_MS = 300_000; // 5 minutes
+
+    // Check for recent outage that ended < 5 min ago (flap consolidation)
+    const recent = await this.pool.query(
+      `SELECT id, ended_at FROM gateway_outage_events
+       WHERE gateway_id = $1
+         AND ended_at IS NOT NULL
+         AND ended_at > NOW() - INTERVAL '${FLAP_WINDOW_MS} milliseconds'
+       ORDER BY ended_at DESC
+       LIMIT 1`,
+      [gatewayId],
+    );
+
+    if (recent.rows.length > 0) {
+      // Reopen existing outage (flap consolidation)
+      await this.pool.query(
+        `UPDATE gateway_outage_events SET ended_at = NULL WHERE id = $1`,
+        [recent.rows[0].id],
+      );
+      console.log(
+        `[GatewayConnectionManager] Flap consolidation: reopened outage ${recent.rows[0].id} for ${gatewayId}`,
+      );
+    } else {
+      // Insert new outage event
+      await this.pool.query(
+        `INSERT INTO gateway_outage_events (gateway_id, org_id, started_at)
+         VALUES ($1, $2, NOW())`,
+        [gatewayId, orgId],
+      );
+      console.log(
+        `[GatewayConnectionManager] New outage event for ${gatewayId}`,
+      );
     }
   }
 

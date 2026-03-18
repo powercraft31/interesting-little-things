@@ -50,8 +50,8 @@ describe("is_online migration audit", () => {
       path.join(handlersDir, "get-fleet-overview.ts"),
       "utf-8",
     );
-    // Should reference gateways.status for online counting
-    expect(content).toContain("g.status = 'online'");
+    // Should reference gateways.status for online counting (with or without table alias)
+    expect(content).toMatch(/(?:g\.)?status\s*=\s*'online'/);
     // Should NOT use is_online in FILTER clauses
     expect(content).not.toMatch(/FILTER\s*\(\s*WHERE.*is_online/);
   });

@@ -13,8 +13,13 @@ import { queryWithOrg } from "../../shared/db";
 
 /**
  * GET /api/fleet/integradores
- * EP-2: Integrador list with device counts and online rates.
- * Min role: SOLFACIL_ADMIN
+ * EP-2 v6.1: Organization summary table — gateway-first.
+ *
+ * Columns: org, gatewayCount, gatewayOnlineRate, backfillPendingFailed, lastCommissioning.
+ * Only orgs with >= 1 gateway are returned.
+ * Sorted: gatewayOnlineRate ASC, gatewayCount DESC.
+ *
+ * NOTE: backfill_requests uses 'pending' as DB value (maps to REQ 'not_started').
  */
 export async function handler(
   event: APIGatewayProxyEventV2,
@@ -33,32 +38,61 @@ export async function handler(
     return apiError(e.statusCode ?? 500, e.message ?? "Error");
   }
 
+  const rlsOrgId = ctx.orgId;
+
   const { rows } = await queryWithOrg(
-    `SELECT
-       o.org_id,
-       o.name,
-       COUNT(a.asset_id)::int AS device_count,
-       ROUND(100.0 * COUNT(a.asset_id) FILTER (WHERE g.status = 'online')
-         / NULLIF(COUNT(a.asset_id), 0), 1) AS online_rate,
-       MAX(a.commissioned_at) AS last_commission
-     FROM organizations o
-     LEFT JOIN assets a ON o.org_id = a.org_id AND a.is_active = true
-     LEFT JOIN gateways g ON a.gateway_id = g.gateway_id
-     WHERE o.org_id = $1
-     GROUP BY o.org_id, o.name
-     ORDER BY o.name`,
-    [ctx.orgId],
-    ctx.orgId,
+    `WITH gw AS (
+       SELECT
+         o.org_id,
+         o.name,
+         COUNT(g.gateway_id)::int                                         AS gateway_count,
+         COUNT(*) FILTER (WHERE g.status = 'online')::int                 AS online_gateways,
+         MAX(COALESCE(g.commissioned_at, g_first_telem.first_ts))         AS last_commissioning
+       FROM organizations o
+       INNER JOIN gateways g ON g.org_id = o.org_id
+       LEFT JOIN LATERAL (
+         SELECT MIN(th.recorded_at) AS first_ts
+         FROM telemetry_history th
+         JOIN assets a ON a.asset_id = th.asset_id
+         WHERE a.gateway_id = g.gateway_id
+       ) g_first_telem ON true
+       GROUP BY o.org_id, o.name
+     ),
+     bf AS (
+       SELECT
+         g.org_id,
+         COUNT(DISTINCT br.gateway_id)::int                               AS backfill_pending_failed
+       FROM backfill_requests br
+       JOIN gateways g ON g.gateway_id = br.gateway_id
+       WHERE br.status IN ('pending','in_progress','failed')
+       GROUP BY g.org_id
+     )
+     SELECT
+       gw.org_id,
+       gw.name,
+       gw.gateway_count,
+       CASE WHEN gw.gateway_count > 0
+         THEN ROUND(100.0 * gw.online_gateways / gw.gateway_count)::int
+         ELSE 0
+       END                                                               AS gateway_online_rate,
+       COALESCE(bf.backfill_pending_failed, 0)::int                      AS backfill_pending_failed,
+       gw.last_commissioning
+     FROM gw
+     LEFT JOIN bf ON bf.org_id = gw.org_id
+     WHERE gw.gateway_count > 0
+     ORDER BY gateway_online_rate ASC, gateway_count DESC`,
+    [],
+    rlsOrgId,
   );
 
   const integradores = rows.map((r: Record<string, unknown>) => ({
     orgId: r.org_id as string,
     name: r.name as string,
-    deviceCount: Number(r.device_count),
-    onlineRate:
-      r.online_rate != null ? parseFloat(String(r.online_rate)) : null,
-    lastCommission: r.last_commission
-      ? new Date(r.last_commission as string).toISOString()
+    gatewayCount: Number(r.gateway_count),
+    gatewayOnlineRate: Number(r.gateway_online_rate),
+    backfillPendingFailed: Number(r.backfill_pending_failed),
+    lastCommissioning: r.last_commissioning
+      ? new Date(r.last_commissioning as string).toISOString()
       : null,
   }));
 

@@ -92,6 +92,32 @@ export class BffStack extends cdk.Stack {
       stage,
     );
 
+    // v6.1: Fleet gateway-first handlers
+    const getFleetOverview = this.createHandler(
+      "GetFleetOverview",
+      handlersDir,
+      "get-fleet-overview.handler",
+      stage,
+    );
+    const getFleetIntegradores = this.createHandler(
+      "GetFleetIntegradores",
+      handlersDir,
+      "get-fleet-integradores.handler",
+      stage,
+    );
+    const getFleetOfflineEvents = this.createHandler(
+      "GetFleetOfflineEvents",
+      handlersDir,
+      "get-fleet-offline-events.handler",
+      stage,
+    );
+    const getFleetCharts = this.createHandler(
+      "GetFleetCharts",
+      handlersDir,
+      "get-fleet-charts.handler",
+      stage,
+    );
+
     // v6.0: P4 batch dispatch handlers
     const postHemsBatchDispatch = this.createHandler(
       "PostHemsBatchDispatch",
@@ -130,6 +156,21 @@ export class BffStack extends cdk.Stack {
       "/api/gateways/{gatewayId}/schedule",
       putGatewaySchedule,
     );
+    // v6.1: Fleet gateway-first routes
+    this.addRoute(httpApi, "GET", "/api/fleet/overview", getFleetOverview);
+    this.addRoute(
+      httpApi,
+      "GET",
+      "/api/fleet/integradores",
+      getFleetIntegradores,
+    );
+    this.addRoute(
+      httpApi,
+      "GET",
+      "/api/fleet/offline-events",
+      getFleetOfflineEvents,
+    );
+    this.addRoute(httpApi, "GET", "/api/fleet/charts", getFleetCharts);
     // v6.0: P4 batch dispatch routes
     this.addRoute(
       httpApi,

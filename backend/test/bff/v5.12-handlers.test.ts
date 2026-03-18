@@ -107,26 +107,20 @@ beforeEach(() => {
 // ---------------------------------------------------------------------------
 
 describe("GET /api/fleet/overview", () => {
-  it("returns fleet aggregate KPIs (admin)", async () => {
-    mockQueryWithOrg
-      .mockResolvedValueOnce({
-        rows: [
-          {
-            total_devices: 47,
-            online_count: 44,
-            offline_count: 3,
-            online_rate: 93.6,
-          },
-        ],
-      })
-      .mockResolvedValueOnce({
-        rows: [
-          { type: "INVERTER_BATTERY", count: 20, online: 19 },
-          { type: "SMART_METER", count: 12, online: 12 },
-        ],
-      })
-      .mockResolvedValueOnce({ rows: [{ total_gateways: 3 }] })
-      .mockResolvedValueOnce({ rows: [{ total_integradores: 2 }] });
+  it("returns fleet aggregate KPIs — v6.1 gateway-first (admin)", async () => {
+    mockQueryWithOrg.mockResolvedValueOnce({
+      rows: [
+        {
+          total_gateways: 10,
+          online_gateways: 8,
+          offline_gateways: 2,
+          gateway_online_rate: 80,
+          backfill_pressure_count: 1,
+          has_backfill_failure: false,
+          organization_count: 3,
+        },
+      ],
+    });
 
     const event = makeEvent("GET", "/api/fleet/overview", adminToken());
     const result = (await fleetOverviewHandler(
@@ -136,11 +130,11 @@ describe("GET /api/fleet/overview", () => {
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
     expect(body.success).toBe(true);
-    expect(body.data).toHaveProperty("totalDevices", 47);
-    expect(body.data).toHaveProperty("onlineCount", 44);
-    expect(body.data).toHaveProperty("offlineCount", 3);
-    expect(body.data).toHaveProperty("totalGateways", 3);
-    expect(body.data).toHaveProperty("deviceTypes");
+    expect(body.data).toHaveProperty("totalGateways", 10);
+    expect(body.data).toHaveProperty("onlineGateways", 8);
+    expect(body.data).toHaveProperty("offlineGateways", 2);
+    expect(body.data).toHaveProperty("gatewayOnlineRate", 80);
+    expect(body.data).toHaveProperty("organizationCount", 3);
   });
 
   it("returns 401 with empty auth", async () => {
@@ -157,15 +151,16 @@ describe("GET /api/fleet/overview", () => {
 // ---------------------------------------------------------------------------
 
 describe("GET /api/fleet/integradores", () => {
-  it("returns integrador list for admin", async () => {
+  it("returns integrador list for admin — v6.1 gateway-first", async () => {
     mockQueryWithOrg.mockResolvedValueOnce({
       rows: [
         {
           org_id: "ORG_ENERGIA_001",
           name: "Solar São Paulo",
-          device_count: 26,
-          online_rate: 96.2,
-          last_commission: "2024-11-15T10:00:00Z",
+          gateway_count: 5,
+          gateway_online_rate: 80,
+          backfill_pending_failed: 1,
+          last_commissioning: "2024-11-15T10:00:00Z",
         },
       ],
     });
@@ -182,7 +177,8 @@ describe("GET /api/fleet/integradores", () => {
       .integradores as Array<Record<string, unknown>>;
     expect(integradores.length).toBeGreaterThanOrEqual(1);
     expect(integradores[0]).toHaveProperty("orgId");
-    expect(integradores[0]).toHaveProperty("deviceCount");
+    expect(integradores[0]).toHaveProperty("gatewayCount", 5);
+    expect(integradores[0]).toHaveProperty("gatewayOnlineRate", 80);
   });
 
   it("returns integrador list for org user (org-scoped)", async () => {
@@ -191,9 +187,10 @@ describe("GET /api/fleet/integradores", () => {
         {
           org_id: "ORG_ENERGIA_001",
           name: "Solar São Paulo",
-          device_count: 26,
-          online_rate: 96.2,
-          last_commission: "2024-11-15T10:00:00Z",
+          gateway_count: 5,
+          gateway_online_rate: 80,
+          backfill_pending_failed: 0,
+          last_commissioning: "2024-11-15T10:00:00Z",
         },
       ],
     });
@@ -208,7 +205,7 @@ describe("GET /api/fleet/integradores", () => {
     expect(body.data).toHaveProperty("integradores");
   });
 
-  it("scopes organizations query with WHERE o.org_id = $1 to prevent zero-shell foreign rows", async () => {
+  it("v6.1: uses INNER JOIN gateways + HAVING to exclude 0-gw orgs, RLS via orgId", async () => {
     mockQueryWithOrg.mockResolvedValueOnce({ rows: [] });
 
     const event = makeEvent(
@@ -219,14 +216,12 @@ describe("GET /api/fleet/integradores", () => {
     await fleetIntegradoresHandler(event);
 
     const sql = mockQueryWithOrg.mock.calls[0][0] as string;
-    const params = mockQueryWithOrg.mock.calls[0][1] as unknown[];
     const orgIdArg = mockQueryWithOrg.mock.calls[0][2] as string;
 
-    // SQL must filter organizations table by org_id
-    expect(sql).toContain("WHERE o.org_id = $1");
-    // org_id must be passed as a query parameter
-    expect(params).toEqual(["ORG_DEMO_002"]);
-    // org_id must also be passed as RLS context
+    // v6.1: Uses INNER JOIN + HAVING instead of WHERE o.org_id = $1
+    expect(sql).toContain("INNER JOIN gateways g");
+    expect(sql).toContain("HAVING COUNT(g.gateway_id) > 0");
+    // org_id passed as RLS context
     expect(orgIdArg).toBe("ORG_DEMO_002");
   });
 });
@@ -236,15 +231,16 @@ describe("GET /api/fleet/integradores", () => {
 // ---------------------------------------------------------------------------
 
 describe("GET /api/fleet/offline-events", () => {
-  it("returns offline events list", async () => {
+  it("returns gateway outage events — v6.1", async () => {
     mockQueryWithOrg.mockResolvedValueOnce({
       rows: [
         {
-          device_id: "DEV-016",
-          start: "2026-03-05T10:00:00Z",
-          duration_hrs: 2.5,
-          cause: "network",
-          backfill: false,
+          gateway_id: "gw-001",
+          gateway_name: "Gateway A",
+          org_name: "Solar SP",
+          offline_start: "2026-03-15T10:00:00Z",
+          duration_minutes: 45,
+          backfill_status: "pending",
         },
       ],
     });
@@ -257,6 +253,11 @@ describe("GET /api/fleet/offline-events", () => {
     expect(result.statusCode).toBe(200);
     const body = parseBody(result);
     expect(body.data).toHaveProperty("events");
+    const events = (body.data as Record<string, unknown>).events as Array<
+      Record<string, unknown>
+    >;
+    expect(events[0]).toHaveProperty("gatewayId", "gw-001");
+    expect(events[0]).toHaveProperty("gatewayName", "Gateway A");
   });
 });
 

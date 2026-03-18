@@ -46,7 +46,7 @@ describe("HeartbeatHandler", () => {
       makeHeartbeatPayload(ts),
     );
 
-    // v5.22: CTE query + pg_notify = 2 queries
+    // v6.1: CTE query + pg_notify = 2 queries (no reconnect)
     expect(pool.queries).toHaveLength(2);
     const q = pool.queries[0];
     expect(q.sql).toContain("WITH prev AS");
@@ -142,12 +142,12 @@ describe("HeartbeatHandler", () => {
     expect(q.params[0]).toBe(1609459200000);
   });
 
-  // ─── v5.22: Reconnect detection ────────────────────────────────────────────
+  // ─── v6.1: Outage close on reconnect ─────────────────────────────────────
 
-  it("inserts backfill_request when reconnect gap > 2 minutes", async () => {
-    const twoMinutesAgo = new Date(Date.now() - 300_000); // 5 min ago last_seen
+  it("closes outage event on reconnect (prev_status=offline)", async () => {
+    const fiveMinAgo = new Date(Date.now() - 300_000);
     const pool = createMockPool([
-      { prev_last_seen: twoMinutesAgo, prev_status: "offline" },
+      { prev_last_seen: fiveMinAgo, prev_status: "offline" },
     ]);
 
     const nowTs = String(Date.now());
@@ -158,16 +158,16 @@ describe("HeartbeatHandler", () => {
       makeHeartbeatPayload(nowTs),
     );
 
-    // CTE UPDATE + backfill INSERT + pg_notify = 3 queries
+    // CTE UPDATE + outage close + pg_notify = 3 queries
     expect(pool.queries).toHaveLength(3);
-    const backfillQ = pool.queries.find((q) =>
-      q.sql.includes("INSERT INTO backfill_requests"),
+    const closeQ = pool.queries.find((q) =>
+      q.sql.includes("UPDATE gateway_outage_events"),
     );
-    expect(backfillQ).toBeDefined();
-    expect(backfillQ!.params[0]).toBe("gw-001");
+    expect(closeQ).toBeDefined();
+    expect(closeQ!.params[0]).toBe("gw-001");
   });
 
-  it("does NOT insert backfill when gateway was already online", async () => {
+  it("does NOT close outage when gateway was already online", async () => {
     const recentTime = new Date(Date.now() - 300_000);
     const pool = createMockPool([
       { prev_last_seen: recentTime, prev_status: "online" },
@@ -181,30 +181,23 @@ describe("HeartbeatHandler", () => {
       makeHeartbeatPayload(nowTs),
     );
 
-    // CTE UPDATE + pg_notify only (no backfill INSERT)
+    // CTE UPDATE + pg_notify only (no outage close)
     expect(pool.queries).toHaveLength(2);
-    const backfillQ = pool.queries.find((q) =>
-      q.sql.includes("INSERT INTO backfill_requests"),
-    );
-    expect(backfillQ).toBeUndefined();
   });
 
-  it("does NOT insert backfill when gap < 2 minutes", async () => {
-    const justNow = new Date(Date.now() - 30_000); // 30s ago
+  it("v6.1: does NOT insert backfill_request on reconnect", async () => {
+    const fiveMinAgo = new Date(Date.now() - 300_000);
     const pool = createMockPool([
-      { prev_last_seen: justNow, prev_status: "offline" },
+      { prev_last_seen: fiveMinAgo, prev_status: "offline" },
     ]);
 
-    const nowTs = String(Date.now());
     await handleHeartbeat(
       pool as unknown as import("pg").Pool,
       "gw-001",
       "CID",
-      makeHeartbeatPayload(nowTs),
+      makeHeartbeatPayload(String(Date.now())),
     );
 
-    // CTE UPDATE + pg_notify only (gap too small)
-    expect(pool.queries).toHaveLength(2);
     const backfillQ = pool.queries.find((q) =>
       q.sql.includes("INSERT INTO backfill_requests"),
     );

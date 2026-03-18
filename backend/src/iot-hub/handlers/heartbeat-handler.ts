@@ -2,11 +2,13 @@ import { Pool } from "pg";
 import type { SolfacilMessage } from "../../shared/types/solfacil-protocol";
 
 /**
- * PR5: HeartbeatHandler
+ * PR5 / v6.1: HeartbeatHandler
  *
  * Processes `device/ems/{clientId}/status` messages.
  * Updates `gateways.last_seen_at` using payload.timeStamp (device clock, NOT server clock).
- * v5.22: Detects reconnect gaps and queues backfill requests via atomic CTE.
+ *
+ * v6.1: Connectivity recovery only — closes open outage events on reconnect.
+ * Backfill trigger responsibility moved to telemetry-handler.ts (gap > 5 min on primary stream).
  */
 export async function handleHeartbeat(
   pool: Pool,
@@ -39,25 +41,19 @@ export async function handleHeartbeat(
     [deviceTimestamp, gatewayId],
   );
 
-  // Reconnect detection: only when transitioning from non-online to online
+  // v6.1: Close open outage event on reconnect (connectivity recovery)
   if (result.rows.length > 0) {
-    const { prev_last_seen, prev_status } = result.rows[0];
+    const { prev_status } = result.rows[0];
 
-    if (prev_last_seen && prev_status !== "online") {
-      const newTime = new Date(deviceTimestamp);
-      const gapMs = newTime.getTime() - new Date(prev_last_seen).getTime();
-      const RECONNECT_THRESHOLD_MS = 120_000; // 2 minutes
-
-      if (gapMs > RECONNECT_THRESHOLD_MS) {
-        await pool.query(
-          `INSERT INTO backfill_requests (gateway_id, gap_start, gap_end)
-           VALUES ($1, $2, to_timestamp($3::bigint / 1000.0))`,
-          [gatewayId, prev_last_seen, deviceTimestamp],
-        );
-        console.log(
-          `[HeartbeatHandler] Reconnect: ${gatewayId}, gap=${Math.round(gapMs / 60000)}min, backfill queued`,
-        );
-      }
+    if (prev_status && prev_status !== "online") {
+      await pool.query(
+        `UPDATE gateway_outage_events SET ended_at = NOW()
+         WHERE gateway_id = $1 AND ended_at IS NULL`,
+        [gatewayId],
+      );
+      console.log(
+        `[HeartbeatHandler] Reconnect: ${gatewayId}, outage closed`,
+      );
     }
   }
 
