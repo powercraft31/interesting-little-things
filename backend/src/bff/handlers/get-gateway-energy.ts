@@ -12,9 +12,14 @@ import {
 import { queryWithOrg } from "../../shared/db";
 
 /**
- * GET /api/gateways/:gatewayId/energy
- * EP-7: 24hr time-series energy data for a gateway (96 × 15-min buckets).
- * Query param: date (ISO, default today)
+ * GET /api/gateways/{gatewayId}/energy-24h
+ * v6.3: 24h time-series energy data for a gateway (288 × 5-min buckets).
+ * Query param: date (YYYY-MM-DD, default today)
+ *
+ * Returns named-field points + directional summary.
+ * Sign semantics:
+ *   Battery: positive = discharge, negative = charge
+ *   Grid:    positive = import,    negative = export
  */
 export async function handler(
   event: APIGatewayProxyEventV2,
@@ -35,7 +40,7 @@ export async function handler(
 
   const rlsOrgId = ctx.orgId;
 
-  // Extract gatewayId from path: /api/gateways/:gatewayId/energy
+  // Extract gatewayId from path: /api/gateways/{gatewayId}/energy-24h
   const pathParts = event.rawPath.split("/");
   const gatewaysIdx = pathParts.indexOf("gateways");
   const gatewayId = gatewaysIdx >= 0 ? pathParts[gatewaysIdx + 1] : "";
@@ -45,130 +50,109 @@ export async function handler(
   }
 
   const dateParam =
-    event.queryStringParameters?.date ?? new Date().toISOString().slice(0, 10);
+    event.queryStringParameters?.date ??
+    new Date().toISOString().slice(0, 10);
 
-  const [energyResult, tariffResult] = await Promise.all([
-    queryWithOrg(
-      `SELECT
-         date_trunc('minute', th.recorded_at)
-           - (EXTRACT(MINUTE FROM th.recorded_at)::INT % 15) * INTERVAL '1 minute' AS time_bucket,
-         COALESCE(SUM(th.pv_power), 0) AS pv,
-         COALESCE(SUM(th.load_power), 0) AS load,
-         COALESCE(SUM(th.battery_power), 0) AS battery,
-         COALESCE(SUM(th.grid_power_kw), 0) AS grid,
-         COALESCE(AVG(th.battery_soc), 0) AS soc,
-         COALESCE(AVG(th.flload_power), 0) AS flload
-       FROM telemetry_history th
-       JOIN assets a ON th.asset_id = a.asset_id
-       WHERE a.gateway_id = $1
-         AND a.is_active = true
-         AND th.recorded_at >= $2::DATE
-         AND th.recorded_at < $2::DATE + INTERVAL '1 day'
-       GROUP BY time_bucket
-       ORDER BY time_bucket`,
-      [gatewayId, dateParam],
-      rlsOrgId,
-    ),
-    queryWithOrg(
-      `SELECT peak_rate, offpeak_rate,
-              COALESCE(intermediate_rate, (peak_rate + offpeak_rate) / 2.0) AS intermediate_rate,
-              peak_start, peak_end, intermediate_start, intermediate_end
-       FROM tariff_schedules
-       ORDER BY effective_from DESC LIMIT 1`,
-      [],
-      rlsOrgId,
-    ),
-  ]);
+  // Query telemetry_history with 5-minute bucketing (288 points/day)
+  const energyResult = await queryWithOrg(
+    `SELECT
+       date_trunc('minute', th.recorded_at)
+         - (EXTRACT(MINUTE FROM th.recorded_at)::INT % 5) * INTERVAL '1 minute' AS time_bucket,
+       COALESCE(AVG(th.pv_power), 0)       AS pv,
+       COALESCE(AVG(th.load_power), 0)      AS load,
+       COALESCE(AVG(th.battery_power), 0)   AS battery,
+       COALESCE(AVG(th.grid_power_kw), 0)   AS grid,
+       AVG(th.battery_soc)                  AS soc
+     FROM telemetry_history th
+     JOIN assets a ON th.asset_id = a.asset_id
+     WHERE a.gateway_id = $1
+       AND a.is_active = true
+       AND th.recorded_at >= $2::DATE
+       AND th.recorded_at < $2::DATE + INTERVAL '1 day'
+     GROUP BY time_bucket
+     ORDER BY time_bucket`,
+    [gatewayId, dateParam],
+    rlsOrgId,
+  );
 
-  // Build 96 time labels
-  const timeLabels: string[] = [];
-  for (let h = 0; h < 24; h++) {
-    for (let m = 0; m < 60; m += 15) {
-      timeLabels.push(
-        `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}`,
-      );
-    }
-  }
-
-  // Initialize 96-point arrays
-  const pv = new Array(96).fill(0);
-  const load = new Array(96).fill(0);
-  const battery = new Array(96).fill(0);
-  const grid = new Array(96).fill(0);
-  const soc = new Array(96).fill(0);
-  const flload = new Array(96).fill(0);
+  // Build 288-point array with named fields
+  const pointsMap = new Map<number, {
+    pv: number;
+    load: number;
+    battery: number;
+    grid: number;
+    soc: number | null;
+  }>();
 
   for (const row of energyResult.rows) {
     const r = row as Record<string, unknown>;
     const bucket = new Date(r.time_bucket as string);
-    const idx = bucket.getHours() * 4 + Math.floor(bucket.getMinutes() / 15);
-    if (idx >= 0 && idx < 96) {
-      pv[idx] = parseFloat(String(r.pv));
-      load[idx] = parseFloat(String(r.load));
-      battery[idx] = parseFloat(String(r.battery));
-      grid[idx] = parseFloat(String(r.grid));
-      soc[idx] = parseFloat(String(r.soc));
-      flload[idx] = parseFloat(String(r.flload));
+    const idx = bucket.getHours() * 12 + Math.floor(bucket.getMinutes() / 5);
+    if (idx >= 0 && idx < 288) {
+      pointsMap.set(idx, {
+        pv: parseFloat(String(r.pv)),
+        load: parseFloat(String(r.load)),
+        battery: parseFloat(String(r.battery)),
+        grid: parseFloat(String(r.grid)),
+        soc: r.soc != null ? parseFloat(String(r.soc)) : null,
+      });
     }
   }
 
-  // Compute baseline (load without PV/battery)
-  const baseline = load.map((l: number, i: number) => l + Math.max(0, grid[i]));
+  // Build points array with ISO timestamps
+  const points: Array<{
+    ts: string;
+    pv: number;
+    load: number;
+    battery: number;
+    grid: number;
+    soc: number | null;
+  }> = [];
 
-  // Compute daily savings using tariff rates
-  const tariff = tariffResult.rows[0] as Record<string, unknown> | undefined;
-  const peakRate = tariff ? parseFloat(String(tariff.peak_rate)) : null;
-  const offpeakRate = tariff ? parseFloat(String(tariff.offpeak_rate)) : null;
-  const intermediateRate = tariff
-    ? parseFloat(String(tariff.intermediate_rate))
-    : null;
+  // Compute directional summary while iterating
+  let batteryChargeKwh = 0;
+  let batteryDischargeKwh = 0;
+  let gridImportKwh = 0;
+  let gridExportKwh = 0;
 
-  // Parse peak hours for rate assignment
-  const peakStartHour = tariff
-    ? parseInt(String(tariff.peak_start ?? "17:00").slice(0, 2), 10)
-    : 17;
-  const peakEndHour = tariff
-    ? parseInt(String(tariff.peak_end ?? "20:00").slice(0, 2), 10)
-    : 20;
-  const intStartHour = tariff
-    ? parseInt(String(tariff.intermediate_start ?? "16:00").slice(0, 2), 10)
-    : 16;
-  const intEndHour = tariff
-    ? parseInt(String(tariff.intermediate_end ?? "21:00").slice(0, 2), 10)
-    : 21;
+  for (let i = 0; i < 288; i++) {
+    const h = Math.floor(i / 12);
+    const m = (i % 12) * 5;
+    const ts = `${dateParam}T${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:00`;
 
-  let savingsBrl: number | null = null;
-  if (peakRate != null && offpeakRate != null && intermediateRate != null) {
-    savingsBrl = 0;
-    for (let i = 0; i < 96; i++) {
-      const hour = Math.floor(i / 4);
-      const savedKwh = Math.max(0, baseline[i] - Math.max(0, grid[i])) * 0.25; // 15-min bucket → kWh
-      let rate = offpeakRate;
-      if (hour >= peakStartHour && hour < peakEndHour) {
-        rate = peakRate;
-      } else if (hour >= intStartHour && hour < intEndHour) {
-        rate = intermediateRate;
+    const p = pointsMap.get(i);
+    if (p) {
+      points.push({ ts, ...p });
+      // Convert 5-min power (kW) to energy (kWh): kW * (5/60)
+      if (p.battery < 0) {
+        batteryChargeKwh += Math.abs(p.battery) * (5 / 60);
+      } else {
+        batteryDischargeKwh += p.battery * (5 / 60);
       }
-      savingsBrl += savedKwh * rate;
+      if (p.grid > 0) {
+        gridImportKwh += p.grid * (5 / 60);
+      } else {
+        gridExportKwh += Math.abs(p.grid) * (5 / 60);
+      }
+    } else {
+      points.push({ ts, pv: 0, load: 0, battery: 0, grid: 0, soc: null });
     }
-    savingsBrl = Math.round(savingsBrl * 100) / 100;
   }
+
+  // Round summary values to 2 decimal places
+  const summary = {
+    batteryChargeKwh: Math.round(batteryChargeKwh * 100) / 100,
+    batteryDischargeKwh: Math.round(batteryDischargeKwh * 100) / 100,
+    gridImportKwh: Math.round(gridImportKwh * 100) / 100,
+    gridExportKwh: Math.round(gridExportKwh * 100) / 100,
+  };
 
   const body = ok({
     gatewayId,
     date: dateParam,
-    timeLabels,
-    pv,
-    load,
-    battery,
-    grid,
-    soc,
-    flload,
-    acPower: new Array(96).fill(0), // Placeholder — needs per-device telemetry
-    evCharge: new Array(96).fill(0), // Placeholder — needs per-device telemetry
-    baseline,
-    savingsBrl,
-    _tenant: { orgId: ctx.orgId, role: ctx.role },
+    resolution: "5min",
+    points,
+    summary,
   });
 
   return {

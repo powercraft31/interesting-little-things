@@ -605,6 +605,16 @@ var DevicesPage = {
     self._currentGatewayId = gatewayId;
     self._updateLocatorSelection(gatewayId);
 
+    // v6.3: Share gateway context with Energy page via DemoStore
+    DemoStore.set("selectedGatewayId", gatewayId);
+    var gwObj = (self._gateways || []).find(function (g) {
+      return g.gatewayId === gatewayId;
+    });
+    DemoStore.set(
+      "selectedGatewayName",
+      gwObj ? gwObj.homeAlias || gwObj.name || gatewayId : gatewayId,
+    );
+
     workbench.innerHTML =
       '<div class="detail-loading">' +
       '<div class="skeleton" style="height:300px;border-radius:10px"></div>' +

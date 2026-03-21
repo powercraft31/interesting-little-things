@@ -133,6 +133,20 @@ export class BffStack extends cdk.Stack {
       stage,
     );
 
+    // v6.3: Energy page handlers
+    const getGatewayEnergy24h = this.createHandler(
+      "GetGatewayEnergy24h",
+      handlersDir,
+      "get-gateway-energy.handler",
+      stage,
+    );
+    const getGatewayEnergyStats = this.createHandler(
+      "GetGatewayEnergyStats",
+      handlersDir,
+      "get-gateway-energy-stats.handler",
+      stage,
+    );
+
     // v6.0: P4 batch dispatch handlers
     const postHemsBatchDispatch = this.createHandler(
       "PostHemsBatchDispatch",
@@ -194,6 +208,19 @@ export class BffStack extends cdk.Stack {
       getFleetOfflineEvents,
     );
     this.addRoute(httpApi, "GET", "/api/fleet/charts", getFleetCharts);
+    // v6.3: Energy page routes
+    this.addRoute(
+      httpApi,
+      "GET",
+      "/api/gateways/{gatewayId}/energy-24h",
+      getGatewayEnergy24h,
+    );
+    this.addRoute(
+      httpApi,
+      "GET",
+      "/api/gateways/{gatewayId}/energy-stats",
+      getGatewayEnergyStats,
+    );
     // v6.0: P4 batch dispatch routes
     this.addRoute(
       httpApi,

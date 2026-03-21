@@ -20,6 +20,7 @@ import { handler as fleetChartsHandler } from "../src/bff/handlers/get-fleet-cha
 import { handler as devicesHandler } from "../src/bff/handlers/get-devices";
 import { handler as gatewaysHandler } from "../src/bff/handlers/get-gateways";
 import { handler as gatewayEnergyHandler } from "../src/bff/handlers/get-gateway-energy";
+import { handler as gatewayEnergyStatsHandler } from "../src/bff/handlers/get-gateway-energy-stats";
 import { handler as gatewaysSummaryHandler } from "../src/bff/handlers/get-gateways-summary";
 import { handler as gatewayDevicesHandler } from "../src/bff/handlers/get-gateway-devices";
 import { handler as deviceDetailHandler } from "../src/bff/handlers/get-device-detail";
@@ -200,6 +201,18 @@ app.get(
   wrapHandler(gatewayEnergyHandler, "GET", "/api/gateways/:gatewayId/energy"),
 );
 app.get(
+  "/api/gateways/:gatewayId/energy-24h",
+  wrapHandler(gatewayEnergyHandler, "GET", "/api/gateways/:gatewayId/energy-24h"),
+);
+app.get(
+  "/api/gateways/:gatewayId/energy-stats",
+  wrapHandler(
+    gatewayEnergyStatsHandler,
+    "GET",
+    "/api/gateways/:gatewayId/energy-stats",
+  ),
+);
+app.get(
   "/api/gateways/:gatewayId/devices",
   wrapHandler(gatewayDevicesHandler, "GET", "/api/gateways/:gatewayId/devices"),
 );
@@ -363,7 +376,7 @@ app.get("/login", (_req, res) =>
 // ────────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
-  console.log(`Local API Gateway emulator running at http://localhost:${PORT}`);
+  console.log(`Local API Gateway emulator running on port ${PORT} (host-local probe: http://127.0.0.1:${PORT})`);
   console.log("Routes:");
   console.log("  GET  /dashboard");
   console.log("  GET  /assets");
@@ -377,6 +390,8 @@ app.listen(PORT, () => {
   console.log("  GET  /api/gateways                  (v5.19)");
   console.log("  GET  /api/gateways/summary          (v5.19)");
   console.log("  GET  /api/gateways/:id/energy       (v5.19)");
+  console.log("  GET  /api/gateways/:id/energy-24h   (v6.3)");
+  console.log("  GET  /api/gateways/:id/energy-stats (v6.3)");
   console.log("  GET  /api/gateways/:id/devices      (v5.19)");
   console.log("  GET  /api/gateways/:id/detail       (v5.20)");
   console.log("  GET  /api/gateways/:id/schedule     (v5.20)");
@@ -405,7 +420,7 @@ app.listen(PORT, () => {
   console.log("  POST /api/users                  (v5.23)");
   console.log("");
   console.log("Auth: JWT required for /api/* routes (except /api/auth/login)");
-  console.log("  curl -X POST http://localhost:3000/api/auth/login \\");
+  console.log(`  curl -X POST http://127.0.0.1:${PORT}/api/auth/login \\`);
   console.log('    -H "Content-Type: application/json" \\');
   console.log(
     '    -d \'{"email":"admin@solfacil.com.br","password":"solfacil2026"}\'',

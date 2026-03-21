@@ -16,7 +16,7 @@ var DataSource = (function () {
   var rawBase =
     typeof CONFIG !== "undefined" && CONFIG.BFF_API_URL
       ? CONFIG.BFF_API_URL
-      : window.SOLFACIL_API_BASE || "http://localhost:3000";
+      : window.SOLFACIL_API_BASE || window.location.origin;
   var API_BASE = rawBase.replace(/\/api\/?$/, "");
   var USE_LIVE_API =
     typeof CONFIG !== "undefined" && CONFIG.USE_MOCK === true ? false : true;
@@ -283,6 +283,60 @@ var DataSource = (function () {
 
   // ── Energy (P3) ───────────────────────────────────────────
   var energy = {
+    // v6.3: Gateway-level 24h energy behavior (288 x 5-min points + summary)
+    gateway24h: function (gatewayId, date) {
+      var qs = date ? "?date=" + date : "";
+      return withFallback(
+        function () {
+          return apiGet("/api/gateways/" + gatewayId + "/energy-24h" + qs);
+        },
+        function () {
+          return typeof MOCK_ENERGY_24H !== "undefined"
+            ? MOCK_ENERGY_24H
+            : {
+                points: [],
+                summary: {
+                  batteryChargeKwh: 0,
+                  batteryDischargeKwh: 0,
+                  gridImportKwh: 0,
+                  gridExportKwh: 0,
+                },
+              };
+        },
+      );
+    },
+    // v6.3: Gateway-level energy statistics (7d/30d/12m buckets + totals)
+    gatewayStats: function (gatewayId, window, endDate) {
+      var qs =
+        "?window=" +
+        encodeURIComponent(window) +
+        "&endDate=" +
+        encodeURIComponent(endDate);
+      return withFallback(
+        function () {
+          return apiGet("/api/gateways/" + gatewayId + "/energy-stats" + qs);
+        },
+        function () {
+          return typeof MOCK_ENERGY_STATS !== "undefined"
+            ? MOCK_ENERGY_STATS
+            : {
+                buckets: [],
+                totals: {
+                  pvGenerationKwh: 0,
+                  loadConsumptionKwh: 0,
+                  gridImportKwh: 0,
+                  gridExportKwh: 0,
+                  batteryChargeKwh: 0,
+                  batteryDischargeKwh: 0,
+                  selfConsumptionPct: 0,
+                  selfSufficiencyPct: 0,
+                  peakDemandKw: 0,
+                },
+              };
+        },
+      );
+    },
+    // Legacy methods (kept for asset-energy submodule compatibility)
     gatewayEnergy: function (gatewayId, date) {
       var qs = date ? "?date=" + date : "";
       return withFallback(
