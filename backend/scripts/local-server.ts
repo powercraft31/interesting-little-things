@@ -35,6 +35,7 @@ import { handler as tariffsHandler } from "../src/bff/handlers/get-tariffs";
 import { handler as hemsOverviewHandler } from "../src/bff/handlers/get-hems-overview";
 import { handler as hemsDispatchHandler } from "../src/bff/handlers/post-hems-batch-dispatch";
 import { handler as hemsBatchHistoryHandler } from "../src/bff/handlers/get-hems-batch-history";
+import { handler as hemsTargetingHandler } from "../src/bff/handlers/get-hems-targeting";
 import { handler as vppCapacityHandler } from "../src/bff/handlers/get-vpp-capacity";
 import { handler as vppLatencyHandler } from "../src/bff/handlers/get-vpp-latency";
 import { handler as vppDrEventsHandler } from "../src/bff/handlers/get-vpp-dr-events";
@@ -274,6 +275,11 @@ app.get(
   "/api/hems/batch-history",
   wrapHandler(hemsBatchHistoryHandler, "GET", "/api/hems/batch-history"),
 );
+// v6.4: P4 HEMS targeting (gateway fleet eligibility)
+app.get(
+  "/api/hems/targeting",
+  wrapHandler(hemsTargetingHandler, "GET", "/api/hems/targeting"),
+);
 // VPP
 app.get(
   "/api/vpp/capacity",
@@ -404,6 +410,7 @@ app.listen(PORT, () => {
   console.log("  GET  /api/hems/overview             (v5.12)");
   console.log("  POST /api/hems/batch-dispatch       (v6.0)");
   console.log("  GET  /api/hems/batch-history        (v6.0)");
+  console.log("  GET  /api/hems/targeting            (v6.4)");
   console.log("  GET  /api/vpp/capacity              (v5.12)");
   console.log("  GET  /api/vpp/latency               (v5.12)");
   console.log("  GET  /api/vpp/dr-events             (v5.12)");

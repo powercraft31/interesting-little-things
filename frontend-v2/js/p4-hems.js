@@ -1,51 +1,48 @@
 /* ============================================
-   SOLFACIL Admin Portal — P4: HEMS Control (v6.0)
-   Three-step batch dispatch flow:
-     Step 1: Mode selection + parameters
-     Step 2: Gateway selection
-     Step 3: Preview + dispatch + history
+   SOLFACIL Admin Portal — P4: HEMS Control Workbench (v6.4)
+   Four-step single-page workbench:
+     Step 1: Strategy selector + parameters
+     Step 2: Impact counter strip
+     Step 3: Targeting table (selection enabled)
+     Step 4: Review panel (Phase 1: dormant placeholder)
    ============================================ */
 
 var HEMSPage = {
-  _currentStep: 1,
-  _selectedMode: null,
-  _socMinLimit: 20,
-  _socMaxLimit: 95,
+  // ── State ──────────────────────────────────────────────
+  _mode: null, // 'self_consumption' | 'peak_shaving' | 'peak_valley_arbitrage'
+  _socMin: 20,
+  _socMax: 95,
   _gridImportLimitKw: 50,
-  _arbGrid: null, // 24-element array: 'charge'|'discharge'|null
+  _arbGrid: null,
   _arbBrush: "charge",
-  _gateways: null,
-  _selectedGateways: {},
-  _batchHistory: null,
-  _overview: null,
 
-  // Mode metadata
+  _gateways: [],
+  _selected: {},
+  _filters: { integrator: "all", home: "all", status: "all", mode: "all" },
+  _batchHistory: [],
+
+  // Mode metadata — i18n keys mapped per mode
   _modeKeys: {
     self_consumption: {
       icon: "\u2600\uFE0F",
-      titleKey: "hems.mode.selfCons",
-      descKey: "hems.mode.selfCons.desc",
-      borderColor: "var(--positive)",
+      i18nKey: "p4.mode.selfConsumption",
+      color: "var(--positive, #2bcc5a)",
     },
     peak_shaving: {
       icon: "\u26A1",
-      titleKey: "hems.mode.peak",
-      descKey: "hems.mode.peak.desc",
-      borderColor: "var(--neutral)",
+      i18nKey: "p4.mode.peakShaving",
+      color: "var(--amber, #f0a820)",
     },
     peak_valley_arbitrage: {
       icon: "\uD83D\uDCCA",
-      titleKey: "hems.mode.arb",
-      descKey: "hems.mode.arb.desc",
-      borderColor: "var(--accent)",
+      i18nKey: "p4.mode.peakValleyArbitrage",
+      color: "var(--accent, #8b6cf5)",
     },
   },
 
-  // =========================================================
-  // INIT / LIFECYCLE
-  // =========================================================
-
+  // ── Lifecycle ──────────────────────────────────────────
   init: function () {
+    this._stopResultsPolling();
     var self = this;
     var container = document.getElementById("hems-content");
     if (!container) return;
@@ -53,18 +50,17 @@ var HEMSPage = {
     container.innerHTML = this._buildSkeleton();
     self._arbGrid = [];
     for (var i = 0; i < 24; i++) self._arbGrid.push(null);
+    self._selected = {};
+    self._mode = null;
 
     Promise.all([
-      DataSource.hems.overview(),
-      DataSource.devices.gateways(),
+      DataSource.hems.gatewayTargeting(),
       DataSource.hems.batchHistory(20),
     ])
       .then(function (results) {
-        self._overview = results[0];
-        self._gateways = results[1];
-        self._batchHistory = results[2] ? results[2].batches || [] : [];
-        container.innerHTML = self._buildContent();
-        self._setupStepListeners();
+        self._gateways = results[0] ? results[0].gateways || [] : [];
+        self._batchHistory = results[1] ? results[1].batches || [] : [];
+        self._render();
       })
       .catch(function (err) {
         if (typeof showErrorBoundary === "function") {
@@ -77,226 +73,227 @@ var HEMSPage = {
     this.init();
   },
 
-  // =========================================================
-  // SKELETON
-  // =========================================================
-
   _buildSkeleton: function () {
     return [
-      '<div class="p4-mode-cards">',
-      '<div class="skeleton" style="height:180px;border-radius:10px"></div>',
-      '<div class="skeleton" style="height:180px;border-radius:10px"></div>',
-      '<div class="skeleton" style="height:180px;border-radius:10px"></div>',
+      '<div class="hems-wb-skeleton">',
+      '<div class="skeleton" style="height:60px;border-radius:8px;margin-bottom:16px"></div>',
+      '<div class="skeleton" style="height:120px;border-radius:8px;margin-bottom:16px"></div>',
+      '<div class="skeleton" style="height:48px;border-radius:8px;margin-bottom:16px"></div>',
+      Components.skeletonTable(5),
       "</div>",
-      Components.skeletonTable(4),
     ].join("");
   },
 
-  // =========================================================
-  // MAIN CONTENT
-  // =========================================================
+  // ── Escape helper ─────────────────────────────────────
+  _esc: function (str) {
+    if (!str) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;");
+  },
 
-  _buildContent: function () {
+  // ── Status display helper (A3 rollback to current business rule) ──────
+  _normalizedStatus: function (status) {
+    return status === "online" ? "online" : "offline";
+  },
+
+  _statusLabel: function (status) {
+    return t("p4.status." + this._normalizedStatus(status));
+  },
+
+  _statusBadgeHtml: function (status) {
+    var normalized = this._normalizedStatus(status);
+    var label = this._statusLabel(status);
+    return '<span class="status-badge-' + normalized + '">' + label + "</span>";
+  },
+
+  // ── Full page render ──────────────────────────────────
+  _render: function () {
+    var container = document.getElementById("hems-content");
+    if (!container) return;
+    container.innerHTML = [
+      this._renderHeader(),
+      this._renderStrategy(),
+      this._renderImpact(),
+      this._renderTargeting(),
+      this._renderReview(),
+    ].join("");
+    this._setupListeners();
+  },
+
+  // ── Header ────────────────────────────────────────────
+  _renderHeader: function () {
+    var modeChip = "";
+    if (this._mode) {
+      var m = this._modeKeys[this._mode];
+      modeChip =
+        '<span class="hems-mode-chip" style="border-color:' +
+        m.color +
+        '">' +
+        m.icon +
+        " " +
+        t(m.i18nKey) +
+        "</span>";
+    }
     return [
-      this._buildStepIndicator(),
-      '<div id="p4-step-container">',
-      this._buildCurrentStep(),
+      '<div class="hems-header">',
+      "<h2>" + t("p4.title") + "</h2>",
+      modeChip,
       "</div>",
+      '<div class="hems-instruction">' + t("p4.instruction") + "</div>",
     ].join("");
   },
 
-  _buildStepIndicator: function () {
-    var steps = [
-      { num: 1, label: t("hems.step1") || "Modo & Parâmetros" },
-      { num: 2, label: t("hems.step2") || "Gateways" },
-      { num: 3, label: t("hems.step3") || "Confirmar & Enviar" },
-    ];
+  // ── Step 1: Strategy Selector ──────────────────────────
+  _renderStrategy: function () {
     var self = this;
-    var items = steps
-      .map(function (s) {
-        var cls = "p4-step-item";
-        if (s.num === self._currentStep) cls += " p4-step-active";
-        if (s.num < self._currentStep) cls += " p4-step-done";
-        return (
-          '<div class="' +
-          cls +
-          '"><span class="p4-step-num">' +
-          s.num +
-          "</span><span>" +
-          s.label +
-          "</span></div>"
-        );
-      })
-      .join('<div class="p4-step-divider"></div>');
-
-    return '<div class="p4-step-indicator">' + items + "</div>";
-  },
-
-  _buildCurrentStep: function () {
-    if (this._currentStep === 1) return this._buildStep1();
-    if (this._currentStep === 2) return this._buildStep2();
-    return this._buildStep3();
-  },
-
-  // =========================================================
-  // STEP 1 — Mode Selection + Parameters
-  // =========================================================
-
-  _buildStep1: function () {
-    var self = this;
-    var modes = Object.keys(this._modeKeys);
-
+    var modes = ["self_consumption", "peak_shaving", "peak_valley_arbitrage"];
     var cards = modes
-      .map(function (modeKey) {
-        var meta = self._modeKeys[modeKey];
-        var selected = self._selectedMode === modeKey ? " selected" : "";
+      .map(function (key) {
+        var m = self._modeKeys[key];
+        var active = self._mode === key ? " active" : "";
         return [
-          '<div class="p4-mode-card' + selected + '"',
-          ' data-mode="' + modeKey + '"',
-          ' style="--mode-border: ' + meta.borderColor + '">',
-          '<div class="p4-mode-icon">' + meta.icon + "</div>",
-          '<div class="p4-mode-title">' + t(meta.titleKey) + "</div>",
-          '<div class="p4-mode-desc">' + t(meta.descKey) + "</div>",
-          self._selectedMode === modeKey
-            ? '<div class="p4-mode-check">\u2713</div>'
-            : "",
+          '<div class="s-card' +
+            active +
+            '" data-mode="' +
+            key +
+            '" style="--mode-accent:' +
+            m.color +
+            '">',
+          '<div class="s-card-icon">' + m.icon + "</div>",
+          '<div class="s-card-label">' + t(m.i18nKey) + "</div>",
+          active ? '<div class="s-card-dot"></div>' : "",
           "</div>",
         ].join("");
       })
       .join("");
 
-    // SoC parameters
-    var socPanel = [
-      '<div class="p4-param-panel">',
-      '<h4>' + (t("hems.socParams") || "Parâmetros SoC") + "</h4>",
-      '<div class="p4-param-row">',
-      '<label>SoC Mínimo (%): <strong id="p4-soc-min-val">' +
-        this._socMinLimit +
-        "</strong></label>",
-      '<input type="range" id="p4-soc-min" min="5" max="50" value="' +
-        this._socMinLimit +
-        '">',
-      "</div>",
-      '<div class="p4-param-row">',
-      '<label>SoC Máximo (%): <strong id="p4-soc-max-val">' +
-        this._socMaxLimit +
-        "</strong></label>",
-      '<input type="range" id="p4-soc-max" min="70" max="100" value="' +
-        this._socMaxLimit +
-        '">',
-      "</div>",
-      "</div>",
-    ].join("");
-
-    // Peak shaving params (only shown when peak_shaving selected)
-    var peakPanel = "";
-    if (this._selectedMode === "peak_shaving") {
-      peakPanel = [
-        '<div class="p4-param-panel">',
-        '<h4>' + (t("hems.peakParams") || "Limite de Demanda") + "</h4>",
-        '<div class="p4-param-row">',
-        '<label>Grid Import Limit (kW):</label>',
-        '<input type="number" id="p4-grid-limit" min="0" step="1" value="' +
-          this._gridImportLimitKw +
-          '" style="width:100px">',
+    // Parameter strip
+    var params = "";
+    if (this._mode) {
+      var gridSlider = "";
+      if (this._mode === "peak_shaving") {
+        gridSlider = [
+          '<div class="param-item">',
+          "<label>" +
+            t("p4.grid.importLimit") +
+            ': <strong id="hems-grid-val">' +
+            this._gridImportLimitKw +
+            "</strong></label>",
+          '<input type="range" id="hems-grid-limit" min="10" max="80" value="' +
+            this._gridImportLimitKw +
+            '">',
+          "</div>",
+        ].join("");
+      }
+      params = [
+        '<div class="params-strip">',
+        '<div class="param-item">',
+        "<label>" +
+          t("p4.soc.min") +
+          ': <strong id="hems-soc-min-val">' +
+          this._socMin +
+          "</strong></label>",
+        '<input type="range" id="hems-soc-min" min="5" max="50" value="' +
+          this._socMin +
+          '">',
         "</div>",
+        '<div class="param-item">',
+        "<label>" +
+          t("p4.soc.max") +
+          ': <strong id="hems-soc-max-val">' +
+          this._socMax +
+          "</strong></label>",
+        '<input type="range" id="hems-soc-max" min="70" max="100" value="' +
+          this._socMax +
+          '">',
+        "</div>",
+        gridSlider,
         "</div>",
       ].join("");
     }
 
-    // Arbitrage editor (only shown when arb selected)
-    var arbEditor = "";
-    if (this._selectedMode === "peak_valley_arbitrage") {
-      arbEditor = this._buildArbEditor();
+    // Arb editor
+    var arbHtml = "";
+    if (this._mode === "peak_valley_arbitrage") {
+      arbHtml = this._buildArbEditor();
     }
 
-    var nextDisabled = this._validateStep1() ? "" : " disabled";
-
     return [
-      '<div class="section-card">',
-      '<div class="section-card-header"><h3>' +
-        (t("hems.step1Title") || "Selecionar Modo") +
-        "</h3></div>",
-      '<div class="section-card-body">',
-      '<div class="p4-mode-cards">' + cards + "</div>",
-      socPanel,
-      peakPanel,
-      arbEditor,
-      '<div class="p4-nav-buttons">',
-      '<button id="p4-btn-next" class="btn btn-primary"' +
-        nextDisabled +
-        ">" +
-        (t("hems.next") || "Próximo") +
-        "</button>",
-      "</div>",
-      "</div>",
+      '<div class="hems-step">',
+      '<div class="step-num">\u2460</div>',
+      "<h3>" + t("p4.step1") + "</h3>",
+      '<div class="hems-strategy-row">' + cards + "</div>",
+      params,
+      arbHtml,
       "</div>",
     ].join("");
   },
 
+  // ── Arb Editor ────────────────────────────────────────
   _buildArbEditor: function () {
     var self = this;
-    var hours = [];
+    var cells = [];
+    var filledCount = 0;
     for (var h = 0; h < 24; h++) {
       var val = self._arbGrid[h];
-      var cls = "p4-arb-cell";
-      if (val === "charge") cls += " p4-arb-charge";
-      if (val === "discharge") cls += " p4-arb-discharge";
+      var cls = "arb-cell";
+      if (val === "charge") {
+        cls += " charge";
+        filledCount++;
+      } else if (val === "discharge") {
+        cls += " discharge";
+        filledCount++;
+      }
       var label = h < 10 ? "0" + h : "" + h;
-      hours.push(
-        '<div class="' +
-          cls +
-          '" data-hour="' +
-          h +
-          '"><span>' +
-          label +
-          "</span></div>",
+      cells.push(
+        '<div class="' + cls + '" data-hour="' + h + '">' + label + "</div>",
       );
     }
 
-    var filledCount = 0;
-    for (var j = 0; j < 24; j++) {
-      if (self._arbGrid[j]) filledCount++;
-    }
-
-    var templates = [
-      '<div class="p4-arb-templates">',
-      '<button class="btn btn-sm" data-template="enel">' +
-        (t("hems.tplEnel") || "Enel SP") +
-        "</button>",
-      '<button class="btn btn-sm" data-template="night">' +
-        (t("hems.tplNight") || "Carga Noturna") +
-        "</button>",
-      '<button class="btn btn-sm" data-template="double">' +
-        (t("hems.tplDouble") || "Dupla Carga") +
-        "</button>",
-      '<button class="btn btn-sm" data-template="clear">' +
-        (t("hems.tplClear") || "Limpar") +
-        "</button>",
-      "</div>",
-    ].join("");
-
     return [
-      '<div class="p4-param-panel">',
-      '<h4>' +
-        (t("hems.arbTitle") || "Horários de Carga/Descarga") +
-        " (" +
-        filledCount +
-        "/24)</h4>",
-      '<div class="p4-arb-brush">',
-      '<label><input type="radio" name="p4-brush" value="charge"' +
+      '<div class="arb-section">',
+      '<div class="arb-header">',
+      "<span>" + t("p4.arb.schedule") + " (" + filledCount + "/24)</span>",
+      '<div class="arb-brush-group">',
+      '<label class="arb-brush-label' +
+        (self._arbBrush === "charge" ? " active" : "") +
+        '">',
+      '<input type="radio" name="hems-brush" value="charge"' +
         (self._arbBrush === "charge" ? " checked" : "") +
         "> " +
-        (t("hems.charge") || "Carga") +
-        "</label>",
-      '<label><input type="radio" name="p4-brush" value="discharge"' +
+        t("p4.arb.charge"),
+      "</label>",
+      '<label class="arb-brush-label' +
+        (self._arbBrush === "discharge" ? " active" : "") +
+        '">',
+      '<input type="radio" name="hems-brush" value="discharge"' +
         (self._arbBrush === "discharge" ? " checked" : "") +
         "> " +
-        (t("hems.discharge") || "Descarga") +
-        "</label>",
+        t("p4.arb.discharge"),
+      "</label>",
       "</div>",
-      '<div class="p4-arb-grid">' + hours.join("") + "</div>",
-      templates,
+      "</div>",
+      '<div class="arb-grid">' + cells.join("") + "</div>",
+      '<div class="arb-templates">',
+      '<button class="btn btn-sm" data-template="enel">' +
+        t("p4.arb.tpl.enelSp") +
+        "</button>",
+      '<button class="btn btn-sm" data-template="night">' +
+        t("p4.arb.tpl.night") +
+        "</button>",
+      '<button class="btn btn-sm" data-template="double">' +
+        t("p4.arb.tpl.double") +
+        "</button>",
+      '<button class="btn btn-sm" data-template="clear">' +
+        t("p4.arb.tpl.clear") +
+        "</button>",
+      "</div>",
+      filledCount < 24
+        ? '<div class="arb-hint">' + t("p4.arb.hint") + "</div>"
+        : "",
       "</div>",
     ].join("");
   },
@@ -307,242 +304,21 @@ var HEMSPage = {
     if (name === "clear") {
       for (i = 0; i < 24; i++) grid[i] = null;
     } else if (name === "enel") {
-      // Enel SP: charge 0-6, 9-17; discharge 6-9, 17-24
       for (i = 0; i < 24; i++) {
         if ((i >= 0 && i < 6) || (i >= 9 && i < 17)) grid[i] = "charge";
         else grid[i] = "discharge";
       }
     } else if (name === "night") {
-      // Night charge: charge 0-6; discharge 6-24
       for (i = 0; i < 24; i++) {
         grid[i] = i < 6 ? "charge" : "discharge";
       }
     } else if (name === "double") {
-      // Double charge: charge 0-6 & 12-17; discharge 6-12 & 17-24
       for (i = 0; i < 24; i++) {
         if ((i >= 0 && i < 6) || (i >= 12 && i < 17)) grid[i] = "charge";
         else grid[i] = "discharge";
       }
     }
-    this._renderStep();
-  },
-
-  _validateStep1: function () {
-    if (!this._selectedMode) return false;
-    if (this._selectedMode === "peak_valley_arbitrage") {
-      for (var i = 0; i < 24; i++) {
-        if (!this._arbGrid[i]) return false;
-      }
-    }
-    return true;
-  },
-
-  // =========================================================
-  // STEP 2 — Gateway Selection
-  // =========================================================
-
-  _buildStep2: function () {
-    var self = this;
-    var gateways = this._gateways || [];
-
-    var rows = gateways
-      .map(function (gw) {
-        var checked = self._selectedGateways[gw.gatewayId] ? " checked" : "";
-        var statusCls =
-          gw.status === "online"
-            ? "status-badge-online"
-            : "status-badge-offline";
-        var statusText = gw.status === "online" ? "Online" : "Offline";
-        return [
-          "<tr>",
-          '<td><input type="checkbox" class="p4-gw-check" data-gw="' +
-            gw.gatewayId +
-            '"' +
-            checked +
-            "></td>",
-          "<td>" + gw.gatewayId + "</td>",
-          "<td>" + (gw.name || "\u2014") + "</td>",
-          '<td><span class="' +
-            statusCls +
-            '">' +
-            statusText +
-            "</span></td>",
-          "<td>" + (gw.deviceCount != null ? gw.deviceCount : "\u2014") + "</td>",
-          "<td>" +
-            (gw.lastSeenAt
-              ? typeof formatISODateTime === "function"
-                ? formatISODateTime(gw.lastSeenAt)
-                : gw.lastSeenAt
-              : "\u2014") +
-            "</td>",
-          "</tr>",
-        ].join("");
-      })
-      .join("");
-
-    var allChecked =
-      gateways.length > 0 &&
-      gateways.every(function (gw) {
-        return self._selectedGateways[gw.gatewayId];
-      });
-
-    var selectedCount = Object.keys(this._selectedGateways).filter(function (k) {
-      return self._selectedGateways[k];
-    }).length;
-
-    return [
-      '<div class="section-card">',
-      '<div class="section-card-header"><h3>' +
-        (t("hems.step2Title") || "Selecionar Gateways") +
-        " (" +
-        selectedCount +
-        "/" +
-        gateways.length +
-        ")</h3></div>",
-      '<div class="section-card-body">',
-      '<div class="table-wrapper"><table class="data-table">',
-      "<thead><tr>",
-      '<th><input type="checkbox" id="p4-gw-all"' +
-        (allChecked ? " checked" : "") +
-        "></th>",
-      "<th>Gateway ID</th>",
-      "<th>" + (t("hems.home") || "Residência") + "</th>",
-      "<th>Status</th>",
-      "<th>" + (t("hems.devices") || "Dispositivos") + "</th>",
-      "<th>" + (t("hems.lastSync") || "Último Sync") + "</th>",
-      "</tr></thead>",
-      "<tbody>" + rows + "</tbody>",
-      "</table></div>",
-      '<div class="p4-nav-buttons">',
-      '<button id="p4-btn-prev" class="btn">' +
-        (t("hems.prev") || "Anterior") +
-        "</button>",
-      '<button id="p4-btn-next" class="btn btn-primary"' +
-        (selectedCount === 0 ? " disabled" : "") +
-        ">" +
-        (t("hems.next") || "Próximo") +
-        "</button>",
-      "</div>",
-      "</div>",
-      "</div>",
-    ].join("");
-  },
-
-  // =========================================================
-  // STEP 3 — Preview + Dispatch + History
-  // =========================================================
-
-  _buildStep3: function () {
-    var self = this;
-    var modeMeta = this._modeKeys[this._selectedMode] || {};
-    var modeTitle = t(modeMeta.titleKey) || this._selectedMode;
-    var selectedIds = this._getSelectedGatewayIds();
-
-    // Config summary
-    var configSummary = [
-      '<div class="p4-config-summary">',
-      "<div><strong>" +
-        (t("hems.mode") || "Modo") +
-        ":</strong> " +
-        (modeMeta.icon || "") +
-        " " +
-        modeTitle +
-        "</div>",
-      "<div><strong>SoC:</strong> " +
-        this._socMinLimit +
-        "% \u2013 " +
-        this._socMaxLimit +
-        "%</div>",
-    ];
-
-    if (this._selectedMode === "peak_shaving") {
-      configSummary.push(
-        "<div><strong>Grid Import Limit:</strong> " +
-          this._gridImportLimitKw +
-          " kW</div>",
-      );
-    }
-
-    if (this._selectedMode === "peak_valley_arbitrage") {
-      configSummary.push(
-        "<div><strong>" +
-          (t("hems.arbSlots") || "Horários") +
-          ":</strong> " +
-          this._buildArbSummary() +
-          "</div>",
-      );
-    }
-
-    configSummary.push(
-      "<div><strong>" +
-        (t("hems.gwCount") || "Gateways") +
-        ":</strong> " +
-        selectedIds.length +
-        "</div>",
-      "</div>",
-    );
-
-    // Gateway list preview
-    var gwPreview = selectedIds
-      .map(function (gwId) {
-        var gw = (self._gateways || []).filter(function (g) {
-          return g.gatewayId === gwId;
-        })[0];
-        var name = gw ? gw.name || gwId : gwId;
-        var status = gw ? gw.status : "unknown";
-        return (
-          "<div>" +
-          name +
-          ' <span class="' +
-          (status === "online"
-            ? "status-badge-online"
-            : "status-badge-offline") +
-          '">' +
-          status +
-          "</span></div>"
-        );
-      })
-      .join("");
-
-    // Batch history
-    var historyHtml = this._buildBatchHistory();
-
-    return [
-      '<div class="section-card">',
-      '<div class="section-card-header"><h3>' +
-        (t("hems.step3Title") || "Confirmar & Enviar") +
-        "</h3></div>",
-      '<div class="section-card-body">',
-      configSummary.join(""),
-      '<div class="p4-gw-preview"><h4>' +
-        (t("hems.selectedGw") || "Gateways Selecionados") +
-        "</h4>" +
-        gwPreview +
-        "</div>",
-      '<div class="p4-nav-buttons">',
-      '<button id="p4-btn-prev" class="btn">' +
-        (t("hems.prev") || "Anterior") +
-        "</button>",
-      '<button id="p4-btn-dispatch" class="btn btn-primary">' +
-        (t("hems.dispatch") || "Enviar") +
-        "</button>",
-      "</div>",
-      "</div>",
-      "</div>",
-      historyHtml,
-    ].join("");
-  },
-
-  _buildArbSummary: function () {
-    var slots = this._buildArbSlots();
-    return slots
-      .map(function (s) {
-        var label = s.action === "charge" ? "Carga" : "Descarga";
-        return (
-          s.startHour + ":00\u2013" + s.endHour + ":00 " + label
-        );
-      })
-      .join(", ");
+    this._render();
   },
 
   _buildArbSlots: function () {
@@ -562,411 +338,1277 @@ var HEMSPage = {
     return slots;
   },
 
-  _buildBatchHistory: function () {
-    var batches = this._batchHistory || [];
-    if (batches.length === 0) {
+  _isArbComplete: function () {
+    for (var i = 0; i < 24; i++) {
+      if (!this._arbGrid[i]) return false;
+    }
+    return true;
+  },
+
+  // ── Target schedule computation ────────────────────────
+  _targetSchedule: function () {
+    if (this._mode === "self_consumption") {
+      return [{ mode: "self_consumption", startMinute: 0, endMinute: 1440 }];
+    }
+    if (this._mode === "peak_shaving") {
+      return [{ mode: "peak_shaving", startMinute: 0, endMinute: 1440 }];
+    }
+    if (this._mode === "peak_valley_arbitrage") {
+      var slots = [];
+      var grid = this._arbGrid;
+      var i = 0;
+      while (i < 24) {
+        if (!grid[i]) {
+          i++;
+          continue;
+        }
+        var action = grid[i];
+        var start = i;
+        while (i < 24 && grid[i] === action) i++;
+        slots.push({
+          mode: "peak_valley_arbitrage",
+          action: action,
+          startMinute: start * 60,
+          endMinute: i * 60,
+        });
+      }
+      return slots;
+    }
+    return [];
+  },
+
+  // ── Eligibility classification ─────────────────────────
+  _classify: function (gw) {
+    if (gw.status !== "online") return "offline";
+    if (!this._mode) return "no_strategy";
+    if (gw.hasActiveCommand) return "conflict";
+    if (this._currentMatchesTarget(gw)) return "same";
+    return "eligible";
+  },
+
+  _currentMatchesTarget: function (gw) {
+    if (!this._mode) return false;
+    if (!gw.currentMode) return false;
+    if (this._mode === "self_consumption" || this._mode === "peak_shaving") {
+      return gw.currentMode === this._mode;
+    }
+    // Arb: deep compare slots
+    var target = this._targetSchedule();
+    var current = gw.currentSlots;
+    if (!current || !target) return false;
+    if (current.length !== target.length) return false;
+    for (var i = 0; i < current.length; i++) {
+      if (current[i].action !== target[i].action) return false;
+      if (current[i].startMinute !== target[i].startMinute) return false;
+      if (current[i].endMinute !== target[i].endMinute) return false;
+    }
+    return true;
+  },
+
+  _impactCounters: function () {
+    var self = this;
+    var c = {
+      eligible: 0,
+      same: 0,
+      conflict: 0,
+      offline: 0,
+      no_strategy: 0,
+      selected: 0,
+      willChange: 0,
+    };
+    (this._gateways || []).forEach(function (gw) {
+      var cls = self._classify(gw);
+      c[cls]++;
+      if (self._selected[gw.gatewayId]) {
+        c.selected++;
+        if (cls === "eligible") c.willChange++;
+      }
+    });
+    return c;
+  },
+
+  // ── Step 2: Impact Counter Strip ───────────────────────
+  _renderImpact: function () {
+    var c = this._impactCounters();
+    var onlineCount = (this._gateways || []).filter(function (gw) {
+      return gw.status === "online";
+    }).length;
+    var offlineCount = (this._gateways || []).length - onlineCount;
+
+    // Pre-strategy: show only online/offline totals + hint
+    if (!this._mode) {
       return [
-        '<div class="section-card" style="margin-top:var(--space-lg)">',
-        '<div class="section-card-header"><h3>' +
-          (t("hems.history") || "Histórico de Operações") +
-          "</h3></div>",
-        '<div class="section-card-body">',
-        '<div class="empty-state-detail">' +
-          (t("hems.noHistory") || "Nenhuma operação anterior") +
-          "</div>",
-        "</div></div>",
+        '<div class="hems-step">',
+        '<div class="step-num">\u2461</div>',
+        "<h3>" + t("p4.step2") + "</h3>",
+        '<div class="impact-strip">',
+        '<div class="impact-cell"><div class="ic-val">' +
+          (this._gateways || []).length +
+          '</div><div class="ic-label">Total</div></div>',
+        '<div class="impact-cell"><div class="ic-val" style="color:var(--positive,#2bcc5a)">' +
+          onlineCount +
+          '</div><div class="ic-label">' +
+          t("p4.status.online") +
+          "</div></div>",
+        '<div class="impact-cell"><div class="ic-val" style="color:var(--negative,#ef4444)">' +
+          offlineCount +
+          '</div><div class="ic-label">' +
+          t("p4.status.offline") +
+          "</div></div>",
+        "</div>",
+        '<div class="impact-hint">' + t("p4.noStrategy.hint") + "</div>",
+        "</div>",
       ].join("");
     }
 
-    var rows = batches
-      .map(function (b) {
-        var modeLabel = "\u2014";
-        if (b.samplePayload && b.samplePayload.slots) {
-          var firstSlot = b.samplePayload.slots[0];
-          if (firstSlot) modeLabel = firstSlot.mode || "\u2014";
+    return [
+      '<div class="hems-step">',
+      '<div class="step-num">\u2461</div>',
+      "<h3>" + t("p4.step2") + "</h3>",
+      '<div class="impact-strip">',
+      '<div class="impact-cell ic-eligible"><div class="ic-val">' +
+        c.eligible +
+        '</div><div class="ic-label">' +
+        t("p4.impact.eligible") +
+        "</div></div>",
+      '<div class="impact-cell ic-same"><div class="ic-val">' +
+        c.same +
+        '</div><div class="ic-label">' +
+        t("p4.impact.same") +
+        "</div></div>",
+      '<div class="impact-cell ic-conflict"><div class="ic-val">' +
+        c.conflict +
+        '</div><div class="ic-label">' +
+        t("p4.impact.conflict") +
+        "</div></div>",
+      '<div class="impact-cell ic-offline"><div class="ic-val">' +
+        c.offline +
+        '</div><div class="ic-label">' +
+        t("p4.impact.offline") +
+        "</div></div>",
+      '<div class="impact-sep"></div>',
+      '<div class="impact-cell ic-selected"><div class="ic-val">' +
+        c.selected +
+        '</div><div class="ic-label">' +
+        t("p4.impact.selected") +
+        "</div></div>",
+      '<div class="impact-cell ic-willchange"><div class="ic-val">' +
+        c.willChange +
+        '</div><div class="ic-label">' +
+        t("p4.impact.willChange") +
+        "</div></div>",
+      "</div>",
+      "</div>",
+    ].join("");
+  },
+
+  // ── Mini schedule bar ─────────────────────────────────
+  _segmentClass: function (slot) {
+    if (slot.mode === "self_consumption") return "seg-self";
+    if (slot.mode === "peak_shaving") return "seg-peak";
+    if (slot.action === "charge") return "seg-charge";
+    if (slot.action === "discharge") return "seg-discharge";
+    return "seg-self";
+  },
+
+  _segTitle: function (slot) {
+    if (slot.mode === "self_consumption") return t("p4.legend.selfConsumption");
+    if (slot.mode === "peak_shaving") return t("p4.legend.peakShaving");
+    if (slot.action === "charge") return t("p4.legend.charge");
+    if (slot.action === "discharge") return t("p4.legend.discharge");
+    return "";
+  },
+
+  _buildMiniBar: function (slots) {
+    if (!slots || slots.length === 0) {
+      return '<div class="mini-bar"><span class="seg seg-empty" style="width:100%"></span></div>';
+    }
+    var self = this;
+    var totalMinutes = 1440;
+    var segs = slots.map(function (s) {
+      var pct = ((s.endMinute - s.startMinute) / totalMinutes) * 100;
+      var cls = self._segmentClass(s);
+      return (
+        '<span class="seg ' +
+        cls +
+        '" style="width:' +
+        pct +
+        '%" title="' +
+        self._segTitle(s) +
+        '"></span>'
+      );
+    });
+    return '<div class="mini-bar">' + segs.join("") + "</div>";
+  },
+
+  // ── Filter + visible gateways ─────────────────────────
+  _visibleGateways: function () {
+    var self = this;
+    var f = this._filters;
+    return (this._gateways || []).filter(function (gw) {
+      if (f.integrator !== "all" && gw.integrator !== f.integrator)
+        return false;
+      var home = gw.homeAlias || gw.name;
+      if (f.home !== "all" && home !== f.home) return false;
+      if (f.status !== "all" && self._normalizedStatus(gw.status) !== f.status)
+        return false;
+      if (f.mode !== "all" && (gw.currentMode || "none") !== f.mode)
+        return false;
+      return true;
+    });
+  },
+
+  _uniqueValues: function (key) {
+    var self = this;
+    var seen = {};
+    (this._gateways || []).forEach(function (gw) {
+      var val =
+        key === "home"
+          ? gw.homeAlias || gw.name
+          : key === "mode"
+            ? gw.currentMode || "none"
+            : key === "status"
+              ? self._normalizedStatus(gw.status)
+              : gw[key];
+      if (val) seen[val] = true;
+    });
+    return Object.keys(seen).sort();
+  },
+
+  // ── Selection helpers ─────────────────────────────────
+  _getSelectedIds: function () {
+    var self = this;
+    return Object.keys(this._selected).filter(function (k) {
+      return self._selected[k];
+    });
+  },
+
+  _selectWillChange: function () {
+    var self = this;
+    this._visibleGateways().forEach(function (gw) {
+      if (self._classify(gw) === "eligible") {
+        self._selected[gw.gatewayId] = true;
+      }
+    });
+    this._render();
+  },
+
+  _selectAllSelectable: function () {
+    var self = this;
+    this._visibleGateways().forEach(function (gw) {
+      var cls = self._classify(gw);
+      if (cls === "eligible" || cls === "same") {
+        self._selected[gw.gatewayId] = true;
+      }
+    });
+    this._render();
+  },
+
+  _clearSelection: function () {
+    this._selected = {};
+    this._render();
+  },
+
+  // ── Reset filters (A2) ────────────────────────────────
+  _resetFilters: function () {
+    this._filters = {
+      integrator: "all",
+      home: "all",
+      status: "all",
+      mode: "all",
+    };
+    this._render();
+  },
+
+  // ── Eligibility badge ─────────────────────────────────
+  _badgeHtml: function (cls) {
+    var map = {
+      eligible:
+        '<span class="sb-eligible">' + t("p4.badge.eligible") + "</span>",
+      same: '<span class="sb-same">' + t("p4.badge.same") + "</span>",
+      conflict:
+        '<span class="sb-conflict">' + t("p4.badge.conflict") + "</span>",
+      offline: '<span class="sb-offline">' + t("p4.badge.offline") + "</span>",
+      no_strategy: "",
+    };
+    return map[cls] || "";
+  },
+
+  _modeLabel: function (mode) {
+    var m = this._modeKeys[mode];
+    return m ? t(m.i18nKey) : mode || "\u2014";
+  },
+
+  // ── Step 3: Targeting Table ───────────────────────────
+  _renderTargeting: function () {
+    var self = this;
+    var gws = this._visibleGateways();
+    var targetSlots = this._mode ? this._targetSchedule() : null;
+
+    // Filter controls
+    var makeSelect = function (id, label, values, current) {
+      var opts = '<option value="all">' + t("p4.filter.all") + "</option>";
+      values.forEach(function (v) {
+        var sel = v === current ? " selected" : "";
+        opts +=
+          '<option value="' +
+          self._esc(v) +
+          '"' +
+          sel +
+          ">" +
+          self._esc(v) +
+          "</option>";
+      });
+      return (
+        '<label class="hems-filter-label">' +
+        label +
+        '<select id="' +
+        id +
+        '">' +
+        opts +
+        "</select></label>"
+      );
+    };
+
+    var bulkDisabled = !self._mode ? " disabled" : "";
+
+    var filters = [
+      '<div class="hems-filters">',
+      makeSelect(
+        "hf-integrator",
+        t("p4.filter.integrator"),
+        this._uniqueValues("integrator"),
+        this._filters.integrator,
+      ),
+      makeSelect(
+        "hf-home",
+        t("p4.filter.home"),
+        this._uniqueValues("home"),
+        this._filters.home,
+      ),
+      makeSelect(
+        "hf-status",
+        t("p4.filter.status"),
+        this._uniqueValues("status"),
+        this._filters.status,
+      ),
+      makeSelect(
+        "hf-mode",
+        t("p4.filter.mode"),
+        this._uniqueValues("mode"),
+        this._filters.mode,
+      ),
+      '<div class="hems-filter-actions">',
+      '<button class="btn btn-sm" id="hems-reset-filters">' +
+        t("p4.filter.reset") +
+        "</button>",
+      '<button class="btn btn-sm btn-primary" id="hems-sel-change"' +
+        bulkDisabled +
+        ">" +
+        t("p4.bulk.selectWillChange") +
+        "</button>",
+      '<button class="btn btn-sm" id="hems-sel-all"' +
+        bulkDisabled +
+        ">" +
+        t("p4.bulk.selectAllSelectable") +
+        "</button>",
+      '<button class="btn btn-sm" id="hems-sel-clear"' +
+        bulkDisabled +
+        ">" +
+        t("p4.bulk.clear") +
+        "</button>",
+      "</div>",
+      "</div>",
+    ].join("");
+
+    // Legend
+    var legend = [
+      '<div class="sched-legend">',
+      "<span>" + t("p4.legend.title") + "</span>",
+      '<span class="sched-legend-item"><span class="swatch swatch-self"></span>' +
+        t("p4.legend.selfConsumption") +
+        "</span>",
+      '<span class="sched-legend-item"><span class="swatch swatch-peak"></span>' +
+        t("p4.legend.peakShaving") +
+        "</span>",
+      '<span class="sched-legend-item"><span class="swatch swatch-charge"></span>' +
+        t("p4.legend.charge") +
+        "</span>",
+      '<span class="sched-legend-item"><span class="swatch swatch-discharge"></span>' +
+        t("p4.legend.discharge") +
+        "</span>",
+      "</div>",
+    ].join("");
+
+    // Table rows
+    var rows = gws
+      .map(function (gw) {
+        var cls = self._classify(gw);
+        var isSelectable = self._mode && (cls === "eligible" || cls === "same");
+        var checked = self._selected[gw.gatewayId] ? " checked" : "";
+        var disabled = isSelectable ? "" : " disabled";
+        var rowCls = "";
+        if (cls === "conflict") rowCls = ' class="row-conflict"';
+        else if (cls === "offline") rowCls = ' class="row-offline"';
+        else if (self._selected[gw.gatewayId]) rowCls = ' class="sel"';
+
+        var conflictInfo = "";
+        if (cls === "conflict") {
+          conflictInfo = [
+            '<div class="conflict-reason">',
+            '<span class="conflict-inline">' +
+              t("p4.conflict.executing") +
+              "</span>",
+            '<span class="conflict-toggle" data-batch="' +
+              self._esc(gw.activeCommandBatchId) +
+              '">' +
+              t("p4.conflict.details") +
+              "</span>",
+            '<div class="conflict-popover" style="display:none">',
+            "<div>" + t("p4.conflict.reason") + "</div>",
+            "<div>" +
+              t("p4.conflict.batch") +
+              ": " +
+              self._esc(gw.activeCommandBatchId) +
+              "</div>",
+            "<div>" + t("p4.conflict.suggestion") + "</div>",
+            "</div>",
+            "</div>",
+          ].join("");
         }
-        var time =
-          typeof formatISODateTime === "function"
-            ? formatISODateTime(b.dispatchedAt)
-            : b.dispatchedAt;
+
+        var home = self._esc(gw.homeAlias || gw.name);
+        var statusBadge = self._statusBadgeHtml(gw.status);
+
         return [
-          "<tr>",
-          "<td>" + time + "</td>",
-          "<td>" + (b.source || "p4") + "</td>",
-          "<td>" + modeLabel + "</td>",
-          "<td>" + b.total + "</td>",
-          "<td>" + b.successCount + "</td>",
-          "<td>" + b.failedCount + "</td>",
+          "<tr" + rowCls + ">",
+          '<td><input type="checkbox" class="hems-gw-cb" data-gw="' +
+            gw.gatewayId +
+            '"' +
+            checked +
+            disabled +
+            "></td>",
+          "<td>" + self._esc(gw.gatewayId) + conflictInfo + "</td>",
+          "<td>" + home + "</td>",
+          "<td>" + statusBadge + "</td>",
+          "<td>" + self._modeLabel(gw.currentMode) + "</td>",
+          "<td>" + self._badgeHtml(cls) + "</td>",
+          "<td>" +
+            (gw.deviceCount != null ? gw.deviceCount : "\u2014") +
+            "</td>",
+          "<td>" + self._buildMiniBar(gw.currentSlots) + "</td>",
+          "<td>" + self._buildMiniBar(targetSlots) + "</td>",
           "</tr>",
         ].join("");
       })
       .join("");
 
+    var emptyMsg =
+      gws.length === 0
+        ? '<tr><td colspan="9" class="hems-empty">' +
+          t("p4.empty") +
+          "</td></tr>"
+        : "";
+
     return [
-      '<div class="section-card" style="margin-top:var(--space-lg)">',
-      '<div class="section-card-header"><h3>' +
-        (t("hems.history") || "Histórico de Operações") +
-        "</h3></div>",
-      '<div class="section-card-body">',
-      '<div class="table-wrapper"><table class="data-table">',
+      '<div class="hems-step">',
+      '<div class="step-num">\u2462</div>',
+      "<h3>" + t("p4.step3") + "</h3>",
+      filters,
+      legend,
+      '<div class="table-wrapper"><table class="gw-table">',
       "<thead><tr>",
-      "<th>" + (t("hems.time") || "Data/Hora") + "</th>",
-      "<th>" + (t("hems.source") || "Origem") + "</th>",
-      "<th>" + (t("hems.mode") || "Modo") + "</th>",
-      "<th>Total</th>",
-      "<th>" + (t("hems.success") || "Sucesso") + "</th>",
-      "<th>" + (t("hems.failed") || "Falha") + "</th>",
+      '<th style="width:30px"></th>',
+      "<th>" + t("p4.table.gateway") + "</th>",
+      "<th>" + t("p4.table.site") + "</th>",
+      "<th>" + t("p4.table.status") + "</th>",
+      "<th>" + t("p4.table.currentStrategy") + "</th>",
+      "<th>" + t("p4.table.eligibility") + "</th>",
+      "<th>" + t("p4.table.devices") + "</th>",
+      '<th style="min-width:100px">' + t("p4.table.currentSchedule") + "</th>",
+      '<th style="min-width:100px">' + t("p4.table.targetSchedule") + "</th>",
       "</tr></thead>",
-      "<tbody>" + rows + "</tbody>",
+      "<tbody>" + rows + emptyMsg + "</tbody>",
       "</table></div>",
-      "</div></div>",
+      "</div>",
     ].join("");
   },
 
-  // =========================================================
-  // NAVIGATION
-  // =========================================================
+  // ── Step 4: Review Panel ──────────────────────────────
+  _dispatchResults: null,
+  _dispatching: false,
+  _currentBatchId: null,
+  _resultsPollTimer: null,
 
-  _renderStep: function () {
-    var container = document.getElementById("hems-content");
-    if (!container) return;
-    container.innerHTML = this._buildContent();
-    this._setupStepListeners();
-  },
-
-  _nextStep: function () {
-    if (this._currentStep === 1 && !this._validateStep1()) return;
-    if (this._currentStep === 2 && this._getSelectedGatewayIds().length === 0)
-      return;
-    if (this._currentStep < 3) {
-      this._currentStep++;
-      this._renderStep();
-    }
-  },
-
-  _prevStep: function () {
-    if (this._currentStep > 1) {
-      this._currentStep--;
-      this._renderStep();
-    }
-  },
-
-  _getSelectedGatewayIds: function () {
-    var self = this;
-    return Object.keys(this._selectedGateways).filter(function (k) {
-      return self._selectedGateways[k];
-    });
-  },
-
-  // =========================================================
-  // EVENT LISTENERS
-  // =========================================================
-
-  _setupStepListeners: function () {
-    var self = this;
-
-    // Step navigation
-    var nextBtn = document.getElementById("p4-btn-next");
-    if (nextBtn) {
-      nextBtn.addEventListener("click", function () {
-        self._nextStep();
-      });
-    }
-
-    var prevBtn = document.getElementById("p4-btn-prev");
-    if (prevBtn) {
-      prevBtn.addEventListener("click", function () {
-        self._prevStep();
-      });
-    }
-
-    // Step 1: Mode card clicks
-    if (this._currentStep === 1) {
-      document.querySelectorAll(".p4-mode-card").forEach(function (card) {
-        card.addEventListener("click", function () {
-          self._selectedMode = card.dataset.mode;
-          self._renderStep();
-        });
-      });
-
-      // SoC sliders
-      var socMinSlider = document.getElementById("p4-soc-min");
-      if (socMinSlider) {
-        socMinSlider.addEventListener("input", function () {
-          self._socMinLimit = parseInt(this.value, 10);
-          var display = document.getElementById("p4-soc-min-val");
-          if (display) display.textContent = self._socMinLimit;
-        });
-      }
-
-      var socMaxSlider = document.getElementById("p4-soc-max");
-      if (socMaxSlider) {
-        socMaxSlider.addEventListener("input", function () {
-          self._socMaxLimit = parseInt(this.value, 10);
-          var display = document.getElementById("p4-soc-max-val");
-          if (display) display.textContent = self._socMaxLimit;
-        });
-      }
-
-      // Grid import limit
-      var gridLimitInput = document.getElementById("p4-grid-limit");
-      if (gridLimitInput) {
-        gridLimitInput.addEventListener("change", function () {
-          self._gridImportLimitKw = parseInt(this.value, 10) || 50;
-        });
-      }
-
-      // Arb brush radio
-      document
-        .querySelectorAll('input[name="p4-brush"]')
-        .forEach(function (radio) {
-          radio.addEventListener("change", function () {
-            self._arbBrush = this.value;
-          });
-        });
-
-      // Arb grid cells — click to paint
-      var isMouseDown = false;
-      document.querySelectorAll(".p4-arb-cell").forEach(function (cell) {
-        cell.addEventListener("mousedown", function (e) {
-          e.preventDefault();
-          isMouseDown = true;
-          var h = parseInt(cell.dataset.hour, 10);
-          self._arbGrid[h] = self._arbBrush;
-          self._renderStep();
-        });
-        cell.addEventListener("mouseenter", function () {
-          if (!isMouseDown) return;
-          var h = parseInt(cell.dataset.hour, 10);
-          self._arbGrid[h] = self._arbBrush;
-          self._updateArbCellVisual(cell, self._arbBrush);
-        });
-      });
-      document.addEventListener("mouseup", function () {
-        if (isMouseDown) {
-          isMouseDown = false;
-          self._renderStep();
-        }
-      });
-
-      // Arb templates
-      document
-        .querySelectorAll("[data-template]")
-        .forEach(function (btn) {
-          btn.addEventListener("click", function () {
-            self._applyArbTemplate(btn.dataset.template);
-          });
-        });
-    }
-
-    // Step 2: Gateway checkboxes
-    if (this._currentStep === 2) {
-      var allCheck = document.getElementById("p4-gw-all");
-      if (allCheck) {
-        allCheck.addEventListener("change", function () {
-          var checked = this.checked;
-          (self._gateways || []).forEach(function (gw) {
-            self._selectedGateways[gw.gatewayId] = checked;
-          });
-          self._renderStep();
-        });
-      }
-
-      document.querySelectorAll(".p4-gw-check").forEach(function (cb) {
-        cb.addEventListener("change", function () {
-          self._selectedGateways[cb.dataset.gw] = cb.checked;
-          // Update next button state
-          var nextBtn2 = document.getElementById("p4-btn-next");
-          if (nextBtn2) {
-            nextBtn2.disabled =
-              self._getSelectedGatewayIds().length === 0;
-          }
-        });
-      });
-    }
-
-    // Step 3: Dispatch button
-    if (this._currentStep === 3) {
-      var dispatchBtn = document.getElementById("p4-btn-dispatch");
-      if (dispatchBtn) {
-        dispatchBtn.addEventListener("click", function () {
-          self._handleDispatch();
-        });
-      }
-    }
-  },
-
-  _updateArbCellVisual: function (cell, action) {
-    cell.classList.remove("p4-arb-charge", "p4-arb-discharge");
-    if (action === "charge") cell.classList.add("p4-arb-charge");
-    if (action === "discharge") cell.classList.add("p4-arb-discharge");
-  },
-
-  // =========================================================
-  // DISPATCH
-  // =========================================================
-
-  _handleDispatch: function () {
-    var self = this;
-    var selectedIds = this._getSelectedGatewayIds();
-    if (selectedIds.length === 0) return;
-
-    var modeMeta = this._modeKeys[this._selectedMode] || {};
-    var modeTitle = t(modeMeta.titleKey) || this._selectedMode;
-
-    this._showConfirmDialog(
-      t("hems.confirmTitle") || "Confirmar Envio",
-      (t("hems.confirmMsg") || "Enviar {mode} para {n} gateways?")
-        .replace("{mode}", modeTitle)
-        .replace("{n}", selectedIds.length),
-      function () {
-        self._executeDispatch(selectedIds);
-      },
+  // ── Terminal-status polling helpers ───────────────────
+  _isTerminalResult: function (status) {
+    return (
+      status === "success" ||
+      status === "fail" ||
+      status === "failed" ||
+      status === "timeout" ||
+      status === "skipped"
     );
   },
 
-  _executeDispatch: function (gatewayIds) {
+  _startResultsPolling: function (batchId) {
     var self = this;
+    this._stopResultsPolling();
+    this._currentBatchId = batchId;
+    this._resultsPollTimer = setInterval(function () {
+      DataSource.hems
+        .batchHistory(20)
+        .then(function (hist) {
+          var batches = hist ? hist.batches || [] : [];
+          self._batchHistory = batches;
+          var batch = null;
+          for (var i = 0; i < batches.length; i++) {
+            if (batches[i].batchId === self._currentBatchId) {
+              batch = batches[i];
+              break;
+            }
+          }
+          if (batch) {
+            var changed = self._mergeBatchHistoryIntoResults(batch);
+            if (changed) self._rerenderResultsPanel();
+            if (self._allResultsTerminal()) self._stopResultsPolling();
+          }
+        })
+        .catch(function () {});
+    }, 3000);
+  },
 
-    var dispatchBtn = document.getElementById("p4-btn-dispatch");
-    if (dispatchBtn) {
-      dispatchBtn.disabled = true;
-      dispatchBtn.textContent = t("hems.dispatching") || "Enviando...";
+  _stopResultsPolling: function () {
+    if (this._resultsPollTimer) {
+      clearInterval(this._resultsPollTimer);
+      this._resultsPollTimer = null;
+    }
+    this._currentBatchId = null;
+  },
+
+  _mergeBatchHistoryIntoResults: function (batch) {
+    if (!this._dispatchResults || !this._dispatchResults.results) return false;
+    var gateways = batch.gateways || [];
+    var gwMap = {};
+    for (var i = 0; i < gateways.length; i++) {
+      gwMap[gateways[i].gatewayId] = gateways[i].result;
+    }
+    var changed = false;
+    var items = this._dispatchResults.results;
+    for (var j = 0; j < items.length; j++) {
+      // Never overwrite skipped rows from original POST response
+      if (items[j].status === "skipped") continue;
+      var liveStatus = gwMap[items[j].gatewayId];
+      if (liveStatus && liveStatus !== items[j].status) {
+        items[j].status = liveStatus;
+        changed = true;
+      }
+    }
+    return changed;
+  },
+
+  _allResultsTerminal: function () {
+    if (!this._dispatchResults || !this._dispatchResults.results) return true;
+    var items = this._dispatchResults.results;
+    for (var i = 0; i < items.length; i++) {
+      if (!this._isTerminalResult(items[i].status)) return false;
+    }
+    return true;
+  },
+
+  _rerenderResultsPanel: function () {
+    var panel = document.querySelector(".review-panel.results");
+    if (!panel) return;
+    var wrapper = document.createElement("div");
+    wrapper.innerHTML = this._buildResultsPanel();
+    var newPanel = wrapper.firstChild;
+    panel.parentNode.replaceChild(newPanel, panel);
+    this._bindResultsPanelEvents();
+  },
+
+  _bindResultsPanelEvents: function () {
+    var self = this;
+    var retryBtn = document.getElementById("hems-retry-failed");
+    if (retryBtn) {
+      retryBtn.addEventListener("click", function () {
+        self._retryFailed();
+      });
+    }
+    var doneBtn = document.getElementById("hems-results-done");
+    if (doneBtn) {
+      doneBtn.addEventListener("click", function () {
+        self._resetToStep1();
+      });
+    }
+  },
+
+  _renderReview: function () {
+    var self = this;
+    var selIds = this._getSelectedIds();
+    var header = [
+      '<div class="hems-step">',
+      '<div class="step-num">\u2463</div>',
+      "<h3>" + t("p4.step4") + "</h3>",
+    ].join("");
+
+    // Dormant state
+    if (selIds.length === 0 && !this._dispatchResults) {
+      return [
+        header,
+        '<div class="review-panel dormant">',
+        "<p>" + t("p4.review.placeholder") + "</p>",
+        "</div>",
+        "</div>",
+      ].join("");
     }
 
-    self._showToast(t("hems.toast.dispatching") || "Enviando comandos...", "info");
+    // Post-dispatch results mode
+    if (this._dispatchResults) {
+      return header + this._buildResultsPanel() + "</div>";
+    }
+
+    // Active review mode
+    var cards = selIds
+      .map(function (id) {
+        return self._buildReviewCard(id);
+      })
+      .join("");
+    var summary = this._buildDispatchSummary();
+    var arbIncomplete =
+      this._mode === "peak_valley_arbitrage" && !this._isArbComplete();
+    var btnDisabled = selIds.length === 0 || arbIncomplete ? " disabled" : "";
+    var btnLabel = arbIncomplete
+      ? t("p4.review.dispatchBtnDisabled")
+      : t("p4.review.dispatchBtn");
+
+    return [
+      header,
+      '<div class="review-panel active">',
+      '<div class="review-layout">',
+      '<div class="review-cards">' + cards + "</div>",
+      '<div class="dispatch-summary">' + summary + "</div>",
+      "</div>",
+      '<div class="review-actions">',
+      '<button class="btn btn-primary" id="hems-dispatch-btn"' +
+        btnDisabled +
+        ">" +
+        btnLabel +
+        "</button>",
+      "</div>",
+      "</div>",
+      "</div>",
+    ].join("");
+  },
+
+  _buildReviewCard: function (gwId) {
+    var self = this;
+    var gw = null;
+    (this._gateways || []).forEach(function (g) {
+      if (g.gatewayId === gwId) gw = g;
+    });
+    if (!gw) return "";
+
+    var cls = this._classify(gw);
+    var changeLabel =
+      cls === "eligible"
+        ? '<span class="rc-change">' + t("p4.review.willChange") + "</span>"
+        : '<span class="rc-same">' + t("p4.review.alreadySame") + "</span>";
+    var targetSlots = this._mode ? this._targetSchedule() : [];
+
+    return [
+      '<div class="review-card">',
+      '<div class="rc-header">',
+      "<strong>" + self._esc(gw.gatewayId) + "</strong>",
+      changeLabel,
+      "</div>",
+      '<div class="rc-mode">' + self._modeLabel(gw.currentMode) + "</div>",
+      '<div class="rc-bars">',
+      '<div class="rc-bar-row"><span class="rc-bar-label">' +
+        t("p4.table.currentSchedule") +
+        "</span>" +
+        self._buildMiniBar(gw.currentSlots) +
+        "</div>",
+      '<div class="rc-bar-row"><span class="rc-bar-label">' +
+        t("p4.table.targetSchedule") +
+        "</span>" +
+        self._buildMiniBar(targetSlots) +
+        "</div>",
+      "</div>",
+      "</div>",
+    ].join("");
+  },
+
+  _buildDispatchSummary: function () {
+    var c = this._impactCounters();
+    var m = this._modeKeys[this._mode];
+    var modeIcon = m ? m.icon : "";
+    var modeLabel = m ? t(m.i18nKey) : "";
+    var gridLine =
+      this._mode === "peak_shaving"
+        ? '<div class="ds-row"><span>' +
+          t("p4.review.gridLimit") +
+          ":</span><strong>" +
+          this._gridImportLimitKw +
+          " kW</strong></div>"
+        : "";
+
+    // Count blocked among selected
+    var self = this;
+    var blockedCount = 0;
+    this._getSelectedIds().forEach(function (id) {
+      (self._gateways || []).forEach(function (gw) {
+        if (gw.gatewayId === id && self._classify(gw) === "conflict") {
+          blockedCount++;
+        }
+      });
+    });
+
+    return [
+      '<div class="ds-title">' + t("p4.review.summary") + "</div>",
+      '<div class="ds-mode">' + modeIcon + " " + modeLabel + "</div>",
+      '<div class="ds-row"><span>' +
+        t("p4.review.socRange") +
+        ":</span><strong>" +
+        this._socMin +
+        "% \u2014 " +
+        this._socMax +
+        "%</strong></div>",
+      gridLine,
+      '<div class="ds-sep"></div>',
+      '<div class="ds-row"><span>' +
+        t("p4.modal.selected") +
+        ":</span><strong>" +
+        c.selected +
+        "</strong></div>",
+      '<div class="ds-row"><span>' +
+        t("p4.modal.willChange") +
+        ":</span><strong>" +
+        c.willChange +
+        "</strong></div>",
+      '<div class="ds-row"><span>' +
+        t("p4.modal.alreadySame") +
+        ":</span><strong>" +
+        (c.selected - c.willChange - blockedCount) +
+        "</strong></div>",
+      '<div class="ds-row"><span>' +
+        t("p4.modal.blockedSkip") +
+        ":</span><strong>" +
+        blockedCount +
+        "</strong></div>",
+    ].join("");
+  },
+
+  // ── Confirmation Modal ──────────────────────────────
+  _buildConfirmModal: function () {
+    var self = this;
+    var c = this._impactCounters();
+    var m = this._modeKeys[this._mode];
+    var modeIcon = m ? m.icon : "";
+    var modeLabel = m ? t(m.i18nKey) : "";
+    var targetSlots = this._mode ? this._targetSchedule() : [];
+    var gridLine =
+      this._mode === "peak_shaving"
+        ? "<div>" +
+          t("p4.review.gridLimit") +
+          ": " +
+          this._gridImportLimitKw +
+          " kW</div>"
+        : "";
+
+    // Find blocked gateways among selected
+    var blockedGws = [];
+    this._getSelectedIds().forEach(function (id) {
+      (self._gateways || []).forEach(function (gw) {
+        if (gw.gatewayId === id && self._classify(gw) === "conflict") {
+          blockedGws.push(gw);
+        }
+      });
+    });
+
+    var warningHtml = "";
+    if (blockedGws.length > 0) {
+      var blockedList = blockedGws
+        .map(function (gw) {
+          return (
+            "<li>" +
+            self._esc(gw.gatewayId) +
+            " \u2014 " +
+            t("p4.conflict.executing") +
+            " (batch: " +
+            self._esc(gw.activeCommandBatchId) +
+            ")</li>"
+          );
+        })
+        .join("");
+      warningHtml = [
+        '<div class="modal-warning">',
+        "\u26A0\uFE0F " + blockedGws.length + " " + t("p4.modal.warning"),
+        "<ul>" + blockedList + "</ul>",
+        "</div>",
+      ].join("");
+    }
+
+    return [
+      '<div class="hems-modal-overlay" id="hems-modal-overlay">',
+      '<div class="hems-modal">',
+      "<h3>" + t("p4.modal.title") + "</h3>",
+      '<div class="modal-section">',
+      '<div class="ds-mode">' + modeIcon + " " + modeLabel + "</div>",
+      "<div>" +
+        t("p4.review.socRange") +
+        ": " +
+        this._socMin +
+        "% \u2014 " +
+        this._socMax +
+        "%</div>",
+      gridLine,
+      "</div>",
+      '<div class="modal-section">',
+      "<div><strong>" + t("p4.modal.targetSchedule") + "</strong></div>",
+      '<div class="modal-bar">' + this._buildMiniBar(targetSlots) + "</div>",
+      "</div>",
+      '<div class="modal-section">',
+      "<div>" +
+        t("p4.modal.selected") +
+        ": <strong>" +
+        c.selected +
+        "</strong></div>",
+      "<div>" +
+        t("p4.modal.willChange") +
+        ": <strong>" +
+        c.willChange +
+        "</strong></div>",
+      "<div>" +
+        t("p4.modal.alreadySame") +
+        ": <strong>" +
+        (c.selected - c.willChange - blockedGws.length) +
+        "</strong></div>",
+      "<div>" +
+        t("p4.modal.blockedSkip") +
+        ": <strong>" +
+        blockedGws.length +
+        "</strong></div>",
+      "</div>",
+      warningHtml,
+      '<div class="modal-actions">',
+      '<button class="btn" id="hems-cancel-dispatch">' +
+        t("p4.modal.cancel") +
+        "</button>",
+      '<button class="btn danger" id="hems-confirm-dispatch">' +
+        t("p4.modal.confirm") +
+        "</button>",
+      "</div>",
+      "</div>",
+      "</div>",
+    ].join("");
+  },
+
+  _openConfirmModal: function () {
+    var self = this;
+    var existing = document.getElementById("hems-modal-overlay");
+    if (existing) existing.parentNode.removeChild(existing);
+
+    var wrapper = document.createElement("div");
+    wrapper.innerHTML = this._buildConfirmModal();
+    document.body.appendChild(wrapper.firstChild);
+
+    // Focus cancel button by default
+    var cancelBtn = document.getElementById("hems-cancel-dispatch");
+    if (cancelBtn) cancelBtn.focus();
+
+    // Event: cancel
+    if (cancelBtn) {
+      cancelBtn.addEventListener("click", function () {
+        self._closeConfirmModal();
+      });
+    }
+    // Event: confirm
+    var confirmBtn = document.getElementById("hems-confirm-dispatch");
+    if (confirmBtn) {
+      confirmBtn.addEventListener("click", function () {
+        self._executeDispatch();
+      });
+    }
+    // Event: backdrop click
+    var overlay = document.getElementById("hems-modal-overlay");
+    if (overlay) {
+      overlay.addEventListener("click", function (e) {
+        if (e.target === overlay) self._closeConfirmModal();
+      });
+    }
+    // Event: ESC key
+    self._modalEscHandler = function (e) {
+      if (e.key === "Escape") self._closeConfirmModal();
+    };
+    document.addEventListener("keydown", self._modalEscHandler);
+  },
+
+  _closeConfirmModal: function () {
+    var overlay = document.getElementById("hems-modal-overlay");
+    if (overlay && overlay.parentNode) overlay.parentNode.removeChild(overlay);
+    if (this._modalEscHandler) {
+      document.removeEventListener("keydown", this._modalEscHandler);
+      this._modalEscHandler = null;
+    }
+  },
+
+  // ── Dispatch Execution ──────────────────────────────
+  _executeDispatch: function () {
+    var self = this;
+    var confirmBtn = document.getElementById("hems-confirm-dispatch");
+    var cancelBtn = document.getElementById("hems-cancel-dispatch");
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.innerHTML =
+        '<span class="spinner-sm"></span> ' + t("p4.modal.confirm");
+    }
+    if (cancelBtn) cancelBtn.disabled = true;
 
     var params = {
-      mode: self._selectedMode,
-      socMinLimit: self._socMinLimit,
-      socMaxLimit: self._socMaxLimit,
-      gatewayIds: gatewayIds,
+      mode: this._mode,
+      socMinLimit: this._socMin,
+      socMaxLimit: this._socMax,
+      gatewayIds: this._getSelectedIds(),
     };
-
-    if (self._selectedMode === "peak_shaving") {
-      params.gridImportLimitKw = self._gridImportLimitKw;
+    if (this._mode === "peak_shaving") {
+      params.gridImportLimitKw = this._gridImportLimitKw;
     }
-
-    if (self._selectedMode === "peak_valley_arbitrage") {
-      params.arbSlots = self._buildArbSlots();
+    if (this._mode === "peak_valley_arbitrage") {
+      params.slots = this._buildArbSlots();
     }
 
     DataSource.hems
       .batchDispatch(params)
-      .then(function (data) {
-        var summary = data.summary || { pending: 0, skipped: 0 };
-        self._showToast(
-          (t("hems.toast.dispatchDone") ||
-            "Enviado! {p} pendente(s), {s} ignorado(s)")
-            .replace("{p}", summary.pending)
-            .replace("{s}", summary.skipped),
-          summary.skipped > 0 ? "warning" : "success",
-        );
-
-        // Refresh history
-        DataSource.hems
-          .batchHistory(20)
-          .then(function (histData) {
-            self._batchHistory = histData ? histData.batches || [] : [];
-            self._renderStep();
-          })
-          .catch(function () {
-            self._renderStep();
-          });
+      .then(function (result) {
+        self._closeConfirmModal();
+        self._dispatchResults = result;
+        self._render();
+        var dispatched = result && result.summary ? result.summary.pending : 0;
+        self._showToast(dispatched + " " + t("p4.result.toast"), "success");
+        // Start polling for terminal status updates
+        var batchId = result && result.batchId ? result.batchId : null;
+        if (batchId && !self._allResultsTerminal()) {
+          self._startResultsPolling(batchId);
+        }
       })
       .catch(function (err) {
-        self._showToast(
-          (t("hems.toast.dispatchError") || "Erro: ") +
-            (err.message || "falha no envio"),
-          "error",
-        );
-        if (dispatchBtn) {
-          dispatchBtn.disabled = false;
-          dispatchBtn.textContent = t("hems.dispatch") || "Enviar";
+        self._showToast((err && err.message) || "Dispatch failed", "error");
+        if (confirmBtn) {
+          confirmBtn.disabled = false;
+          confirmBtn.textContent = t("p4.modal.confirm");
         }
+        if (cancelBtn) cancelBtn.disabled = false;
       });
   },
 
-  // =========================================================
-  // CONFIRM DIALOG
-  // =========================================================
+  // ── Post-dispatch Results Panel ─────────────────────
+  _buildResultsPanel: function () {
+    var self = this;
+    var results = this._dispatchResults;
+    var items = results && results.results ? results.results : [];
+    var retryableIds = [];
 
-  _showConfirmDialog: function (title, message, onConfirm) {
-    var html = [
-      '<div id="p4-confirm-modal" class="modal-overlay active">',
-      '<div class="modal-content">',
-      "<h3>" + title + "</h3>",
-      "<p>" + message + "</p>",
-      '<div class="modal-actions">',
-      '<button class="btn" id="p4-confirm-cancel">' +
-        (t("shared.cancel") || "Cancelar") +
-        "</button>",
-      '<button class="btn btn-primary" id="p4-confirm-ok">' +
-        (t("shared.confirm") || "Confirmar") +
-        "</button>",
-      "</div>",
-      "</div>",
+    var statusMeta = {
+      pending: { icon: "\u23F3", i18n: "p4.result.pending", css: "dr-pending" },
+      dispatched: {
+        icon: "\uD83D\uDCE4",
+        i18n: "p4.result.dispatched",
+        css: "dr-pending",
+      },
+      accepted: {
+        icon: "\uD83D\uDD04",
+        i18n: "p4.result.accepted",
+        css: "dr-accepted",
+      },
+      success: { icon: "\u2705", i18n: "p4.result.success", css: "dr-success" },
+      fail: { icon: "\u274C", i18n: "p4.result.failed", css: "dr-fail" },
+      failed: { icon: "\u274C", i18n: "p4.result.failed", css: "dr-fail" },
+      timeout: { icon: "\u23F0", i18n: "p4.result.timeout", css: "dr-fail" },
+      skipped: { icon: "\u23ED", i18n: "p4.result.skipped", css: "dr-skipped" },
+    };
+    var defaultMeta = {
+      icon: "\u2753",
+      i18n: "p4.result.pending",
+      css: "dr-pending",
+    };
+
+    var cards = items
+      .map(function (r) {
+        var meta = statusMeta[r.status] || defaultMeta;
+        var reason =
+          r.status === "skipped" && r.reason
+            ? '<div class="result-reason">' + self._esc(r.reason) + "</div>"
+            : "";
+        if (r.status === "skipped" && r.reason !== "active_command") {
+          retryableIds.push(r.gatewayId);
+        }
+        return [
+          '<div class="dispatch-result ' + meta.css + '">',
+          "<span>" + meta.icon + "</span>",
+          "<strong>" + self._esc(r.gatewayId) + "</strong>",
+          "<span>" + t(meta.i18n) + "</span>",
+          reason,
+          "</div>",
+        ].join("");
+      })
+      .join("");
+
+    var retryBtn = "";
+    if (retryableIds.length > 0) {
+      retryBtn =
+        '<button class="btn" id="hems-retry-failed">' +
+        t("p4.result.retryBtn") +
+        " (" +
+        retryableIds.length +
+        ")</button>";
+    }
+    var doneBtn =
+      '<button class="btn btn-primary" id="hems-results-done">' +
+      t("p4.status.online") +
+      " \u2192 " +
+      t("p4.step1") +
+      "</button>";
+
+    return [
+      '<div class="review-panel results">',
+      '<div class="results-grid">' + cards + "</div>",
+      '<div class="results-actions">' + retryBtn + doneBtn + "</div>",
       "</div>",
     ].join("");
+  },
 
-    document.body.insertAdjacentHTML("beforeend", html);
+  _retryFailed: function () {
+    var self = this;
+    this._stopResultsPolling();
+    var results = this._dispatchResults;
+    var items = results && results.results ? results.results : [];
+    var retryIds = [];
+    items.forEach(function (r) {
+      if (r.status === "skipped" && r.reason !== "active_command") {
+        retryIds.push(r.gatewayId);
+      }
+    });
+    if (retryIds.length === 0) return;
 
-    document
-      .getElementById("p4-confirm-cancel")
-      .addEventListener("click", function () {
-        var m = document.getElementById("p4-confirm-modal");
-        if (m) m.remove();
-      });
+    // Build same params but with only retry IDs
+    var params = {
+      mode: this._mode,
+      socMinLimit: this._socMin,
+      socMaxLimit: this._socMax,
+      gatewayIds: retryIds,
+    };
+    if (this._mode === "peak_shaving") {
+      params.gridImportLimitKw = this._gridImportLimitKw;
+    }
+    if (this._mode === "peak_valley_arbitrage") {
+      params.slots = this._buildArbSlots();
+    }
 
-    document
-      .getElementById("p4-confirm-ok")
-      .addEventListener("click", function () {
-        var m = document.getElementById("p4-confirm-modal");
-        if (m) m.remove();
-        if (onConfirm) onConfirm();
-      });
-
-    document
-      .getElementById("p4-confirm-modal")
-      .addEventListener("click", function (e) {
-        if (e.target.id === "p4-confirm-modal") {
-          var m = document.getElementById("p4-confirm-modal");
-          if (m) m.remove();
+    DataSource.hems
+      .batchDispatch(params)
+      .then(function (result) {
+        self._dispatchResults = result;
+        self._render();
+        var dispatched = result && result.summary ? result.summary.pending : 0;
+        self._showToast(dispatched + " " + t("p4.result.toast"), "success");
+        // Start polling for the new retry batch
+        var batchId = result && result.batchId ? result.batchId : null;
+        if (batchId && !self._allResultsTerminal()) {
+          self._startResultsPolling(batchId);
         }
+      })
+      .catch(function (err) {
+        self._showToast((err && err.message) || "Retry failed", "error");
       });
   },
 
-  // =========================================================
-  // TOAST NOTIFICATIONS
-  // =========================================================
+  _resetToStep1: function () {
+    this._stopResultsPolling();
+    this._dispatchResults = null;
+    this._selected = {};
+    this._render();
+  },
 
+  // ── Event listeners ───────────────────────────────────
+  _setupListeners: function () {
+    var self = this;
+
+    // Mode card clicks
+    document.querySelectorAll(".s-card").forEach(function (card) {
+      card.addEventListener("click", function () {
+        self._mode = card.dataset.mode;
+        self._render();
+      });
+    });
+
+    // SoC sliders
+    var socMin = document.getElementById("hems-soc-min");
+    if (socMin) {
+      socMin.addEventListener("input", function () {
+        self._socMin = parseInt(this.value, 10);
+        var d = document.getElementById("hems-soc-min-val");
+        if (d) d.textContent = self._socMin;
+      });
+    }
+    var socMax = document.getElementById("hems-soc-max");
+    if (socMax) {
+      socMax.addEventListener("input", function () {
+        self._socMax = parseInt(this.value, 10);
+        var d = document.getElementById("hems-soc-max-val");
+        if (d) d.textContent = self._socMax;
+      });
+    }
+    var gridLimit = document.getElementById("hems-grid-limit");
+    if (gridLimit) {
+      gridLimit.addEventListener("input", function () {
+        self._gridImportLimitKw = parseInt(this.value, 10) || 50;
+        var d = document.getElementById("hems-grid-val");
+        if (d) d.textContent = self._gridImportLimitKw;
+      });
+    }
+
+    // Arb brush radio
+    document
+      .querySelectorAll('input[name="hems-brush"]')
+      .forEach(function (radio) {
+        radio.addEventListener("change", function () {
+          self._arbBrush = this.value;
+        });
+      });
+
+    // Arb grid cells — click + drag to paint
+    var isMouseDown = false;
+    document.querySelectorAll(".arb-cell").forEach(function (cell) {
+      cell.addEventListener("mousedown", function (e) {
+        e.preventDefault();
+        isMouseDown = true;
+        var h = parseInt(cell.dataset.hour, 10);
+        self._arbGrid[h] = self._arbBrush;
+        self._render();
+      });
+      cell.addEventListener("mouseenter", function () {
+        if (!isMouseDown) return;
+        var h = parseInt(cell.dataset.hour, 10);
+        self._arbGrid[h] = self._arbBrush;
+        // Quick visual update without full re-render
+        cell.classList.remove("charge", "discharge");
+        cell.classList.add(self._arbBrush);
+      });
+    });
+    document.addEventListener("mouseup", function () {
+      if (isMouseDown) {
+        isMouseDown = false;
+        self._render();
+      }
+    });
+
+    // Arb templates
+    document.querySelectorAll("[data-template]").forEach(function (btn) {
+      btn.addEventListener("click", function () {
+        self._applyArbTemplate(btn.dataset.template);
+      });
+    });
+
+    // Filter controls
+    ["hf-integrator", "hf-home", "hf-status", "hf-mode"].forEach(function (id) {
+      var el = document.getElementById(id);
+      if (el) {
+        el.addEventListener("change", function () {
+          var key = id.replace("hf-", "");
+          self._filters[key] = this.value;
+          self._render();
+        });
+      }
+    });
+
+    // Reset filters button (A2)
+    var resetBtn = document.getElementById("hems-reset-filters");
+    if (resetBtn)
+      resetBtn.addEventListener("click", function () {
+        self._resetFilters();
+      });
+
+    // Selection action buttons
+    var selChange = document.getElementById("hems-sel-change");
+    if (selChange)
+      selChange.addEventListener("click", function () {
+        self._selectWillChange();
+      });
+    var selAll = document.getElementById("hems-sel-all");
+    if (selAll)
+      selAll.addEventListener("click", function () {
+        self._selectAllSelectable();
+      });
+    var selClear = document.getElementById("hems-sel-clear");
+    if (selClear)
+      selClear.addEventListener("click", function () {
+        self._clearSelection();
+      });
+
+    // Gateway checkboxes
+    document.querySelectorAll(".hems-gw-cb").forEach(function (cb) {
+      cb.addEventListener("change", function () {
+        self._selected[cb.dataset.gw] = cb.checked;
+        self._render();
+      });
+    });
+
+    // Conflict popover toggles
+    document.querySelectorAll(".conflict-toggle").forEach(function (toggle) {
+      toggle.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var popover = toggle.parentElement.querySelector(".conflict-popover");
+        if (popover) {
+          popover.style.display =
+            popover.style.display === "none" ? "block" : "none";
+        }
+      });
+    });
+
+    // Phase 2: Dispatch button
+    var dispatchBtn = document.getElementById("hems-dispatch-btn");
+    if (dispatchBtn) {
+      dispatchBtn.addEventListener("click", function () {
+        self._openConfirmModal();
+      });
+    }
+
+    // Phase 2: Results panel buttons
+    var retryBtn = document.getElementById("hems-retry-failed");
+    if (retryBtn) {
+      retryBtn.addEventListener("click", function () {
+        self._retryFailed();
+      });
+    }
+    var doneBtn = document.getElementById("hems-results-done");
+    if (doneBtn) {
+      doneBtn.addEventListener("click", function () {
+        self._resetToStep1();
+      });
+    }
+  },
+
+  // ── Toast (ported from v6.0) ──────────────────────────
   _showToast: function (message, type) {
     type = type || "info";
-
     var toast = document.createElement("div");
     toast.className = "p4-toast p4-toast-" + type;
-
     var icons = {
       success: "\u2705",
       warning: "\u26A0\uFE0F",
       info: "\u2139\uFE0F",
       error: "\u274C",
     };
-
     toast.innerHTML =
       '<span class="p4-toast-icon">' +
       (icons[type] || "") +
-      "</span>" +
-      '<span class="p4-toast-msg">' +
+      '</span><span class="p4-toast-msg">' +
       message +
       "</span>";
-
     document.body.appendChild(toast);
-
     requestAnimationFrame(function () {
       toast.classList.add("p4-toast-show");
     });
-
     setTimeout(function () {
       toast.classList.remove("p4-toast-show");
       setTimeout(function () {

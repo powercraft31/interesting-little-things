@@ -442,6 +442,16 @@ var DataSource = (function () {
           : { batches: [] },
       );
     },
+    gatewayTargeting: function () {
+      return withFallback(
+        function () {
+          return apiGet("/api/hems/targeting");
+        },
+        typeof MOCK_DATA !== "undefined" && MOCK_DATA.HEMS_TARGETING
+          ? MOCK_DATA.HEMS_TARGETING
+          : { gateways: [] },
+      );
+    },
   };
 
   // ── Tariffs ────────────────────────────────────────────────

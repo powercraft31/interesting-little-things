@@ -790,6 +790,130 @@ var MOCK_DATA = {
 };
 
 // =========================================================
+// P4: HEMS TARGETING MOCK (v6.4 — 7 gateways, all eligibility states)
+// =========================================================
+MOCK_DATA.HEMS_TARGETING = {
+  gateways: [
+    {
+      gatewayId: "GW-BR-001",
+      name: "Gateway Alpha",
+      homeAlias: "晨光宅",
+      integrator: "Solar São Paulo",
+      status: "online",
+      deviceCount: 5,
+      lastSeenAt: "2026-03-21T10:05:00Z",
+      currentMode: "self_consumption",
+      currentSlots: [
+        { mode: "self_consumption", startMinute: 0, endMinute: 1440 },
+      ],
+      hasActiveCommand: false,
+      activeCommandBatchId: null,
+    },
+    {
+      gatewayId: "GW-BR-002",
+      name: "Gateway Beta",
+      homeAlias: "星河居",
+      integrator: "Solar São Paulo",
+      status: "online",
+      deviceCount: 3,
+      lastSeenAt: "2026-03-21T10:04:30Z",
+      currentMode: "peak_shaving",
+      currentSlots: [{ mode: "peak_shaving", startMinute: 0, endMinute: 1440 }],
+      hasActiveCommand: false,
+      activeCommandBatchId: null,
+    },
+    {
+      gatewayId: "GW-BR-003",
+      name: "Gateway Gamma",
+      homeAlias: "翠園",
+      integrator: "Solar São Paulo",
+      status: "online",
+      deviceCount: 4,
+      lastSeenAt: "2026-03-21T10:03:00Z",
+      currentMode: "peak_valley_arbitrage",
+      currentSlots: [
+        {
+          mode: "peak_valley_arbitrage",
+          action: "charge",
+          startMinute: 0,
+          endMinute: 360,
+        },
+        {
+          mode: "peak_valley_arbitrage",
+          action: "discharge",
+          startMinute: 360,
+          endMinute: 1020,
+        },
+        {
+          mode: "peak_valley_arbitrage",
+          action: "charge",
+          startMinute: 1020,
+          endMinute: 1440,
+        },
+      ],
+      hasActiveCommand: true,
+      activeCommandBatchId: "batch-conflict-001",
+    },
+    {
+      gatewayId: "GW-BR-004",
+      name: "Gateway Delta",
+      homeAlias: "松風閣",
+      integrator: "Green Energy Rio",
+      status: "online",
+      deviceCount: 6,
+      lastSeenAt: "2026-03-21T10:02:00Z",
+      currentMode: "self_consumption",
+      currentSlots: [
+        { mode: "self_consumption", startMinute: 0, endMinute: 1440 },
+      ],
+      hasActiveCommand: true,
+      activeCommandBatchId: "batch-conflict-002",
+    },
+    {
+      gatewayId: "GW-BR-005",
+      name: "Gateway Epsilon",
+      homeAlias: "明月莊",
+      integrator: "Green Energy Rio",
+      status: "offline",
+      deviceCount: 2,
+      lastSeenAt: "2026-03-20T18:30:00Z",
+      currentMode: "peak_shaving",
+      currentSlots: [{ mode: "peak_shaving", startMinute: 0, endMinute: 1440 }],
+      hasActiveCommand: false,
+      activeCommandBatchId: null,
+    },
+    {
+      gatewayId: "GW-BR-006",
+      name: "Gateway Zeta",
+      homeAlias: "雲水間",
+      integrator: "Solar São Paulo",
+      status: "online",
+      deviceCount: 4,
+      lastSeenAt: "2026-03-21T10:04:50Z",
+      currentMode: null,
+      currentSlots: null,
+      hasActiveCommand: false,
+      activeCommandBatchId: null,
+    },
+    {
+      gatewayId: "GW-BR-007",
+      name: "Gateway Eta",
+      homeAlias: null,
+      integrator: "Green Energy Rio",
+      status: "online",
+      deviceCount: 3,
+      lastSeenAt: "2026-03-21T10:01:00Z",
+      currentMode: "self_consumption",
+      currentSlots: [
+        { mode: "self_consumption", startMinute: 0, endMinute: 1440 },
+      ],
+      hasActiveCommand: false,
+      activeCommandBatchId: null,
+    },
+  ],
+};
+
+// =========================================================
 // P5: VPP & DR DATA
 // =========================================================
 const VPP_CAPACITY = {

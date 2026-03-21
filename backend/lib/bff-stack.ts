@@ -161,6 +161,14 @@ export class BffStack extends cdk.Stack {
       stage,
     );
 
+    // v6.4: P4 HEMS targeting (gateway fleet eligibility)
+    const getHemsTargeting = this.createHandler(
+      "GetHemsTargeting",
+      handlersDir,
+      "get-hems-targeting.handler",
+      stage,
+    );
+
     // ── Route Bindings ─────────────────────────────────────────────
     this.addRoute(httpApi, "GET", "/dashboard", getDashboard);
     this.addRoute(httpApi, "GET", "/assets", getAssets);
@@ -234,6 +242,8 @@ export class BffStack extends cdk.Stack {
       "/api/hems/batch-history",
       getHemsBatchHistory,
     );
+    // v6.4: P4 HEMS targeting route
+    this.addRoute(httpApi, "GET", "/api/hems/targeting", getHemsTargeting);
 
     // ── Outputs ────────────────────────────────────────────────────
     this.apiUrl = new cdk.CfnOutput(this, "BffApiUrl", {
