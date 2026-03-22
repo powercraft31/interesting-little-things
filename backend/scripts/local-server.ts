@@ -60,6 +60,11 @@ import { startBillingJob } from "../src/market-billing/services/daily-billing-jo
 import { startTelemetryAggregator } from "../src/iot-hub/services/telemetry-aggregator";
 import { startTelemetry5MinAggregator } from "../src/iot-hub/services/telemetry-5min-aggregator";
 import { createSseHandler } from "../src/bff/handlers/sse-events";
+// v6.5: P5 Strategy Triggers
+import { handler as p5OverviewHandler } from "../src/bff/handlers/get-p5-overview";
+import { handler as p5IntentDetailHandler } from "../src/bff/handlers/get-p5-intent-detail";
+import { handler as p5IntentActionHandler } from "../src/bff/handlers/post-p5-intent-action";
+import { handler as p5PostureOverrideHandler } from "../src/bff/handlers/post-p5-posture-override";
 
 type LambdaHandler = (
   event: APIGatewayProxyEventV2,
@@ -203,7 +208,11 @@ app.get(
 );
 app.get(
   "/api/gateways/:gatewayId/energy-24h",
-  wrapHandler(gatewayEnergyHandler, "GET", "/api/gateways/:gatewayId/energy-24h"),
+  wrapHandler(
+    gatewayEnergyHandler,
+    "GET",
+    "/api/gateways/:gatewayId/energy-24h",
+  ),
 );
 app.get(
   "/api/gateways/:gatewayId/energy-stats",
@@ -342,6 +351,37 @@ app.post("/api/telemetry/mock", createTelemetryWebhookHandler(servicePool));
 app.post("/api/dispatch/ack", createAckHandler(servicePool));
 // ────────────────────────────────────────────────────────────────────────
 
+// ── P5 Strategy Triggers (v6.5) ─────────────────────────────────────────
+app.get(
+  "/api/p5/overview",
+  wrapHandler(p5OverviewHandler, "GET", "/api/p5/overview"),
+);
+app.get(
+  "/api/p5/intents/:intentId",
+  wrapHandler(p5IntentDetailHandler, "GET", "/api/p5/intents/:intentId"),
+);
+app.post(
+  "/api/p5/intents/:intentId/:action",
+  wrapHandler(
+    p5IntentActionHandler,
+    "POST",
+    "/api/p5/intents/:intentId/:action",
+  ),
+);
+app.post(
+  "/api/p5/posture-override",
+  wrapHandler(p5PostureOverrideHandler, "POST", "/api/p5/posture-override"),
+);
+app.post(
+  "/api/p5/posture-override/:overrideId/cancel",
+  wrapHandler(
+    p5PostureOverrideHandler,
+    "POST",
+    "/api/p5/posture-override/:overrideId/cancel",
+  ),
+);
+// ────────────────────────────────────────────────────────────────────────
+
 // ── v5.6 System Heartbeat: 啟動自動化管線 ──────────────────────────────
 startScheduleGenerator(servicePool); // M2: 每小時生成 trade_schedules
 startCommandDispatcher(servicePool); // M3: 每分鐘推進狀態機 → dispatch_commands
@@ -382,7 +422,9 @@ app.get("/login", (_req, res) =>
 // ────────────────────────────────────────────────────────────────────────
 
 app.listen(PORT, () => {
-  console.log(`Local API Gateway emulator running on port ${PORT} (host-local probe: http://127.0.0.1:${PORT})`);
+  console.log(
+    `Local API Gateway emulator running on port ${PORT} (host-local probe: http://127.0.0.1:${PORT})`,
+  );
   console.log("Routes:");
   console.log("  GET  /dashboard");
   console.log("  GET  /assets");
@@ -425,6 +467,11 @@ app.listen(PORT, () => {
   console.log("  POST /api/dispatch/ack");
   console.log("  POST /api/auth/login             (v5.23)");
   console.log("  POST /api/users                  (v5.23)");
+  console.log("  GET  /api/p5/overview               (v6.5)");
+  console.log("  GET  /api/p5/intents/:id             (v6.5)");
+  console.log("  POST /api/p5/intents/:id/:action     (v6.5)");
+  console.log("  POST /api/p5/posture-override        (v6.5)");
+  console.log("  POST /api/p5/posture-override/:id/cancel (v6.5)");
   console.log("");
   console.log("Auth: JWT required for /api/* routes (except /api/auth/login)");
   console.log(`  curl -X POST http://127.0.0.1:${PORT}/api/auth/login \\`);

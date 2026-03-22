@@ -510,6 +510,58 @@ var DataSource = (function () {
     },
   };
 
+  // ── P5 Strategy Triggers ────────────────────────────────────
+  var p5 = {
+    overview: function () {
+      return withFallback(
+        function () {
+          return apiGet("/api/p5/overview");
+        },
+        {
+          hero: {
+            posture: "calm",
+            dominant_driver: "",
+            governance_mode: "observe",
+            governance_summary: "Loading...",
+            override_active: false,
+            conflict_active: false,
+            operator_action_needed: false,
+          },
+          calm_explanation: {
+            reason: "no_conditions_detected",
+            detail: "Loading...",
+            contributing_factors: [],
+          },
+          need_decision_now: [],
+          platform_acting: [],
+          watch_next: [],
+          context: {
+            operating_posture: {},
+            dominant_protector: null,
+            recent_handoffs: [],
+            suppressed_count: 0,
+            deferred_count: 0,
+          },
+        },
+      );
+    },
+    intentDetail: function (intentId) {
+      return apiGet("/api/p5/intents/" + intentId);
+    },
+    intentAction: function (intentId, action, body) {
+      return apiPost("/api/p5/intents/" + intentId + "/" + action, body || {});
+    },
+    createOverride: function (body) {
+      return apiPost("/api/p5/posture-override", body);
+    },
+    cancelOverride: function (overrideId, body) {
+      return apiPost(
+        "/api/p5/posture-override/" + overrideId + "/cancel",
+        body || {},
+      );
+    },
+  };
+
   // ── Performance (P6) ──────────────────────────────────────
   var performance = {
     scorecard: function () {
@@ -575,6 +627,7 @@ var DataSource = (function () {
     hems: hems,
     tariffs: tariffs,
     vpp: vpp,
+    p5: p5,
     performance: performance,
     asset: asset,
   };

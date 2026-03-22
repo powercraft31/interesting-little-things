@@ -173,7 +173,7 @@ function initPage(pageId) {
       if (typeof HEMSPage !== "undefined") promise = HEMSPage.init();
       break;
     case "vpp":
-      if (typeof VPPPage !== "undefined") promise = VPPPage.init();
+      if (typeof StrategyPage !== "undefined") promise = StrategyPage.init();
       break;
     case "performance":
       if (typeof PerformancePage !== "undefined")
@@ -315,7 +315,7 @@ function switchRole(role) {
     devices: typeof DevicesPage !== "undefined" ? DevicesPage : null,
     energy: typeof EnergyPage !== "undefined" ? EnergyPage : null,
     hems: typeof HEMSPage !== "undefined" ? HEMSPage : null,
-    vpp: typeof VPPPage !== "undefined" ? VPPPage : null,
+    vpp: typeof StrategyPage !== "undefined" ? StrategyPage : null,
     performance:
       typeof PerformancePage !== "undefined" ? PerformancePage : null,
   };
