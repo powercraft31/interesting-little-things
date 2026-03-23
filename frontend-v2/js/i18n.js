@@ -17,7 +17,7 @@ var I18n = (function () {
       "nav.devices": "Devices",
       "nav.energy": "Energy",
       "nav.hems": "HEMS",
-      "nav.vpp": "VPP",
+      "nav.vpp": "Strategy",
       "nav.performance": "Performance",
 
       // ---- Page Titles ----
@@ -25,7 +25,7 @@ var I18n = (function () {
       "page.devices": "Device Management",
       "page.energy": "Energy Behavior",
       "page.hems": "HEMS Control",
-      "page.vpp": "VPP & DR",
+      "page.vpp": "Strategy Triggers",
       "page.performance": "Performance",
 
       // ---- Roles ----
@@ -573,7 +573,8 @@ var I18n = (function () {
       "p5.strategy.calmReason.no_conditions_detected": "No conditions detected",
       "p5.strategy.calmReason.all_resolved": "All conditions resolved",
       "p5.strategy.calmReason.suppressed": "All intents suppressed",
-      "p5.strategy.calmReason.override_suppressing": "Override suppressing evaluation",
+      "p5.strategy.calmReason.override_suppressing":
+        "Override suppressing evaluation",
       "p5.strategy.calmReason.telemetry_stale": "Telemetry data stale",
       "p5.strategy.calmReason.protection_dominant": "Protective mode dominant",
       "p5.strategy.calmReason.all_deferred": "All intents deferred",
@@ -635,6 +636,10 @@ var I18n = (function () {
       "p5.strategy.ctx.counts": "Pending Counts",
       "p5.strategy.ctx.suppressed": "Suppressed",
       "p5.strategy.ctx.deferred": "Deferred",
+      "p5.strategy.ctx.countsHelper":
+        "Strategy intents deferred or suppressed by governance rules. Not all may appear in triage lanes above.",
+      "p5.strategy.badge.deferred": "Deferred",
+      "p5.strategy.badge.deferredBy": "Originally: {mode}",
       "p5.strategy.override.title": "Posture Override",
       "p5.strategy.override.activeLabel": "Override Active",
       "p5.strategy.override.cancel": "Cancel Override",
@@ -652,6 +657,43 @@ var I18n = (function () {
       "p5.strategy.override.scopeGateways": "Scope Gateway IDs",
       "p5.strategy.override.scopePlaceholder": "gw-001, gw-002 (optional)",
       "p5.strategy.override.submit": "Create Override",
+      "p5.strategy.hero.currentPosture": "Current Posture",
+      "p5.strategy.hero.calmPrimary":
+        "No strategy governance action needed. System operating within normal parameters.",
+      "p5.strategy.hero.protectivePrimary":
+        "Platform is prioritizing {protector} over economic arbitrage.",
+      "p5.strategy.hero.protectivePrimaryGeneric":
+        "Platform is prioritizing reserve protection over economic arbitrage.",
+      "p5.strategy.hero.overrideShaping":
+        "An active override is shaping current decision posture.",
+      "p5.strategy.hero.approvalPrimary":
+        "A strategy intent requires approval: {driver}.",
+      "p5.strategy.hero.approvalPrimaryGeneric":
+        "A strategy intent has formed and requires operator approval.",
+      "p5.strategy.hero.escalationPrimary": "Escalation required: {driver}.",
+      "p5.strategy.hero.escalationPrimaryGeneric":
+        "A situation requires escalation to manual orchestration.",
+      "p5.strategy.strip.overrideActive": "Override active",
+      "p5.strategy.strip.conflict": "Conflict",
+      "p5.strategy.strip.reviewNeeded": "Review needed",
+      "p5.strategy.derived.label": "Governance-derived",
+      "p5.strategy.derived.decisionTitle":
+        "Review current protective posture vs economic opportunity",
+      "p5.strategy.derived.decisionReason":
+        "Platform is in {posture} posture. Review whether to maintain or adjust.",
+      "p5.strategy.derived.actingTitle":
+        "Protective override currently shaping platform behavior",
+      "p5.strategy.derived.actingReason":
+        "Protective governance is actively constraining platform decisions.",
+      "p5.strategy.derived.actingReasonOverride":
+        "{override} override is actively shaping platform decisions.",
+      "p5.strategy.trace.constrains": "constrains execution",
+      "p5.strategy.trace.governs": "governs posture",
+      "p5.strategy.trace.operatorReview": "operator review required",
+      "p5.strategy.trace.noAction": "no action needed",
+      "p5.strategy.trace.platformHandling": "platform handling autonomously",
+      "p5.strategy.urgency.immediate": "Immediate",
+      "p5.strategy.urgency.watch": "Watch",
 
       // ---- P6: Performance ----
       "perf.obj1": "OBJECTIVE 1: Hardware",
@@ -852,7 +894,7 @@ var I18n = (function () {
       "nav.devices": "Dispositivos",
       "nav.energy": "Energia",
       "nav.hems": "HEMS",
-      "nav.vpp": "VPP",
+      "nav.vpp": "Estrat\u00e9gia",
       "nav.performance": "Desempenho",
 
       // ---- Page Titles ----
@@ -860,7 +902,7 @@ var I18n = (function () {
       "page.devices": "Gest\u00e3o de Dispositivos",
       "page.energy": "Comportamento Energ\u00e9tico",
       "page.hems": "Controle HEMS",
-      "page.vpp": "VPP & DR",
+      "page.vpp": "Gatilhos de Estrat\u00e9gia",
       "page.performance": "Desempenho",
 
       // ---- Roles ----
@@ -1429,8 +1471,7 @@ var I18n = (function () {
         "Override suprimindo avalia\u00e7\u00e3o",
       "p5.strategy.calmReason.telemetry_stale":
         "Dados de telemetria desatualizados",
-      "p5.strategy.calmReason.protection_dominant":
-        "Modo protetivo dominante",
+      "p5.strategy.calmReason.protection_dominant": "Modo protetivo dominante",
       "p5.strategy.calmReason.all_deferred":
         "Todas as inten\u00e7\u00f5es adiadas",
       "p5.strategy.lane.needDecision": "Precisa de Decis\u00e3o Agora",
@@ -1493,6 +1534,10 @@ var I18n = (function () {
       "p5.strategy.ctx.counts": "Contadores Pendentes",
       "p5.strategy.ctx.suppressed": "Suprimidos",
       "p5.strategy.ctx.deferred": "Adiados",
+      "p5.strategy.ctx.countsHelper":
+        "Inten\u00e7\u00f5es estrat\u00e9gicas adiadas ou suprimidas por regras de governan\u00e7a. Nem todas aparecem nas faixas de triagem acima.",
+      "p5.strategy.badge.deferred": "Adiado",
+      "p5.strategy.badge.deferredBy": "Original: {mode}",
       "p5.strategy.override.title": "Override de Postura",
       "p5.strategy.override.activeLabel": "Override Ativo",
       "p5.strategy.override.cancel": "Cancelar Override",
@@ -1501,8 +1546,10 @@ var I18n = (function () {
       "p5.strategy.override.type.forceCalm": "For\u00e7ar Calmo",
       "p5.strategy.override.type.forceProtective": "For\u00e7ar Protetivo",
       "p5.strategy.override.type.suppressEconomic": "Suprimir Econ\u00f4mico",
-      "p5.strategy.override.type.forceApprovalGate": "For\u00e7ar Aprova\u00e7\u00e3o",
-      "p5.strategy.override.type.manualEscalation": "Nota de Escala\u00e7\u00e3o Manual",
+      "p5.strategy.override.type.forceApprovalGate":
+        "For\u00e7ar Aprova\u00e7\u00e3o",
+      "p5.strategy.override.type.manualEscalation":
+        "Nota de Escala\u00e7\u00e3o Manual",
       "p5.strategy.override.type.suppressAll": "Suprimir Todos",
       "p5.strategy.override.type.approveAll": "Aprovar Todos",
       "p5.strategy.override.duration": "Dura\u00e7\u00e3o (minutos)",
@@ -1510,6 +1557,45 @@ var I18n = (function () {
       "p5.strategy.override.scopeGateways": "IDs de Gateways (escopo)",
       "p5.strategy.override.scopePlaceholder": "gw-001, gw-002 (opcional)",
       "p5.strategy.override.submit": "Criar Override",
+      "p5.strategy.hero.currentPosture": "Postura Atual",
+      "p5.strategy.hero.calmPrimary":
+        "Nenhuma a\u00e7\u00e3o de governan\u00e7a necess\u00e1ria. Sistema operando dentro dos par\u00e2metros normais.",
+      "p5.strategy.hero.protectivePrimary":
+        "Plataforma est\u00e1 priorizando {protector} sobre arbitragem econ\u00f4mica.",
+      "p5.strategy.hero.protectivePrimaryGeneric":
+        "Plataforma est\u00e1 priorizando prote\u00e7\u00e3o de reserva sobre arbitragem econ\u00f4mica.",
+      "p5.strategy.hero.overrideShaping":
+        "Um override ativo est\u00e1 moldando a postura de decis\u00e3o atual.",
+      "p5.strategy.hero.approvalPrimary":
+        "Uma inten\u00e7\u00e3o estrat\u00e9gica requer aprova\u00e7\u00e3o: {driver}.",
+      "p5.strategy.hero.approvalPrimaryGeneric":
+        "Uma inten\u00e7\u00e3o estrat\u00e9gica foi formada e requer aprova\u00e7\u00e3o do operador.",
+      "p5.strategy.hero.escalationPrimary":
+        "Escala\u00e7\u00e3o necess\u00e1ria: {driver}.",
+      "p5.strategy.hero.escalationPrimaryGeneric":
+        "Uma situa\u00e7\u00e3o requer escala\u00e7\u00e3o para orquestra\u00e7\u00e3o manual.",
+      "p5.strategy.strip.overrideActive": "Override ativo",
+      "p5.strategy.strip.conflict": "Conflito",
+      "p5.strategy.strip.reviewNeeded": "Revis\u00e3o necess\u00e1ria",
+      "p5.strategy.derived.label": "Derivado de governan\u00e7a",
+      "p5.strategy.derived.decisionTitle":
+        "Revisar postura protetiva atual vs oportunidade econ\u00f4mica",
+      "p5.strategy.derived.decisionReason":
+        "Plataforma est\u00e1 em postura {posture}. Revise se deve manter ou ajustar.",
+      "p5.strategy.derived.actingTitle":
+        "Override protetivo moldando comportamento da plataforma",
+      "p5.strategy.derived.actingReason":
+        "Governan\u00e7a protetiva est\u00e1 restringindo ativamente as decis\u00f5es da plataforma.",
+      "p5.strategy.derived.actingReasonOverride":
+        "Override {override} est\u00e1 moldando ativamente as decis\u00f5es da plataforma.",
+      "p5.strategy.trace.constrains": "restringe execu\u00e7\u00e3o",
+      "p5.strategy.trace.governs": "governa postura",
+      "p5.strategy.trace.operatorReview":
+        "revis\u00e3o do operador necess\u00e1ria",
+      "p5.strategy.trace.noAction": "nenhuma a\u00e7\u00e3o necess\u00e1ria",
+      "p5.strategy.trace.platformHandling": "plataforma tratando autonomamente",
+      "p5.strategy.urgency.immediate": "Imediato",
+      "p5.strategy.urgency.watch": "Observar",
 
       // ---- P6: Performance ----
       "perf.obj1": "OBJETIVO 1: Hardware",
@@ -1714,7 +1800,7 @@ var I18n = (function () {
       "nav.devices": "\u8bbe\u5907\u7ba1\u7406",
       "nav.energy": "\u80fd\u6e90\u884c\u4e3a",
       "nav.hems": "HEMS \u63a7\u5236",
-      "nav.vpp": "VPP & DR",
+      "nav.vpp": "\u7b56\u7565",
       "nav.performance": "\u7ee9\u6548\u8bb0\u5206\u5361",
 
       // ---- Page Titles ----
@@ -1722,7 +1808,7 @@ var I18n = (function () {
       "page.devices": "\u8bbe\u5907\u7ba1\u7406",
       "page.energy": "\u80fd\u6e90\u884c\u4e3a",
       "page.hems": "HEMS \u63a7\u5236",
-      "page.vpp": "VPP & DR",
+      "page.vpp": "\u7b56\u7565\u89e6\u53d1",
       "page.performance": "\u7ee9\u6548\u8bb0\u5206\u5361",
 
       // ---- Roles ----
@@ -2368,6 +2454,10 @@ var I18n = (function () {
       "p5.strategy.ctx.counts": "\u5f85\u5904\u7406\u8ba1\u6570",
       "p5.strategy.ctx.suppressed": "\u5df2\u6291\u5236",
       "p5.strategy.ctx.deferred": "\u5df2\u5ef6\u8fdf",
+      "p5.strategy.ctx.countsHelper":
+        "\u88ab\u6cbb\u7406\u89c4\u5219\u5ef6\u8fdf\u6216\u6291\u5236\u7684\u7b56\u7565\u610f\u56fe\u3002\u5e76\u975e\u5168\u90e8\u663e\u793a\u5728\u4e0a\u65b9\u7684\u5206\u8bca\u901a\u9053\u4e2d\u3002",
+      "p5.strategy.badge.deferred": "\u5df2\u5ef6\u8fdf",
+      "p5.strategy.badge.deferredBy": "\u539f\u6cbb\u7406: {mode}",
       "p5.strategy.override.title": "\u59ff\u6001\u8986\u76d6",
       "p5.strategy.override.activeLabel": "\u8986\u76d6\u6d3b\u52a8\u4e2d",
       "p5.strategy.override.cancel": "\u53d6\u6d88\u8986\u76d6",
@@ -2375,9 +2465,12 @@ var I18n = (function () {
       "p5.strategy.override.type": "\u8986\u76d6\u7c7b\u578b",
       "p5.strategy.override.type.forceCalm": "\u5f3a\u5236\u5e73\u9759",
       "p5.strategy.override.type.forceProtective": "\u5f3a\u5236\u4fdd\u62a4",
-      "p5.strategy.override.type.suppressEconomic": "\u6291\u5236\u7ecf\u6d4e\u578b",
-      "p5.strategy.override.type.forceApprovalGate": "\u5f3a\u5236\u5ba1\u6279\u95e8",
-      "p5.strategy.override.type.manualEscalation": "\u624b\u52a8\u5347\u7ea7\u5907\u6ce8",
+      "p5.strategy.override.type.suppressEconomic":
+        "\u6291\u5236\u7ecf\u6d4e\u578b",
+      "p5.strategy.override.type.forceApprovalGate":
+        "\u5f3a\u5236\u5ba1\u6279\u95e8",
+      "p5.strategy.override.type.manualEscalation":
+        "\u624b\u52a8\u5347\u7ea7\u5907\u6ce8",
       "p5.strategy.override.type.suppressAll": "\u6291\u5236\u6240\u6709",
       "p5.strategy.override.type.approveAll": "\u6279\u51c6\u6240\u6709",
       "p5.strategy.override.duration":
@@ -2386,6 +2479,46 @@ var I18n = (function () {
       "p5.strategy.override.scopeGateways": "\u7f51\u5173 ID \u8303\u56f4",
       "p5.strategy.override.scopePlaceholder": "gw-001, gw-002 (\u53ef\u9009)",
       "p5.strategy.override.submit": "\u521b\u5efa\u8986\u76d6",
+      "p5.strategy.hero.currentPosture": "\u5f53\u524d\u59ff\u6001",
+      "p5.strategy.hero.calmPrimary":
+        "\u65e0\u9700\u7b56\u7565\u6cbb\u7406\u64cd\u4f5c\u3002\u7cfb\u7edf\u5728\u6b63\u5e38\u53c2\u6570\u5185\u8fd0\u884c\u3002",
+      "p5.strategy.hero.protectivePrimary":
+        "\u5e73\u53f0\u6b63\u5728\u4f18\u5148\u4fdd\u62a4 {protector}\uff0c\u800c\u975e\u7ecf\u6d4e\u5957\u5229\u3002",
+      "p5.strategy.hero.protectivePrimaryGeneric":
+        "\u5e73\u53f0\u6b63\u5728\u4f18\u5148\u4fdd\u62a4\u50a8\u5907\uff0c\u800c\u975e\u7ecf\u6d4e\u5957\u5229\u3002",
+      "p5.strategy.hero.overrideShaping":
+        "\u4e00\u4e2a\u6d3b\u8dc3\u8986\u76d6\u6b63\u5728\u5851\u9020\u5f53\u524d\u51b3\u7b56\u59ff\u6001\u3002",
+      "p5.strategy.hero.approvalPrimary":
+        "\u7b56\u7565\u610f\u56fe\u9700\u8981\u5ba1\u6279\uff1a{driver}\u3002",
+      "p5.strategy.hero.approvalPrimaryGeneric":
+        "\u4e00\u4e2a\u7b56\u7565\u610f\u56fe\u5df2\u5f62\u6210\uff0c\u9700\u8981\u64cd\u4f5c\u5458\u5ba1\u6279\u3002",
+      "p5.strategy.hero.escalationPrimary":
+        "\u9700\u8981\u5347\u7ea7\uff1a{driver}\u3002",
+      "p5.strategy.hero.escalationPrimaryGeneric":
+        "\u4e00\u4e2a\u60c5\u51b5\u9700\u8981\u5347\u7ea7\u5230\u624b\u52a8\u7f16\u6392\u3002",
+      "p5.strategy.strip.overrideActive": "\u8986\u76d6\u6d3b\u52a8\u4e2d",
+      "p5.strategy.strip.conflict": "\u51b2\u7a81",
+      "p5.strategy.strip.reviewNeeded": "\u9700\u8981\u5ba1\u67e5",
+      "p5.strategy.derived.label": "\u6cbb\u7406\u6d3e\u751f",
+      "p5.strategy.derived.decisionTitle":
+        "\u5ba1\u67e5\u5f53\u524d\u4fdd\u62a4\u59ff\u6001 vs \u7ecf\u6d4e\u673a\u4f1a",
+      "p5.strategy.derived.decisionReason":
+        "\u5e73\u53f0\u5904\u4e8e {posture} \u59ff\u6001\u3002\u5ba1\u67e5\u662f\u5426\u5e94\u7ef4\u6301\u6216\u8c03\u6574\u3002",
+      "p5.strategy.derived.actingTitle":
+        "\u4fdd\u62a4\u8986\u76d6\u6b63\u5728\u5851\u9020\u5e73\u53f0\u884c\u4e3a",
+      "p5.strategy.derived.actingReason":
+        "\u4fdd\u62a4\u6cbb\u7406\u6b63\u5728\u79ef\u6781\u7ea6\u675f\u5e73\u53f0\u51b3\u7b56\u3002",
+      "p5.strategy.derived.actingReasonOverride":
+        "{override} \u8986\u76d6\u6b63\u5728\u79ef\u6781\u5851\u9020\u5e73\u53f0\u51b3\u7b56\u3002",
+      "p5.strategy.trace.constrains": "\u7ea6\u675f\u6267\u884c",
+      "p5.strategy.trace.governs": "\u6cbb\u7406\u59ff\u6001",
+      "p5.strategy.trace.operatorReview":
+        "\u9700\u8981\u64cd\u4f5c\u5458\u5ba1\u67e5",
+      "p5.strategy.trace.noAction": "\u65e0\u9700\u64cd\u4f5c",
+      "p5.strategy.trace.platformHandling":
+        "\u5e73\u53f0\u81ea\u4e3b\u5904\u7406\u4e2d",
+      "p5.strategy.urgency.immediate": "\u7acb\u5373",
+      "p5.strategy.urgency.watch": "\u89c2\u5bdf",
 
       // ---- P6: Performance ----
       "perf.obj1": "\u76ee\u6807 1\uff1a\u786c\u4ef6",

@@ -5248,6 +5248,11 @@
   color: var(--neutral);
 }
 
+.p5-strategy-badge-governance-escalate {
+  background: var(--amber-bg);
+  color: var(--amber);
+}
+
 .p5-strategy-urgency-critical {
   background: var(--negative-bg);
   color: var(--negative);
@@ -5277,6 +5282,20 @@
 .p5-strategy-status-deferred { background: rgba(255,255,255,0.05); color: var(--muted); }
 .p5-strategy-status-suppressed { background: var(--negative-bg); color: var(--negative); }
 .p5-strategy-status-escalated { background: var(--amber-bg); color: var(--amber); }
+
+.p5-strategy-intent-arb-note {
+  font-size: 0.72rem;
+  color: var(--muted);
+  font-style: italic;
+  margin-top: 4px;
+}
+
+.p5-strategy-ctx-counts-helper {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: 6px;
+  line-height: 1.4;
+}
 
 /* ---- Triage Lanes ---- */
 .p5-strategy-lane {
@@ -5703,4 +5722,103 @@
   .p5-strategy-context {
     grid-template-columns: 1fr;
   }
+}
+
+/* ---- P5 Polish: Posture-first hero ---- */
+.p5-strategy-hero-posture-label {
+  font-size: 0.7rem;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--muted);
+  margin-bottom: 2px;
+}
+
+.p5-strategy-hero-narrative {
+  font-size: 0.9rem;
+  color: var(--text);
+  line-height: 1.5;
+  margin-top: var(--space-xs);
+}
+
+.p5-strategy-hero-explanation {
+  font-size: 0.8rem;
+  color: var(--muted);
+  line-height: 1.4;
+  margin-top: 2px;
+}
+
+.p5-strategy-hero-trace {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: var(--space-sm);
+  padding: 4px 8px;
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--border);
+  font-style: italic;
+}
+
+/* ---- P5 Polish: Status strip ---- */
+.p5-strategy-status-strip {
+  display: flex;
+  align-items: center;
+  gap: var(--space-xs);
+  flex-wrap: wrap;
+  margin-top: var(--space-sm);
+  padding-top: var(--space-sm);
+  border-top: 1px solid var(--border);
+  font-size: 0.75rem;
+  color: var(--muted);
+}
+
+.p5-strategy-strip-item {
+  padding: 2px 8px;
+  border-radius: var(--radius-sm);
+  background: rgba(255,255,255,0.04);
+}
+
+.p5-strategy-strip-override {
+  color: var(--amber);
+}
+
+.p5-strategy-strip-conflict {
+  color: var(--negative);
+}
+
+.p5-strategy-strip-action {
+  color: var(--amber);
+}
+
+.p5-strategy-strip-sep {
+  color: var(--border);
+  font-size: 0.9rem;
+}
+
+/* ---- P5 Polish: Derived cards ---- */
+.p5-strategy-derived-card {
+  border-style: dashed;
+  opacity: 0.92;
+}
+
+.p5-strategy-derived-label {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--muted);
+  padding: 1px 6px;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  margin-left: auto;
+}
+
+/* ---- P5 Polish: Card trace ---- */
+.p5-strategy-card-trace {
+  font-size: 0.75rem;
+  color: var(--muted);
+  margin-top: var(--space-xs);
+  padding: 3px 6px;
+  background: rgba(255,255,255,0.03);
+  border-radius: var(--radius-sm);
+  border-left: 2px solid var(--border);
+  font-style: italic;
 }

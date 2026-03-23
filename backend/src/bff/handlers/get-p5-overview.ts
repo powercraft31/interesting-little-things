@@ -128,7 +128,10 @@ export async function handler(
 
     // Step 6: Partition into lanes
     const needDecisionNow = resolvedIntents.filter(
-      (i) => i.governance_mode === "approval_required" && i.status === "active",
+      (i) =>
+        i.status === "active" &&
+        (i.governance_mode === "approval_required" ||
+          i.governance_mode === "escalate"),
     );
     const platformActing = resolvedIntents.filter(
       (i) => i.governance_mode === "auto_governed" && i.status === "active",
@@ -161,10 +164,20 @@ export async function handler(
       return (urgMap[a.urgency] ?? 3) - (urgMap[b.urgency] ?? 3);
     })[0];
 
+    const escalateActive = resolvedIntents.filter(
+      (i) => i.governance_mode === "escalate" && i.status === "active",
+    );
+
     const governanceSummaryParts: string[] = [];
-    if (needDecisionNow.length > 0) {
+    if (escalateActive.length > 0) {
       governanceSummaryParts.push(
-        `${needDecisionNow.length} intent${needDecisionNow.length > 1 ? "s" : ""} awaiting approval`,
+        `${escalateActive.length} intent${escalateActive.length > 1 ? "s" : ""} requiring operator arbitration`,
+      );
+    }
+    if (needDecisionNow.length - escalateActive.length > 0) {
+      const approvalCount = needDecisionNow.length - escalateActive.length;
+      governanceSummaryParts.push(
+        `${approvalCount} intent${approvalCount > 1 ? "s" : ""} awaiting approval`,
       );
     }
     if (platformActing.length > 0) {
@@ -189,7 +202,7 @@ export async function handler(
 
     // Step 8: Calm explanation
     let calmExplanation: CalmExplanation | null = null;
-    if (needDecisionNow.length === 0 && platformActing.length === 0) {
+    if (posture === "calm") {
       let reason: CalmReason;
       let detail: string;
       const factors: string[] = [];

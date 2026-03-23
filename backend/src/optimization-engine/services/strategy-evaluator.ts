@@ -494,7 +494,7 @@ function detectScopeCollisions(conditions: Condition[]): Set<string> {
 
 interface ArbitratedIntent extends GovernedCondition {
   readonly arbitration_note: string | null;
-  readonly status: "active" | "suppressed";
+  readonly status: "active" | "suppressed" | "deferred";
 }
 
 const FAMILY_PRIORITY: Record<StrategyFamily, number> = {
@@ -555,6 +555,7 @@ function arbitrate(governed: GovernedCondition[]): ArbitratedIntent[] {
           aPri < bPri ? [a, b, i, j] : [b, a, j, i];
         results[loseIdx] = {
           ...loser,
+          status: "deferred" as const,
           arbitration_note: `Dominated by ${winner.family} (protective > economic). Deferred.`,
         };
         continue;
@@ -567,7 +568,8 @@ function arbitrate(governed: GovernedCondition[]): ArbitratedIntent[] {
         const [, loser, , loseIdx] = aUrg < bUrg ? [a, b, i, j] : [b, a, j, i];
         results[loseIdx] = {
           ...loser,
-          arbitration_note: `Lower urgency than competing intent on same scope.`,
+          status: "deferred" as const,
+          arbitration_note: `Lower urgency than competing intent on same scope. Deferred.`,
         };
       }
     }
@@ -591,7 +593,7 @@ async function persistIntents(
     const persisted = await upsertIntent(orgId, {
       org_id: orgId,
       family: intent.family,
-      status: intent.status === "suppressed" ? "suppressed" : "active",
+      status: intent.status,
       governance_mode: intent.governance_mode,
       urgency: intent.urgency,
       title: intent.title,
