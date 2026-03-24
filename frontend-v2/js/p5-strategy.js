@@ -5,15 +5,30 @@
    ============================================ */
 
 var StrategyPage = {
+  // P5 Strategy Homepage — single-decision cockpit layout
+  // Render chain: _buildContent → hero → impact → CTA → context → override → alert → preview
+  // Deferred state: _buildDeferredHero + timer management (_startDeferTimer / _clearDeferTimer)
+
   // =========================================================
   // INIT / LIFECYCLE
   // =========================================================
 
   _data: null,
   _expandedIntent: null,
+  _overrideExpanded: false,
+  _overrideDuration: null,
+  _deferExpanded: false,
+  _alertSilenceExpanded: false,
+  _alertSilenceDuration: null,
+  _deferTimerId: null,
+  _previousDeferContext: null,
+  _selectedPreviewAction: null,
+  _lastDeferLabel: null,
 
   init: async function () {
     var self = this;
+    this._clearDeferTimer();
+    this._previousDeferContext = null;
     var container = document.getElementById("vpp-content");
     if (!container) return;
 
@@ -65,14 +80,24 @@ var StrategyPage = {
     };
     var ctx = this._data.context || {};
 
-    // Inject derived cards to fix semantic contradictions
-    this._injectDerivedCards(hero, ctx, lanes);
+    // Phase 13: detect deferred state
+    var deferContext = this._data.defer_context || null;
+    var isDeferred =
+      deferContext && new Date(deferContext.defer_until) > new Date();
+    this._isDeferred = !!isDeferred;
+    this._deferContext = deferContext;
+
+    // Phase 14: manage defer countdown timer
+    this._startDeferTimer();
 
     return [
-      this._buildHero(hero, calm, ctx),
-      this._buildTriageLanes(lanes),
+      this._buildRecommendationHero(hero, calm, ctx, lanes),
+      this._buildImpactStrip(hero, ctx, lanes),
+      this._buildCtaPair(hero, ctx, lanes),
       this._buildContextSection(ctx, hero),
       this._buildOverrideSection(hero),
+      this._buildAlertControl(hero),
+      this._buildResultPreview(hero),
     ].join("");
   },
 
@@ -218,324 +243,693 @@ var StrategyPage = {
     escalation: { cssClass: "p5-strategy-posture-escalation", icon: "\u26A0" },
   },
 
-  _buildHero: function (hero, calmExplanation, ctx) {
-    var posture = hero.posture || "calm";
-    var cfg = this._POSTURE_CONFIG[posture] || this._POSTURE_CONFIG.calm;
+  // =========================================================
+  // RECOMMENDATION HERO (Action Model Reframe — Phase 1)
+  // =========================================================
 
-    var narrative = this._buildHeroNarrative(hero, calmExplanation, ctx);
-    var statusStrip = this._buildStatusStrip(hero, ctx);
-    var trace = this._buildCausalTrace(hero, ctx);
+  _REC_HERO_CONFIG: {
+    calm: { cssMod: "calm", icon: "\u2713" },
+    approval_gated: { cssMod: "approval", icon: "\u26A1" },
+    protective: { cssMod: "protective", icon: "\uD83D\uDEE1" },
+    escalation: { cssMod: "escalation", icon: "\u26A0" },
+  },
 
-    var calmHtml = "";
-    if (calmExplanation && calmExplanation.reason) {
-      var factors = (calmExplanation.contributing_factors || [])
-        .map(function (f) {
-          return "<li>" + escapeHtml(f) + "</li>";
-        })
-        .join("");
-      calmHtml = [
-        '<div class="p5-strategy-calm-explain">',
-        '<div class="p5-strategy-calm-detail">' +
-          escapeHtml(calmExplanation.detail || "") +
-          "</div>",
-        factors
-          ? '<ul class="p5-strategy-calm-factors">' + factors + "</ul>"
-          : "",
-        "</div>",
-      ].join("");
+  _buildRecommendationHero: function (hero, calmExplanation, ctx, lanes) {
+    // Phase 13: deferred state rendering
+    if (this._isDeferred) {
+      return this._buildDeferredHero(hero, ctx);
     }
 
+    var posture = hero.posture || "calm";
+    var cfg = this._REC_HERO_CONFIG[posture] || this._REC_HERO_CONFIG.calm;
+    var dp = ctx.dominant_protector || {};
+
+    // Recommendation title
+    var recTitle = this._getRecTitle(posture, lanes, dp);
+
+    // Narrative
+    var narrative = this._getRecNarrative(
+      posture,
+      hero,
+      calmExplanation,
+      ctx,
+      lanes,
+      dp,
+    );
+
+    // Phase 14: re-escalation hint after defer expiry
+    if (posture === "escalation" && this._previousDeferContext) {
+      narrative = t("p5.strategy.hero.reescalated") + " " + narrative;
+      this._previousDeferContext = null;
+    }
+
+    // Metric chips
+    var metricsHtml = this._buildRecMetrics(posture, dp, hero);
+
     return [
-      '<div class="p5-strategy-hero ' + cfg.cssClass + '">',
-      '<div class="p5-strategy-hero-main">',
-      '<span class="p5-strategy-hero-icon">' + cfg.icon + "</span>",
-      '<div class="p5-strategy-hero-info">',
-      // Posture label
-      '<div class="p5-strategy-hero-posture-label">' +
-        t("p5.strategy.hero.currentPosture") +
-        "</div>",
-      '<div class="p5-strategy-hero-posture">' +
-        t("p5.strategy.posture." + posture) +
-        "</div>",
-      // Primary posture sentence
-      '<div class="p5-strategy-hero-narrative">' +
-        escapeHtml(narrative.primary) +
-        "</div>",
-      // Secondary explanation
-      narrative.secondary
-        ? '<div class="p5-strategy-hero-explanation">' +
-          escapeHtml(narrative.secondary) +
-          "</div>"
-        : "",
-      // Causal trace (one line)
-      trace ? '<div class="p5-strategy-hero-trace">' + trace + "</div>" : "",
+      '<div class="p5-rec-hero p5-rec-hero--' + cfg.cssMod + '">',
+      '<div class="p5-rec-hero__top">',
+      '<span class="p5-rec-hero__icon">' + cfg.icon + "</span>",
+      '<div class="p5-rec-hero__body">',
+      '<div class="p5-rec-hero__title">' + escapeHtml(recTitle) + "</div>",
+      '<div class="p5-rec-hero__narrative">' + escapeHtml(narrative) + "</div>",
+      metricsHtml,
       "</div>",
       "</div>",
-      // Compact status strip (replaces loud badges)
-      statusStrip,
-      calmHtml,
       "</div>",
     ].join("");
   },
 
-  _buildHeroNarrative: function (hero, calmExplanation, ctx) {
-    var posture = hero.posture || "calm";
-    var dp = ctx.dominant_protector || {};
-    var op = ctx.operating_posture || {};
+  _buildDeferredHero: function (hero, ctx) {
+    var dc = this._deferContext;
+    var returnTime = this._formatReturnTime(dc.defer_until);
+    var countdown = this._formatCountdown(dc.defer_until);
+    var reason = hero.dominant_driver || "";
 
-    var primary = "";
-    var secondary = "";
-
-    if (posture === "calm") {
-      primary =
-        calmExplanation && calmExplanation.detail
-          ? calmExplanation.detail
-          : t("p5.strategy.hero.calmPrimary");
-      secondary = "";
-    } else if (posture === "protective") {
-      var protectorName = dp.family
-        ? t("p5.strategy.family." + dp.family) || dp.family
-        : "";
-      primary = protectorName
-        ? t("p5.strategy.hero.protectivePrimary").replace(
-            "{protector}",
-            protectorName,
-          )
-        : t("p5.strategy.hero.protectivePrimaryGeneric");
-      if (hero.override_active) {
-        secondary = t("p5.strategy.hero.overrideShaping");
-      } else {
-        secondary = hero.governance_summary || "";
-      }
-    } else if (posture === "approval_gated") {
-      primary = hero.dominant_driver
-        ? t("p5.strategy.hero.approvalPrimary").replace(
-            "{driver}",
-            hero.dominant_driver,
-          )
-        : t("p5.strategy.hero.approvalPrimaryGeneric");
-      secondary = hero.governance_summary || "";
-    } else if (posture === "escalation") {
-      primary = hero.dominant_driver
-        ? t("p5.strategy.hero.escalationPrimary").replace(
-            "{driver}",
-            hero.dominant_driver,
-          )
-        : t("p5.strategy.hero.escalationPrimaryGeneric");
-      secondary = hero.governance_summary || "";
-    }
-
-    return { primary: primary, secondary: secondary };
-  },
-
-  _buildStatusStrip: function (hero, ctx) {
-    var items = [];
-    var govLabel = t(
-      "p5.strategy.governance." + (hero.governance_mode || "observe"),
+    var title = t("p5.strategy.hero.deferred.title").replace(
+      "{time}",
+      returnTime,
     );
-    items.push('<span class="p5-strategy-strip-item">' + govLabel + "</span>");
-
-    if (hero.override_active) {
-      items.push(
-        '<span class="p5-strategy-strip-item p5-strategy-strip-override">' +
-          t("p5.strategy.strip.overrideActive") +
-          "</span>",
-      );
-    }
-    if (hero.conflict_active) {
-      items.push(
-        '<span class="p5-strategy-strip-item p5-strategy-strip-conflict">' +
-          t("p5.strategy.strip.conflict") +
-          "</span>",
-      );
-    }
-    if (hero.operator_action_needed) {
-      items.push(
-        '<span class="p5-strategy-strip-item p5-strategy-strip-action">' +
-          t("p5.strategy.strip.reviewNeeded") +
-          "</span>",
-      );
-    }
-
-    return (
-      '<div class="p5-strategy-status-strip">' +
-      items.join('<span class="p5-strategy-strip-sep">\u00b7</span>') +
-      "</div>"
+    var narrative = t("p5.strategy.hero.deferred.narrative").replace(
+      "{reason}",
+      reason,
     );
-  },
-
-  // =========================================================
-  // TRIAGE LANES
-  // =========================================================
-
-  _LANE_CONFIG: {
-    need_decision_now: {
-      accent: "amber",
-      titleKey: "p5.strategy.lane.needDecision",
-    },
-    platform_acting: {
-      accent: "accent",
-      titleKey: "p5.strategy.lane.platformActing",
-    },
-    watch_next: { accent: "muted", titleKey: "p5.strategy.lane.watchNext" },
-  },
-
-  _buildTriageLanes: function (lanes) {
-    var self = this;
-    var html = "";
-    ["need_decision_now", "platform_acting", "watch_next"].forEach(
-      function (laneKey) {
-        var cfg = self._LANE_CONFIG[laneKey];
-        var intents = lanes[laneKey] || [];
-        var body;
-        if (intents.length === 0) {
-          body =
-            '<div class="p5-strategy-lane-empty">' +
-            t("p5.strategy.noIntents") +
-            "</div>";
-        } else {
-          body = intents
-            .map(function (intent) {
-              return self._buildIntentCard(intent);
-            })
-            .join("");
-        }
-        html +=
-          '<div class="p5-strategy-lane p5-strategy-lane-' +
-          cfg.accent +
-          '">' +
-          Components.sectionCard(
-            t(cfg.titleKey),
-            '<div class="p5-strategy-lane-cards">' + body + "</div>",
-          ) +
-          "</div>";
-      },
-    );
-    return html;
-  },
-
-  // =========================================================
-  // INTENT CARD (Level 1)
-  // =========================================================
-
-  _FAMILY_ICONS: {
-    peak_shaving: "\u26A1",
-    reserve_protection: "\uD83D\uDEE1",
-    tariff_optimization: "\uD83D\uDCB0",
-    demand_response: "\uD83D\uDCE1",
-    load_balancing: "\u2696",
-  },
-
-  _buildIntentCard: function (intent) {
-    var familyIcon = this._FAMILY_ICONS[intent.family] || "\uD83D\uDD0B";
-    var isDerived = intent._derived === true;
-    var cardClass =
-      "p5-strategy-intent-card" +
-      (isDerived ? " p5-strategy-derived-card" : "");
-
-    var metaBadges = [];
-    var isDeferred = intent.status === "deferred";
-    if (isDeferred) {
-      metaBadges.push(
-        '<span class="p5-strategy-badge p5-strategy-status-deferred">' +
-          t("p5.strategy.badge.deferred") +
-          "</span>",
-      );
-      var govLabel = t(
-        "p5.strategy.governance." + (intent.governance_mode || "observe"),
-      );
-      metaBadges.push(
-        '<span class="p5-strategy-badge p5-strategy-badge-governance" style="opacity:0.6;font-size:0.7rem">' +
-          t("p5.strategy.badge.deferredBy").replace("{mode}", govLabel) +
-          "</span>",
-      );
-    } else {
-      metaBadges.push(
-        '<span class="p5-strategy-badge p5-strategy-badge-governance">' +
-          t("p5.strategy.governance." + (intent.governance_mode || "observe")) +
-          "</span>",
-      );
-    }
-    if (!isDerived) {
-      var urgencyClass = "p5-strategy-urgency-" + (intent.urgency || "low");
-      metaBadges.push(
-        '<span class="p5-strategy-badge ' +
-          urgencyClass +
-          '">' +
-          t("p5.strategy.urgency." + (intent.urgency || "low")) +
-          "</span>",
-      );
-    }
-
-    var traceHtml = "";
-    if (intent._causal_trace) {
-      traceHtml =
-        '<div class="p5-strategy-card-trace">' +
-        intent._causal_trace +
-        "</div>";
-    }
-
-    var arbNoteHtml = "";
-    if (isDeferred && intent.arbitration_note) {
-      arbNoteHtml =
-        '<div class="p5-strategy-intent-arb-note">' +
-        escapeHtml(intent.arbitration_note) +
-        "</div>";
-    }
-
-    var derivedLabel = isDerived
-      ? '<span class="p5-strategy-derived-label">' +
-        t("p5.strategy.derived.label") +
+    var badge = t("p5.strategy.defer.badge");
+    var countdownHtml = countdown
+      ? '<span class="p5-hero-countdown">' +
+        escapeHtml(
+          t("p5.strategy.hero.deferred.countdown").replace(
+            "{countdown}",
+            countdown,
+          ),
+        ) +
         "</span>"
       : "";
 
     return [
-      '<div class="' +
-        cardClass +
-        '" data-intent-id="' +
-        escapeHtml(String(intent.id)) +
-        '">',
-      '<div class="p5-strategy-intent-header">',
-      '<span class="p5-strategy-intent-icon">' + familyIcon + "</span>",
-      '<span class="p5-strategy-intent-title">' +
-        escapeHtml(intent.title || "") +
+      '<div class="p5-rec-hero p5-rec-hero--escalation p5-hero--deferred">',
+      '<div class="p5-rec-hero__top">',
+      '<span class="p5-rec-hero__icon p5-hero-icon">\u23F8</span>',
+      '<div class="p5-rec-hero__body">',
+      '<div class="p5-rec-hero__title">' + escapeHtml(title) + "</div>",
+      '<div class="p5-rec-hero__narrative">' + escapeHtml(narrative) + "</div>",
+      '<div class="p5-rec-hero__metrics">',
+      '<span class="p5-rec-hero__chip p5-hero-badge--deferred">' +
+        escapeHtml(badge) +
         "</span>",
-      derivedLabel,
       "</div>",
-      '<div class="p5-strategy-intent-meta">' + metaBadges.join("") + "</div>",
-      '<div class="p5-strategy-intent-summary">' +
-        escapeHtml(intent.reason_summary || "") +
+      countdownHtml,
+      "</div>",
+      "</div>",
+      "</div>",
+    ].join("");
+  },
+
+  _formatCountdown: function (deferUntil) {
+    var diff = new Date(deferUntil).getTime() - Date.now();
+    if (diff <= 0) return null;
+    var hours = Math.floor(diff / 3600000);
+    var minutes = Math.floor((diff % 3600000) / 60000);
+    if (hours > 0) return hours + "h " + minutes + "min";
+    return minutes + "min";
+  },
+
+  _formatReturnTime: function (deferUntil) {
+    var d = new Date(deferUntil);
+    return (
+      d.getHours().toString().padStart(2, "0") +
+      ":" +
+      d.getMinutes().toString().padStart(2, "0")
+    );
+  },
+
+  _getRecTitle: function (posture, lanes, dp) {
+    if (posture === "protective") {
+      return t("p5.strategy.hero.rec.protective");
+    }
+    if (posture === "approval_gated") {
+      var pendingIntent = (lanes.need_decision_now || [])[0];
+      var familyLabel = pendingIntent
+        ? t("p5.strategy.family." + pendingIntent.family) ||
+          pendingIntent.family
+        : "";
+      return t("p5.strategy.hero.rec.approval").replace(
+        "{family}",
+        familyLabel,
+      );
+    }
+    if (posture === "escalation") {
+      return t("p5.strategy.hero.rec.escalation");
+    }
+    return t("p5.strategy.hero.rec.calm");
+  },
+
+  _getRecNarrative: function (posture, hero, calmExplanation, ctx, lanes, dp) {
+    if (posture === "protective") {
+      var soc = dp.current_soc;
+      var threshold = dp.threshold;
+      if (soc != null && threshold != null) {
+        return t("p5.strategy.hero.narrative.protective")
+          .replace("{soc}", String(soc))
+          .replace("{threshold}", String(threshold));
+      }
+      return t("p5.strategy.hero.narrative.protective.noMetrics");
+    }
+    if (posture === "approval_gated") {
+      var intent = (lanes.need_decision_now || [])[0];
+      if (intent) {
+        return t("p5.strategy.hero.narrative.approval")
+          .replace("{title}", intent.title || "")
+          .replace("{reason}", intent.reason_summary || "");
+      }
+      return t("p5.strategy.hero.narrative.approval")
+        .replace("{title}", "")
+        .replace("{reason}", "");
+    }
+    if (posture === "escalation") {
+      if (hero.dominant_driver) {
+        return t("p5.strategy.hero.narrative.escalation").replace(
+          "{reason}",
+          hero.dominant_driver,
+        );
+      }
+      return t("p5.strategy.hero.narrative.escalation.default");
+    }
+    // calm
+    if (calmExplanation && calmExplanation.detail) {
+      return calmExplanation.detail;
+    }
+    return t("p5.strategy.hero.narrative.calm.default");
+  },
+
+  _buildRecMetrics: function (posture, dp, hero) {
+    var chips = [];
+
+    // SoC chip
+    if (dp.current_soc != null) {
+      var isWarn = dp.threshold != null && dp.current_soc < dp.threshold;
+      chips.push(
+        '<span class="p5-rec-hero__chip' +
+          (isWarn ? " p5-rec-hero__chip--warn" : "") +
+          '">SoC ' +
+          dp.current_soc +
+          "%</span>",
+      );
+    }
+
+    // Threshold chip
+    if (dp.threshold != null) {
+      chips.push(
+        '<span class="p5-rec-hero__chip">Limite ' + dp.threshold + "%</span>",
+      );
+    }
+
+    // Posture badge chip
+    var postureLabel = t("p5.strategy.posture." + (hero.posture || "calm"));
+    chips.push(
+      '<span class="p5-rec-hero__chip p5-rec-hero__chip--posture">' +
+        escapeHtml(postureLabel) +
+        "</span>",
+    );
+
+    // Override active indicator
+    if (hero.override_active) {
+      chips.push(
+        '<span class="p5-rec-hero__chip p5-rec-hero__chip--warn">' +
+          t("p5.strategy.strip.overrideActive") +
+          "</span>",
+      );
+    }
+
+    if (chips.length === 0) return "";
+    return '<div class="p5-rec-hero__metrics">' + chips.join("") + "</div>";
+  },
+
+  // =========================================================
+  // IMPACT STRIP (Action Model Reframe — Phase 1)
+  // =========================================================
+
+  _buildImpactStrip: function (hero, ctx, lanes) {
+    var affected = this._collectAffectedStrategies(lanes);
+    if (affected.length === 0) return "";
+
+    var dp = ctx.dominant_protector || {};
+    var conditionLabel = dp.family
+      ? t("p5.strategy.family." + dp.family) || dp.family
+      : "";
+
+    var MAX_ROWS = 3;
+    var visible = affected.slice(0, MAX_ROWS);
+    var overflow = affected.length - MAX_ROWS;
+
+    var rows = visible.map(function (intent) {
+      var strategyLabel =
+        t("p5.strategy.family." + intent.family) ||
+        intent.title ||
+        intent.family;
+
+      var statusLabel = t("p5.strategy.impact.label").replace(
+        "{strategy}",
+        strategyLabel,
+      );
+
+      var causalText = conditionLabel
+        ? t("p5.strategy.impact.causal").replace("{condition}", conditionLabel)
+        : t("p5.strategy.impact.causal.generic");
+
+      var recoveryText = intent.recovery_condition
+        ? t("p5.strategy.impact.recovery").replace(
+            "{condition}",
+            intent.recovery_condition,
+          )
+        : "";
+
+      return [
+        '<div class="p5-impact-row">',
+        '<span class="p5-impact-row__icon">\u26A0</span>',
+        '<span class="p5-impact-row__label">' +
+          escapeHtml(statusLabel) +
+          "</span>",
+        '<span class="p5-impact-row__causal">' +
+          escapeHtml(causalText) +
+          "</span>",
+        recoveryText
+          ? '<span class="p5-impact-row__recovery">' +
+            escapeHtml(recoveryText) +
+            "</span>"
+          : "",
         "</div>",
-      arbNoteHtml,
-      traceHtml,
-      intent.scope_summary
-        ? '<div class="p5-strategy-intent-scope">' +
-          t("p5.strategy.scope") +
-          ": " +
-          escapeHtml(intent.scope_summary) +
+      ].join("");
+    });
+
+    var overflowHtml =
+      overflow > 0
+        ? '<div class="p5-impact-more">' +
+          escapeHtml(
+            t("p5.strategy.impact.moreStrategies").replace(
+              "{count}",
+              String(overflow),
+            ),
+          ) +
           "</div>"
+        : "";
+
+    var mutedClass = this._isDeferred ? " p5-impact-strip--muted" : "";
+    return (
+      '<div class="p5-impact-strip' +
+      mutedClass +
+      '">' +
+      rows.join("") +
+      overflowHtml +
+      "</div>"
+    );
+  },
+
+  _collectAffectedStrategies: function (lanes) {
+    var affected = [];
+    var all = (lanes.platform_acting || []).concat(lanes.watch_next || []);
+    for (var i = 0; i < all.length; i++) {
+      var intent = all[i];
+      if (
+        intent.status === "suppressed" ||
+        intent.status === "deferred" ||
+        intent.status === "suspended"
+      ) {
+        affected.push(intent);
+      }
+    }
+    return affected;
+  },
+
+  // =========================================================
+  // CTA PAIR (Action Model Reframe — Phase 2)
+  // =========================================================
+
+  _buildCtaPair: function (hero, ctx, lanes) {
+    var posture = hero.posture || "calm";
+    var dp = ctx.dominant_protector || {};
+
+    // Phase 13: deferred state CTA pair
+    if (this._isDeferred) {
+      var dc = this._deferContext;
+      var intentId = dc.deferred_intent_id || "";
+      return [
+        '<div class="p5-cta-pair p5-cta-pair--deferred">',
+        '<button class="p5-cta-primary p5-cta-primary--resume"',
+        ' id="p5-cta-resume"',
+        ' data-intent-id="' + escapeHtml(String(intentId)) + '">',
+        escapeHtml(t("p5.strategy.cta.resume")),
+        "</button>",
+        '<a class="p5-cta-tertiary" id="p5-cta-tertiary-deferred" href="#hems">',
+        escapeHtml(t("p5.strategy.cta.resume.secondary")),
+        " \u2192",
+        "</a>",
+        "</div>",
+      ].join("");
+    }
+
+    // Calm state: only show secondary CTA
+    if (posture === "calm") {
+      return [
+        '<div class="p5-cta-pair p5-cta-pair--calm-only">',
+        '<button class="p5-cta-secondary" id="p5-cta-secondary" data-nav="hems">',
+        escapeHtml(t("p5.strategy.cta.secondary.calm")),
+        " \u2192",
+        "</button>",
+        "</div>",
+      ].join("");
+    }
+
+    // Escalation state: triple CTA layout (act now / defer / tertiary link)
+    if (posture === "escalation") {
+      return [
+        '<div class="p5-cta-pair p5-cta-pair--escalation">',
+        '<button class="p5-cta-primary p5-cta-primary--escalation"',
+        ' id="p5-cta-primary"',
+        ' data-posture="escalation"',
+        ' data-nav="hems">',
+        escapeHtml(t("p5.strategy.cta.primary.escalation")),
+        " \u2192",
+        "</button>",
+        '<button class="p5-cta-secondary p5-cta-secondary--defer"',
+        ' id="p5-cta-defer">',
+        escapeHtml(t("p5.strategy.cta.defer.escalation")),
+        "</button>",
+        '<a class="p5-cta-tertiary" id="p5-cta-tertiary" href="#hems">',
+        escapeHtml(t("p5.strategy.cta.tertiary.escalation")),
+        " \u2192",
+        "</a>",
+        this._deferExpanded ? this._renderDeferPicker() : "",
+        "</div>",
+      ].join("");
+    }
+
+    // Resolve the correct API action from backend governance semantics
+    var resolved = this._resolvePrimaryAction(hero, lanes);
+
+    // Determine primary CTA label
+    var primaryLabel = this._getCtaPrimaryLabel(posture, lanes);
+
+    // Determine posture CSS modifier for primary button color
+    var postureMod = posture === "approval_gated" ? "approval" : posture;
+
+    // Determine secondary CTA label
+    var secondaryLabel = t(
+      "p5.strategy.cta.secondary." +
+        (posture === "approval_gated" ? "approval" : posture),
+    );
+
+    // Determine secondary navigation target
+    var secondaryNav = posture === "approval_gated" ? "intent-detail" : "hems";
+
+    return [
+      '<div class="p5-cta-pair">',
+      '<button class="p5-cta-primary p5-cta-primary--' + postureMod + '"',
+      ' id="p5-cta-primary"',
+      resolved.intentId
+        ? ' data-intent-id="' + escapeHtml(resolved.intentId) + '"'
         : "",
-      intent.time_pressure
-        ? '<div class="p5-strategy-intent-time">' +
-          escapeHtml(intent.time_pressure) +
-          "</div>"
+      ' data-posture="' + escapeHtml(posture) + '"',
+      resolved.apiAction
+        ? ' data-api-action="' + escapeHtml(resolved.apiAction) + '"'
         : "",
-      !isDerived
-        ? '<div class="p5-strategy-intent-expand">' +
-          t("p5.strategy.viewDetail") +
-          " \u25B8</div>"
-        : "",
-      !isDerived
-        ? '<div class="p5-strategy-intent-detail" id="p5-detail-' +
-          escapeHtml(String(intent.id)) +
-          '" style="display:none"></div>'
-        : "",
+      ">",
+      escapeHtml(primaryLabel),
+      "</button>",
+      '<button class="p5-cta-secondary" id="p5-cta-secondary"',
+      ' data-nav="' + escapeHtml(secondaryNav) + '"',
+      ">",
+      escapeHtml(secondaryLabel),
+      " \u2192",
+      "</button>",
       "</div>",
     ].join("");
   },
 
   // =========================================================
-  // INTENT DETAIL PANEL (Level 2)
+  // DEFER PICKER (Phase 12)
+  // =========================================================
+
+  _renderDeferPicker: function () {
+    var chips = [
+      { minutes: 30, label: "30 min" },
+      { minutes: 60, label: "1 h" },
+      { minutes: 120, label: "2 h" },
+      { minutes: 240, label: "4 h" },
+    ];
+    var parts = [
+      '<div class="p5-defer-picker">',
+      '<span class="p5-defer-picker-label">',
+      escapeHtml(t("p5.strategy.defer.label")),
+      "</span>",
+      '<div class="p5-defer-picker__chips">',
+    ];
+    chips.forEach(function (c) {
+      parts.push(
+        '<button class="p5-defer-picker__chip" data-defer-minutes="' +
+          c.minutes +
+          '">' +
+          c.label +
+          "</button>",
+      );
+    });
+    parts.push("</div>", "</div>");
+    return parts.join("");
+  },
+
+  _executeDeferAction: async function (minutes) {
+    var lanes = this._data || {};
+    var dominantIntent = (lanes.need_decision_now || [])[0];
+    var intentId = dominantIntent ? String(dominantIntent.id) : null;
+
+    if (!intentId || intentId === "null" || intentId === "derived-decision") {
+      if (typeof showToast === "function") {
+        showToast(t("p5.strategy.defer.error"), "error");
+      }
+      return;
+    }
+
+    var deferUntil = new Date(Date.now() + minutes * 60000);
+    var durationLabels = { 30: "30 min", 60: "1 h", 120: "2 h", 240: "4 h" };
+    var durLabel = durationLabels[minutes] || minutes + " min";
+    var returnTime =
+      String(deferUntil.getHours()).padStart(2, "0") +
+      ":" +
+      String(deferUntil.getMinutes()).padStart(2, "0");
+
+    try {
+      await DataSource.p5.intentAction(intentId, "defer", {
+        reason: "Operador adiou revisão via homepage",
+        defer_until: deferUntil.toISOString(),
+      });
+
+      var successMsg = t("p5.strategy.defer.toast")
+        .replace("{duration}", durLabel)
+        .replace("{time}", returnTime);
+      if (typeof showToast === "function") {
+        showToast(successMsg, "success");
+      }
+
+      this._deferExpanded = false;
+      this._data = await DataSource.p5.overview();
+      this._reRender();
+    } catch (err) {
+      console.error("[StrategyPage] defer action failed:", err);
+      var errorMsg = (err && err.message) || t("p5.strategy.defer.error");
+      if (typeof showToast === "function") {
+        showToast(errorMsg, "error");
+      }
+    }
+  },
+
+  // Phase 13: resume from deferred state (cancel defer, re-escalate)
+  _executeResumeAction: async function () {
+    var dc = this._deferContext;
+    var intentId =
+      dc && dc.deferred_intent_id ? String(dc.deferred_intent_id) : null;
+
+    if (!intentId) {
+      if (typeof showToast === "function") {
+        showToast(t("p5.strategy.defer.resume.error"), "error");
+      }
+      return;
+    }
+
+    try {
+      await DataSource.p5.intentAction(intentId, "escalate", {
+        reason: "Operador retomou revisão via homepage",
+      });
+
+      if (typeof showToast === "function") {
+        showToast(t("p5.strategy.defer.resume.toast"), "success");
+      }
+
+      this._selectedPreviewAction = null;
+      this._lastDeferLabel = null;
+      this._deferExpanded = false;
+
+      this._data = await DataSource.p5.overview();
+      this._reRender();
+    } catch (err) {
+      console.error("[StrategyPage] resume action failed:", err);
+      var errorMsg =
+        (err && err.message) || t("p5.strategy.defer.resume.error");
+      if (typeof showToast === "function") {
+        showToast(errorMsg, "error");
+      }
+    }
+  },
+
+  // Resolve the correct API action for the primary CTA from backend semantics
+  _resolvePrimaryAction: function (hero, lanes) {
+    var posture = hero.posture || "calm";
+    if (posture === "calm")
+      return { apiAction: null, intentId: null, posture: posture };
+
+    var dominantIntent = (lanes.need_decision_now || [])[0];
+    var intentId = dominantIntent ? String(dominantIntent.id) : null;
+    var govMode = dominantIntent
+      ? dominantIntent.governance_mode
+      : hero.governance_mode || null;
+
+    var apiAction = null;
+    if (intentId && intentId !== "null" && intentId !== "derived-decision") {
+      if (govMode === "escalate") {
+        apiAction = "escalate";
+      } else if (govMode === "approval_required") {
+        apiAction = "approve";
+      }
+    }
+
+    return { apiAction: apiAction, intentId: intentId, posture: posture };
+  },
+
+  _getCtaPrimaryLabel: function (posture, lanes) {
+    if (posture === "protective") {
+      return t("p5.strategy.cta.primary.protective");
+    }
+    if (posture === "approval_gated") {
+      var intent = (lanes.need_decision_now || [])[0];
+      var familyLabel = intent
+        ? t("p5.strategy.family." + intent.family) || intent.family
+        : "";
+      return t("p5.strategy.cta.primary.approval").replace(
+        "{family}",
+        familyLabel,
+      );
+    }
+    if (posture === "escalation") {
+      return t("p5.strategy.cta.primary.escalation");
+    }
+    return "";
+  },
+
+  _handlePrimaryCtaClick: async function () {
+    var btn = document.getElementById("p5-cta-primary");
+    if (!btn || btn.disabled) return;
+
+    var intentId = btn.dataset.intentId;
+    var posture = btn.dataset.posture;
+    var apiAction = btn.dataset.apiAction || null;
+    var originalLabel = btn.textContent;
+
+    // Show loading state
+    btn.disabled = true;
+    btn.textContent = t("p5.strategy.cta.loading");
+
+    try {
+      if (
+        apiAction &&
+        intentId &&
+        intentId !== "null" &&
+        intentId !== "derived-decision"
+      ) {
+        // Real intent exists: call the governance-correct action (approve or escalate)
+        await DataSource.p5.intentAction(intentId, apiAction, {
+          reason: "operator_confirmed_from_homepage",
+        });
+      } else {
+        // Derived or no intent (protective/escalation with no real intent ID):
+        // Acknowledge is a client-side confirmation only — no server call needed.
+        // Brief delay to show confirmation feedback.
+        await new Promise(function (resolve) {
+          setTimeout(resolve, 400);
+        });
+      }
+
+      // Show success state
+      btn.textContent = "\u2713 " + t("p5.strategy.cta.success");
+      btn.classList.add("p5-cta-primary--success");
+
+      // Refresh after brief pause
+      var self = this;
+      setTimeout(async function () {
+        try {
+          self._data = await DataSource.p5.overview();
+          var container = document.getElementById("vpp-content");
+          if (container) {
+            self._expandedIntent = null;
+            container.innerHTML = self._buildContent();
+            self._setupEventListeners();
+          }
+        } catch (err) {
+          console.error("[StrategyPage] refresh after CTA failed:", err);
+        }
+      }, 1200);
+    } catch (err) {
+      console.error("[StrategyPage] primary CTA action failed:", err);
+      btn.textContent = t("p5.strategy.cta.error");
+      btn.classList.add("p5-cta-primary--error");
+      // Re-enable after showing error
+      setTimeout(function () {
+        btn.disabled = false;
+        btn.textContent = originalLabel;
+        btn.classList.remove("p5-cta-primary--error");
+      }, 2500);
+    }
+  },
+
+  _writeHandoffContext: function () {
+    var hero = (this._data || {}).hero || {};
+    var ctx = (this._data || {}).context || {};
+    var dp = ctx.dominant_protector || {};
+    var lanes = this._data || {};
+    var dominantIntent = (lanes.need_decision_now || [])[0] || null;
+
+    if (typeof DemoStore !== "undefined") {
+      DemoStore.set("p5_handoff", {
+        source: "p5_strategy",
+        posture: hero.posture,
+        dominant_driver: hero.dominant_driver,
+        active_soc: dp.current_soc || null,
+        reserve_threshold: dp.threshold || null,
+        active_intent_id: dominantIntent ? dominantIntent.id : null,
+        timestamp: Date.now(),
+      });
+    }
+  },
+
+  _handleSecondaryCtaClick: function () {
+    var btn = document.getElementById("p5-cta-secondary");
+    if (!btn) return;
+
+    var nav = btn.dataset.nav;
+    var lanes = this._data || {};
+    var dominantIntent = (lanes.need_decision_now || [])[0] || null;
+
+    this._writeHandoffContext();
+
+    // Navigate
+    if (nav === "intent-detail" && dominantIntent) {
+      // For approval-gated: expand the intent detail inline
+      this._loadIntentDetail(dominantIntent.id);
+    } else {
+      window.location.hash = "#hems";
+    }
+  },
+
+  // =========================================================
+  // INTENT DETAIL PANEL (kept for approval-gated secondary CTA)
   // =========================================================
 
   _loadIntentDetail: async function (intentId) {
@@ -964,80 +1358,263 @@ var StrategyPage = {
   // POSTURE OVERRIDE SECTION
   // =========================================================
 
-  _buildOverrideSection: function (hero) {
-    var isAdmin = typeof currentRole !== "undefined" && currentRole === "admin";
-    if (!isAdmin) return "";
+  // Duration options for override
+  // =========================================================
+  // RESULT PREVIEW PANEL (Phase 5)
+  // =========================================================
 
-    var activeOverride = hero.override_active
-      ? [
-          '<div class="p5-strategy-override-active">',
-          '<span class="p5-strategy-indicator p5-strategy-indicator-override">' +
-            t("p5.strategy.override.activeLabel") +
-            "</span>",
-          '<button class="btn btn-negative p5-strategy-cancel-override" id="p5-cancel-override">' +
-            t("p5.strategy.override.cancel") +
-            "</button>",
-          "</div>",
-        ].join("")
-      : "";
+  _buildResultPreview: function (hero) {
+    var body;
+    if (!this._selectedPreviewAction) {
+      body =
+        '<p class="p5-preview__default">' +
+        t("p5.strategy.preview.default") +
+        "</p>";
+    } else {
+      var content = this._getPreviewContent(this._selectedPreviewAction, hero);
+      var tagHtml =
+        '<div class="p5-preview__tag ' +
+        content.tagClass +
+        '">' +
+        content.tag +
+        "</div>";
+      var itemsHtml = '<ul class="p5-preview__items">';
+      content.items.forEach(function (item) {
+        itemsHtml += '<li class="p5-preview__item">' + item + "</li>";
+      });
+      itemsHtml += "</ul>";
+      body = tagHtml + itemsHtml;
+    }
 
-    var form = [
-      '<div class="p5-strategy-override-form" id="p5-override-form" style="display:none">',
-      '<div class="p5-strategy-form-row">',
-      '<div class="p5-strategy-form-group">',
-      "<label>" + t("p5.strategy.override.type") + "</label>",
-      '<select id="p5-override-type">',
-      '<option value="force_calm">' +
-        t("p5.strategy.override.type.forceCalm") +
-        "</option>",
-      '<option value="force_protective">' +
-        t("p5.strategy.override.type.forceProtective") +
-        "</option>",
-      '<option value="suppress_all">' +
-        t("p5.strategy.override.type.suppressAll") +
-        "</option>",
-      '<option value="approve_all">' +
-        t("p5.strategy.override.type.approveAll") +
-        "</option>",
-      "</select>",
-      "</div>",
-      '<div class="p5-strategy-form-group">',
-      "<label>" + t("p5.strategy.override.duration") + "</label>",
-      '<input type="number" id="p5-override-duration" value="60" min="1" max="480">',
-      "</div>",
-      "</div>",
-      '<div class="p5-strategy-form-group">',
-      "<label>" + t("p5.strategy.override.reason") + " *</label>",
-      '<textarea id="p5-override-reason" class="p5-strategy-textarea" rows="2" required></textarea>',
-      "</div>",
-      '<div class="p5-strategy-form-group">',
-      "<label>" + t("p5.strategy.override.scopeGateways") + "</label>",
-      '<input type="text" id="p5-override-scope" placeholder="' +
-        t("p5.strategy.override.scopePlaceholder") +
-        '">',
-      "</div>",
-      '<div class="p5-strategy-form-actions">',
-      '<button class="btn btn-primary" id="p5-override-submit">' +
-        t("p5.strategy.override.submit") +
-        "</button>",
-      '<button class="btn" id="p5-override-cancel-form">' +
-        t("shared.cancel") +
-        "</button>",
+    var borderClass = "";
+    if (this._selectedPreviewAction) {
+      var c = this._getPreviewContent(this._selectedPreviewAction, hero);
+      borderClass = " " + c.borderClass;
+    }
+
+    return [
+      '<div class="p5-preview' + borderClass + '" id="p5-preview">',
+      '<div class="p5-preview__header">\u25B6 ' +
+        t("p5.strategy.preview.title") +
+        "</div>",
+      '<div class="p5-preview__body" id="p5-preview-body">',
+      body,
       "</div>",
       "</div>",
     ].join("");
+  },
 
-    var body = [
-      activeOverride,
-      '<button class="btn btn-primary p5-strategy-create-override" id="p5-create-override">' +
-        t("p5.strategy.override.create") +
-        "</button>",
-      form,
-    ].join("");
+  _getPreviewContent: function (actionKey, hero) {
+    switch (actionKey) {
+      case "keep":
+        return {
+          tag: "\u2714 " + t("p5.strategy.preview.tag.decision"),
+          tagClass: "p5-preview__tag--green",
+          borderClass: "p5-preview--green",
+          items: [
+            t("p5.strategy.preview.keep.item1"),
+            t("p5.strategy.preview.keep.item2"),
+            t("p5.strategy.preview.keep.item3"),
+            t("p5.strategy.preview.keep.item4").replace(
+              "{threshold}",
+              hero.soc_threshold || "30",
+            ),
+          ],
+        };
+      case "adjust":
+        return {
+          tag: "\u2192 " + t("p5.strategy.preview.tag.navigate"),
+          tagClass: "p5-preview__tag--blue",
+          borderClass: "p5-preview--blue",
+          items: [
+            t("p5.strategy.preview.adjust.item1"),
+            t("p5.strategy.preview.adjust.item2"),
+            t("p5.strategy.preview.adjust.item3"),
+          ],
+        };
+      case "defer":
+        return {
+          tag: "\u23F8 " + t("p5.strategy.preview.tag.defer"),
+          tagClass: "p5-preview__tag--amber",
+          borderClass: "p5-preview--amber",
+          items: [
+            t("p5.strategy.preview.defer.item1").replace(
+              "{duration}",
+              this._lastDeferLabel || "",
+            ),
+            t("p5.strategy.preview.defer.item2"),
+            t("p5.strategy.preview.defer.item3"),
+            t("p5.strategy.preview.defer.item4"),
+          ],
+        };
+      case "override":
+        return {
+          tag: "\u26A0 " + t("p5.strategy.preview.tag.override"),
+          tagClass: "p5-preview__tag--amber",
+          borderClass: "p5-preview--amber",
+          items: [
+            t("p5.strategy.preview.override.item1").replace(
+              "{duration}",
+              this._overrideDuration ? this._overrideDuration + "h" : "",
+            ),
+            t("p5.strategy.preview.override.item2"),
+            t("p5.strategy.preview.override.item3"),
+          ],
+        };
+      case "alert":
+        return {
+          tag: "\uD83D\uDD15 " + t("p5.strategy.preview.tag.alert"),
+          tagClass: "p5-preview__tag--gray",
+          borderClass: "p5-preview--default",
+          items: [
+            t("p5.strategy.preview.alert.item1").replace(
+              "{duration}",
+              this._alertSilenceDuration
+                ? this._alertSilenceDuration + "min"
+                : "",
+            ),
+            t("p5.strategy.preview.alert.item2"),
+            t("p5.strategy.preview.alert.item3"),
+          ],
+        };
+      default:
+        return { tag: "", tagClass: "", borderClass: "", items: [] };
+    }
+  },
 
-    return Components.sectionCard(t("p5.strategy.override.title"), body, {
-      dataRole: "admin",
+  _updatePreview: function (actionKey) {
+    this._selectedPreviewAction = actionKey;
+    var previewBody = document.getElementById("p5-preview-body");
+    var previewContainer = document.getElementById("p5-preview");
+    if (!previewBody || !previewContainer) return;
+
+    [
+      "p5-preview--green",
+      "p5-preview--blue",
+      "p5-preview--amber",
+      "p5-preview--default",
+    ].forEach(function (cls) {
+      previewContainer.classList.remove(cls);
     });
+
+    if (!actionKey) {
+      previewBody.innerHTML =
+        '<p class="p5-preview__default">' +
+        t("p5.strategy.preview.default") +
+        "</p>";
+      return;
+    }
+
+    var content = this._getPreviewContent(actionKey, this._data.hero || {});
+    previewContainer.classList.add(content.borderClass);
+
+    var html =
+      '<div class="p5-preview__tag ' +
+      content.tagClass +
+      '">' +
+      content.tag +
+      "</div>";
+    html += '<ul class="p5-preview__items">';
+    content.items.forEach(function (item) {
+      html += '<li class="p5-preview__item">' + item + "</li>";
+    });
+    html += "</ul>";
+    previewBody.innerHTML = html;
+  },
+
+  _overrideDurations: [
+    { label: "30 min", minutes: 30 },
+    { label: "1 hora", minutes: 60 },
+    { label: "2 horas", minutes: 120 },
+    { label: "4 horas", minutes: 240 },
+  ],
+
+  _buildOverrideSection: function (hero) {
+    // Phase 13: hide during deferred state
+    if (this._isDeferred) return "";
+
+    // Hide when posture is calm — nothing to override
+    if (hero.posture === "calm") return "";
+
+    var expanded = this._overrideExpanded;
+    var selectedDur = this._overrideDuration;
+
+    var parts = [
+      '<div class="p5-override' +
+        (expanded ? " p5-override--expanded" : " p5-override--collapsed") +
+        '" id="p5-override-section">',
+    ];
+
+    // Collapsed trigger
+    parts.push(
+      '<div class="p5-override__trigger" id="p5-override-trigger">',
+      '<span class="p5-override__trigger-icon">\u26A0</span>',
+      '<span class="p5-override__trigger-label">' +
+        t("p5.strategy.override.staged.trigger") +
+        "</span>",
+      '<span class="p5-override__trigger-chevron">' +
+        (expanded ? "\u25B2" : "\u25BC") +
+        "</span>",
+      "</div>",
+    );
+
+    // Expanded panel
+    if (expanded) {
+      parts.push('<div class="p5-override__panel">');
+
+      // Duration picker
+      parts.push(
+        '<div class="p5-override__duration-label">' +
+          t("p5.strategy.override.staged.duration.label") +
+          "</div>",
+        '<div class="p5-override__duration-picker">',
+      );
+
+      var self = this;
+      this._overrideDurations.forEach(function (opt) {
+        var isSelected = selectedDur === opt.minutes;
+        parts.push(
+          '<button class="p5-override__duration-chip' +
+            (isSelected ? " p5-override__duration-chip--selected" : "") +
+            '" data-duration="' +
+            opt.minutes +
+            '">' +
+            opt.label +
+            "</button>",
+        );
+      });
+
+      parts.push("</div>");
+
+      // Warning
+      parts.push(
+        '<div class="p5-override__expiry-note">' +
+          t("p5.strategy.override.staged.warning") +
+          "</div>",
+      );
+
+      // Confirm button — only visible after duration selection
+      if (selectedDur !== null) {
+        var durLabel = "";
+        this._overrideDurations.forEach(function (opt) {
+          if (opt.minutes === selectedDur) durLabel = opt.label;
+        });
+        parts.push(
+          '<button class="p5-override__confirm" id="p5-override-confirm">' +
+            t("p5.strategy.override.staged.confirm").replace(
+              "{duration}",
+              durLabel,
+            ) +
+            "</button>",
+        );
+      }
+
+      parts.push("</div>"); // end panel
+    }
+
+    parts.push("</div>"); // end section
+
+    return parts.join("");
   },
 
   // =========================================================
@@ -1047,57 +1624,175 @@ var StrategyPage = {
   _setupEventListeners: function () {
     var self = this;
 
-    // Intent card expand
+    // CTA pair (Phase 2)
+    var primaryCta = document.getElementById("p5-cta-primary");
+    if (primaryCta) {
+      primaryCta.addEventListener("click", function () {
+        // Escalation primary CTA navigates to HEMS instead of calling API
+        if (primaryCta.dataset.nav === "hems") {
+          self._updatePreview("adjust");
+          self._writeHandoffContext();
+          window.location.hash = "#hems";
+          return;
+        }
+        self._updatePreview("keep");
+        self._handlePrimaryCtaClick();
+      });
+    }
+
+    var secondaryCta = document.getElementById("p5-cta-secondary");
+    if (secondaryCta) {
+      secondaryCta.addEventListener("click", function () {
+        self._updatePreview("adjust");
+        self._handleSecondaryCtaClick();
+      });
+    }
+
+    // Defer button (escalation triple CTA — Phase 12)
+    var deferBtn = document.getElementById("p5-cta-defer");
+    if (deferBtn) {
+      deferBtn.addEventListener("click", function (e) {
+        e.stopPropagation();
+        self._deferExpanded = !self._deferExpanded;
+        self._reRender();
+      });
+    }
+
+    // Resume button (deferred state — Phase 13)
+    var resumeBtn = document.getElementById("p5-cta-resume");
+    if (resumeBtn) {
+      resumeBtn.addEventListener("click", function () {
+        self._executeResumeAction();
+      });
+    }
+
+    // Defer duration chip selection (Phase 12)
+    var deferPicker = document.querySelector(".p5-defer-picker");
+    if (deferPicker) {
+      deferPicker.addEventListener("click", function (e) {
+        e.stopPropagation();
+        var chip = e.target.closest("[data-defer-minutes]");
+        if (!chip) return;
+        var minutes = parseInt(chip.dataset.deferMinutes, 10);
+        self._lastDeferLabel = chip.textContent.trim();
+        self._updatePreview("defer");
+        self._executeDeferAction(minutes);
+      });
+    }
+
+    // Click outside to collapse defer picker (Phase 12)
+    if (this._deferExpanded) {
+      this._deferOutsideHandler = function (e) {
+        var picker = document.querySelector(".p5-defer-picker");
+        var btn = document.getElementById("p5-cta-defer");
+        if (
+          picker &&
+          !picker.contains(e.target) &&
+          btn &&
+          !btn.contains(e.target)
+        ) {
+          self._deferExpanded = false;
+          document.removeEventListener("click", self._deferOutsideHandler);
+          self._reRender();
+        }
+      };
+      document.addEventListener("click", this._deferOutsideHandler);
+    }
+
+    // Tertiary link handoff context (escalation triple CTA)
+    var tertiaryCta = document.getElementById("p5-cta-tertiary");
+    if (tertiaryCta) {
+      tertiaryCta.addEventListener("click", function () {
+        self._writeHandoffContext();
+      });
+    }
+
+    // Override staged confirmation — expand/collapse trigger
+    var overrideTrigger = document.getElementById("p5-override-trigger");
+    if (overrideTrigger) {
+      overrideTrigger.addEventListener("click", function () {
+        self._handleOverrideExpand();
+      });
+    }
+
+    // Override duration chip selection
     document
-      .querySelectorAll(".p5-strategy-intent-card")
-      .forEach(function (card) {
-        card.addEventListener("click", function (e) {
-          // Don't expand if clicking action buttons inside detail
-          if (
-            e.target.closest(".p5-strategy-action-btn") ||
-            e.target.closest(".p5-strategy-submit-action") ||
-            e.target.closest("textarea") ||
-            e.target.closest("input")
-          )
-            return;
-          var intentId = card.dataset.intentId;
-          if (intentId) self._loadIntentDetail(intentId);
+      .querySelectorAll(".p5-override__duration-chip")
+      .forEach(function (chip) {
+        chip.addEventListener("click", function (e) {
+          e.stopPropagation();
+          var minutes = parseInt(chip.dataset.duration, 10);
+          self._overrideDuration = minutes;
+          self._updatePreview("override");
+          self._reRender();
         });
       });
 
-    // Override create toggle
-    var createBtn = document.getElementById("p5-create-override");
-    if (createBtn) {
-      createBtn.addEventListener("click", function () {
-        var form = document.getElementById("p5-override-form");
-        if (form) {
-          form.style.display = form.style.display === "none" ? "block" : "none";
+    // Override confirm button
+    var overrideConfirm = document.getElementById("p5-override-confirm");
+    if (overrideConfirm) {
+      overrideConfirm.addEventListener("click", function (e) {
+        e.stopPropagation();
+        self._handleOverrideConfirm();
+      });
+    }
+
+    // Alert control — expand/collapse trigger
+    var alertTrigger = document.getElementById("p5-alert-control-trigger");
+    if (alertTrigger) {
+      alertTrigger.addEventListener("click", function () {
+        self._alertSilenceExpanded = !self._alertSilenceExpanded;
+        if (!self._alertSilenceExpanded) {
+          self._alertSilenceDuration = null;
         }
+        self._reRender();
       });
     }
 
-    // Override cancel form
-    var cancelFormBtn = document.getElementById("p5-override-cancel-form");
-    if (cancelFormBtn) {
-      cancelFormBtn.addEventListener("click", function () {
-        var form = document.getElementById("p5-override-form");
-        if (form) form.style.display = "none";
+    // Alert control — duration chip selection
+    document
+      .querySelectorAll(".p5-alert-control__duration-chip")
+      .forEach(function (chip) {
+        chip.addEventListener("click", function (e) {
+          e.stopPropagation();
+          var minutes = parseInt(chip.dataset.alertDuration, 10);
+          self._alertSilenceDuration = minutes;
+          self._updatePreview("alert");
+          self._reRender();
+        });
+      });
+
+    // Alert control — confirm button
+    var alertConfirm = document.getElementById("p5-alert-control-confirm");
+    if (alertConfirm) {
+      alertConfirm.addEventListener("click", function (e) {
+        e.stopPropagation();
+        self._handleAlertSilenceConfirm();
       });
     }
 
-    // Override submit
-    var submitBtn = document.getElementById("p5-override-submit");
-    if (submitBtn) {
-      submitBtn.addEventListener("click", function () {
-        self._handleOverrideSubmit();
-      });
-    }
-
-    // Cancel active override
-    var cancelOverrideBtn = document.getElementById("p5-cancel-override");
-    if (cancelOverrideBtn) {
-      cancelOverrideBtn.addEventListener("click", function () {
-        self._handleCancelOverride();
+    // Click outside override/alert sections to collapse (attach once)
+    if (!this._overrideOutsideClickBound) {
+      this._overrideOutsideClickBound = true;
+      document.addEventListener("click", function (e) {
+        var changed = false;
+        if (
+          self._overrideExpanded &&
+          !e.target.closest("#p5-override-section")
+        ) {
+          self._overrideExpanded = false;
+          self._overrideDuration = null;
+          changed = true;
+        }
+        if (
+          self._alertSilenceExpanded &&
+          !e.target.closest("#p5-alert-control-section")
+        ) {
+          self._alertSilenceExpanded = false;
+          self._alertSilenceDuration = null;
+          changed = true;
+        }
+        if (changed) self._reRender();
       });
     }
   },
@@ -1168,73 +1863,288 @@ var StrategyPage = {
     }
   },
 
-  _handleOverrideSubmit: async function () {
-    var typeEl = document.getElementById("p5-override-type");
-    var durationEl = document.getElementById("p5-override-duration");
-    var reasonEl = document.getElementById("p5-override-reason");
-    var scopeEl = document.getElementById("p5-override-scope");
+  _handleOverrideExpand: function () {
+    this._overrideExpanded = !this._overrideExpanded;
+    if (!this._overrideExpanded) {
+      this._overrideDuration = null;
+    }
+    this._reRender();
+  },
 
-    if (!reasonEl || !reasonEl.value.trim()) {
-      if (reasonEl) reasonEl.classList.add("p5-strategy-input-error");
-      return;
+  _handleOverrideConfirm: async function () {
+    if (this._overrideDuration === null) return;
+
+    var confirmBtn = document.getElementById("p5-override-confirm");
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = t("p5.strategy.override.staged.loading");
     }
 
-    var duration = parseInt(durationEl ? durationEl.value : "60", 10);
-    if (isNaN(duration) || duration < 1 || duration > 480) {
-      if (durationEl) durationEl.classList.add("p5-strategy-input-error");
-      return;
-    }
-
-    var scopeIds =
-      scopeEl && scopeEl.value.trim()
-        ? scopeEl.value
-            .split(",")
-            .map(function (s) {
-              return s.trim();
-            })
-            .filter(Boolean)
-        : [];
+    var durLabel = "";
+    var selectedMin = this._overrideDuration;
+    this._overrideDurations.forEach(function (opt) {
+      if (opt.minutes === selectedMin) durLabel = opt.label;
+    });
 
     var payload = {
-      override_type: typeEl ? typeEl.value : "force_calm",
-      reason: reasonEl.value.trim(),
-      duration_minutes: duration,
+      override_type: "suppress_economic",
+      reason: "operator_override_from_homepage",
+      duration_minutes: this._overrideDuration,
+      scope_gateway_ids: [],
     };
-    if (scopeIds.length > 0) {
-      payload.scope_gateway_ids = scopeIds;
-    }
 
     try {
       await DataSource.p5.createOverride(payload);
-      this._data = await DataSource.p5.overview();
-      var container = document.getElementById("vpp-content");
-      if (container) {
-        this._expandedIntent = null;
-        container.innerHTML = this._buildContent();
-        this._setupEventListeners();
+
+      // Show success toast
+      var successMsg = t("p5.strategy.override.staged.success").replace(
+        "{time}",
+        durLabel,
+      );
+      if (typeof showToast === "function") {
+        showToast(successMsg, "success");
       }
+
+      // Reset state and refresh
+      this._overrideExpanded = false;
+      this._overrideDuration = null;
+      this._data = await DataSource.p5.overview();
+      this._reRender();
     } catch (err) {
-      console.error("[StrategyPage] override submit failed:", err);
-      showErrorBoundary("vpp-content", err);
+      console.error("[StrategyPage] override confirm failed:", err);
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = t("p5.strategy.override.staged.error");
+        confirmBtn.classList.add("p5-override__confirm--error");
+      }
+      // Allow retry after 2s
+      setTimeout(function () {
+        if (confirmBtn) {
+          confirmBtn.classList.remove("p5-override__confirm--error");
+          var retryLabel = t("p5.strategy.override.staged.confirm").replace(
+            "{duration}",
+            durLabel,
+          );
+          confirmBtn.textContent = retryLabel;
+        }
+      }, 2000);
     }
   },
 
-  _handleCancelOverride: async function () {
-    // For now use a placeholder override ID; in production this comes from state
-    try {
-      await DataSource.p5.cancelOverride("active", {
-        reason: "Operator cancelled",
+  // =========================================================
+  // ALERT CONTROL SECTION (Phase 4)
+  // =========================================================
+
+  _alertSilenceDurations: [
+    { label: "30 min", minutes: 30 },
+    { label: "1 hora", minutes: 60 },
+    { label: "2 horas", minutes: 120 },
+    { label: "4 horas", minutes: 240 },
+  ],
+
+  _buildAlertControl: function (hero) {
+    // Always available except during calm with no activity
+    if (hero.posture === "calm") return "";
+
+    var expanded = this._alertSilenceExpanded;
+    var selectedDur = this._alertSilenceDuration;
+
+    var parts = [
+      '<div class="p5-alert-control' +
+        (expanded ? " p5-alert-control--expanded" : "") +
+        '" id="p5-alert-control-section">',
+    ];
+
+    // Collapsed trigger — small text link with bell-slash icon
+    parts.push(
+      '<div class="p5-alert-control__trigger" id="p5-alert-control-trigger">',
+      '<span class="p5-alert-control__trigger-icon">\uD83D\uDD15</span>',
+      '<span class="p5-alert-control__trigger-label">' +
+        t("p5.strategy.alert.silence.trigger") +
+        "</span>",
+      '<span class="p5-alert-control__trigger-chevron">' +
+        (expanded ? "\u25B2" : "\u25BC") +
+        "</span>",
+      "</div>",
+    );
+
+    // Expanded panel
+    if (expanded) {
+      parts.push('<div class="p5-alert-control__panel">');
+
+      // Duration picker
+      parts.push(
+        '<div class="p5-alert-control__duration-label">' +
+          t("p5.strategy.alert.silence.duration.label") +
+          "</div>",
+        '<div class="p5-alert-control__duration-picker">',
+      );
+
+      this._alertSilenceDurations.forEach(function (opt) {
+        var isSelected = selectedDur === opt.minutes;
+        parts.push(
+          '<button class="p5-alert-control__duration-chip' +
+            (isSelected ? " p5-alert-control__duration-chip--selected" : "") +
+            '" data-alert-duration="' +
+            opt.minutes +
+            '">' +
+            opt.label +
+            "</button>",
+        );
       });
-      this._data = await DataSource.p5.overview();
-      var container = document.getElementById("vpp-content");
-      if (container) {
-        this._expandedIntent = null;
-        container.innerHTML = this._buildContent();
-        this._setupEventListeners();
+
+      parts.push("</div>");
+
+      // Warning note
+      parts.push(
+        '<div class="p5-alert-control__expiry-note">' +
+          t("p5.strategy.alert.silence.warning") +
+          "</div>",
+      );
+
+      // Confirm button — only after duration selection
+      if (selectedDur !== null) {
+        var durLabel = "";
+        this._alertSilenceDurations.forEach(function (opt) {
+          if (opt.minutes === selectedDur) durLabel = opt.label;
+        });
+        parts.push(
+          '<button class="p5-alert-control__confirm" id="p5-alert-control-confirm">' +
+            t("p5.strategy.alert.silence.confirm").replace(
+              "{duration}",
+              durLabel,
+            ) +
+            "</button>",
+        );
       }
+
+      parts.push("</div>"); // end panel
+    }
+
+    parts.push("</div>"); // end section
+
+    return parts.join("");
+  },
+
+  _handleAlertSilenceConfirm: async function () {
+    if (this._alertSilenceDuration === null) return;
+
+    var confirmBtn = document.getElementById("p5-alert-control-confirm");
+    if (confirmBtn) {
+      confirmBtn.disabled = true;
+      confirmBtn.textContent = t("p5.strategy.alert.silence.loading");
+    }
+
+    var durLabel = "";
+    var selectedMin = this._alertSilenceDuration;
+    this._alertSilenceDurations.forEach(function (opt) {
+      if (opt.minutes === selectedMin) durLabel = opt.label;
+    });
+
+    var payload = {
+      override_type: "suppress_alerts",
+      reason: "operator_silenced_alerts_from_homepage",
+      duration_minutes: this._alertSilenceDuration,
+      scope_gateway_ids: [],
+    };
+
+    try {
+      await DataSource.p5.createOverride(payload);
+
+      // Show success toast
+      var successMsg = t("p5.strategy.alert.silence.success").replace(
+        "{duration}",
+        durLabel,
+      );
+      if (typeof showToast === "function") {
+        showToast(successMsg, "success");
+      }
+
+      // Reset state and refresh
+      this._alertSilenceExpanded = false;
+      this._alertSilenceDuration = null;
+      this._data = await DataSource.p5.overview();
+      this._reRender();
     } catch (err) {
-      console.error("[StrategyPage] cancel override failed:", err);
-      showErrorBoundary("vpp-content", err);
+      console.error("[StrategyPage] alert silence failed:", err);
+      if (confirmBtn) {
+        confirmBtn.disabled = false;
+        confirmBtn.textContent = t("p5.strategy.alert.silence.error");
+        confirmBtn.classList.add("p5-alert-control__confirm--error");
+      }
+      // Allow retry after 2s
+      setTimeout(function () {
+        if (confirmBtn) {
+          confirmBtn.classList.remove("p5-alert-control__confirm--error");
+          var retryLabel = t("p5.strategy.alert.silence.confirm").replace(
+            "{duration}",
+            durLabel,
+          );
+          confirmBtn.textContent = retryLabel;
+        }
+      }, 2000);
+    }
+  },
+
+  // Phase 14: clear defer countdown timer
+  _clearDeferTimer: function () {
+    if (this._deferTimerId) {
+      clearInterval(this._deferTimerId);
+      this._deferTimerId = null;
+    }
+  },
+
+  // Phase 14: start defer countdown timer (auto-refresh on expiry)
+  _startDeferTimer: function () {
+    this._clearDeferTimer();
+
+    if (!this._isDeferred) return;
+
+    var self = this;
+    var deferUntilMs = new Date(this._deferContext.defer_until).getTime();
+
+    this._deferTimerId = setInterval(function () {
+      var remaining = deferUntilMs - Date.now();
+
+      if (remaining <= 0) {
+        // Defer expired — auto-refresh once
+        self._clearDeferTimer();
+        self._previousDeferContext = self._deferContext;
+        self._autoRefreshAfterDefer();
+        return;
+      }
+
+      // Update countdown display without full re-render
+      var countdownEl = document.querySelector(".p5-hero-countdown");
+      if (countdownEl) {
+        var countdown = self._formatCountdown(self._deferContext.defer_until);
+        if (countdown) {
+          countdownEl.textContent = t(
+            "p5.strategy.hero.deferred.countdown",
+          ).replace("{countdown}", countdown);
+        }
+      }
+    }, 30000);
+  },
+
+  // Phase 14: fetch fresh overview after defer expiry
+  _autoRefreshAfterDefer: async function () {
+    try {
+      this._data = await DataSource.p5.overview();
+      this._reRender();
+    } catch (err) {
+      console.error(
+        "[StrategyPage] auto-refresh after defer expiry failed:",
+        err,
+      );
+    }
+  },
+
+  _reRender: function () {
+    var container = document.getElementById("vpp-content");
+    if (container) {
+      container.innerHTML = this._buildContent();
+      this._setupEventListeners();
     }
   },
 };

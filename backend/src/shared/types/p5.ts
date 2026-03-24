@@ -5,44 +5,45 @@
 // ── Enums as union types ────────────────────────────────────────────────
 
 export type StrategyFamily =
-  | 'peak_shaving'
-  | 'tariff_arbitrage'
-  | 'reserve_protection'
-  | 'curtailment_mitigation'
-  | 'resilience_preparation'
-  | 'external_dr';
+  | "peak_shaving"
+  | "tariff_arbitrage"
+  | "reserve_protection"
+  | "curtailment_mitigation"
+  | "resilience_preparation"
+  | "external_dr";
 
 export type IntentStatus =
-  | 'active'
-  | 'approved'
-  | 'deferred'
-  | 'suppressed'
-  | 'escalated'
-  | 'expired'
-  | 'executed';
+  | "active"
+  | "approved"
+  | "deferred"
+  | "suppressed"
+  | "escalated"
+  | "expired"
+  | "executed";
 
 export type GovernanceMode =
-  | 'observe'
-  | 'approval_required'
-  | 'auto_governed'
-  | 'escalate';
+  | "observe"
+  | "approval_required"
+  | "auto_governed"
+  | "escalate";
 
-export type Urgency = 'immediate' | 'soon' | 'watch';
+export type Urgency = "immediate" | "soon" | "watch";
 
 export type OverrideType =
-  | 'force_protective'
-  | 'suppress_economic'
-  | 'force_approval_gate'
-  | 'manual_escalation_note';
+  | "force_protective"
+  | "suppress_economic"
+  | "force_approval_gate"
+  | "manual_escalation_note"
+  | "suppress_alerts";
 
-export type Posture = 'calm' | 'approval_gated' | 'protective' | 'escalation';
+export type Posture = "calm" | "approval_gated" | "protective" | "escalation";
 
 export type CalmReason =
-  | 'no_conditions_detected'
-  | 'telemetry_stale'
-  | 'override_suppressing'
-  | 'protection_dominant'
-  | 'all_deferred';
+  | "no_conditions_detected"
+  | "telemetry_stale"
+  | "override_suppressing"
+  | "protection_dominant"
+  | "all_deferred";
 
 // ── DB row types ────────────────────────────────────────────────────────
 
@@ -67,6 +68,8 @@ export interface StrategyIntent {
   readonly created_at: string;
   readonly updated_at: string;
   readonly expires_at: string | null;
+  readonly defer_until: string | null;
+  readonly deferred_by: string | null;
 }
 
 export interface PostureOverride {
@@ -96,6 +99,7 @@ export interface IntentCard {
   readonly reason_summary: string;
   readonly scope_summary: string | null;
   readonly time_pressure: string;
+  readonly recovery_condition: string | null;
   readonly created_at: string;
 }
 
@@ -150,6 +154,8 @@ export interface ProtectorSummary {
   readonly title: string;
   readonly scope_summary: string | null;
   readonly governance_mode: GovernanceMode;
+  readonly current_soc: number | null;
+  readonly threshold: number | null;
 }
 
 export interface HandoffSummary {
@@ -159,12 +165,21 @@ export interface HandoffSummary {
   readonly escalated_at: string;
 }
 
+export interface DeferContext {
+  readonly case_fingerprint: string;
+  readonly deferred_intent_id: number;
+  readonly defer_until: string;
+  readonly deferred_by: string | null;
+  readonly deferred_at: string | null;
+}
+
 export interface P5Overview {
   readonly hero: HeroPosture;
   readonly calm_explanation: CalmExplanation | null;
   readonly need_decision_now: IntentCard[];
   readonly platform_acting: IntentCard[];
   readonly watch_next: IntentCard[];
+  readonly defer_context: DeferContext | null;
   readonly context: {
     readonly operating_posture: PostureSummary;
     readonly dominant_protector: ProtectorSummary | null;

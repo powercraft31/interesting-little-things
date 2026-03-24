@@ -695,6 +695,133 @@ var I18n = (function () {
       "p5.strategy.urgency.immediate": "Immediate",
       "p5.strategy.urgency.watch": "Watch",
 
+      // ---- P5: Action Model Reframe (hero + impact strip) ----
+      "p5.strategy.hero.rec.protective":
+        "Recommendation: maintain active reserve protection",
+      "p5.strategy.hero.rec.approval": "Recommendation: evaluate {family}",
+      "p5.strategy.hero.rec.calm": "System operating normally",
+      "p5.strategy.hero.rec.escalation":
+        "Recommendation: evaluate situation in HEMS",
+      "p5.strategy.hero.narrative.protective":
+        "Reserve at {soc}% SoC \u2014 below the {threshold}% limit. Economic dispatches suspended to protect backup capacity.",
+      "p5.strategy.hero.narrative.protective.noMetrics":
+        "Reserve protection active. Economic dispatches suspended to protect backup capacity.",
+      "p5.strategy.hero.narrative.approval":
+        "{title}. {reason}. Requires operator approval.",
+      "p5.strategy.hero.narrative.calm.default":
+        "All strategies operating within normal parameters. No governance action needed.",
+      "p5.strategy.hero.narrative.escalation":
+        "{reason}. Automatic resolution not possible \u2014 manual adjustment recommended.",
+      "p5.strategy.hero.narrative.escalation.default":
+        "A situation requires escalation. Manual adjustment recommended.",
+      "p5.strategy.impact.label": "{strategy}: suspended",
+      "p5.strategy.impact.causal":
+        "\u2014 {condition} prevents economic dispatches",
+      "p5.strategy.impact.recovery": "Returns when {condition}",
+      "p5.strategy.impact.moreStrategies":
+        "+ {count} additional strategies affected",
+      "p5.strategy.impact.causal.generic":
+        "\u2014 active protection prevents operation",
+      "p5.strategy.family.tariff_arbitrage": "Tariff Arbitrage",
+
+      // ---- P5: Action Model Reframe (CTA pair — Phase 2) ----
+      "p5.strategy.cta.primary.protective": "Maintain protection",
+      "p5.strategy.cta.primary.approval": "Approve {family}",
+      "p5.strategy.cta.primary.escalation": "Adjust manually",
+      "p5.strategy.cta.defer.escalation": "\u23F8 Skip for now",
+      "p5.strategy.cta.tertiary.escalation": "Open HEMS panel to adjust",
+      "p5.strategy.cta.secondary.protective": "Adjust in HEMS",
+      "p5.strategy.cta.secondary.approval": "View details",
+      "p5.strategy.cta.secondary.calm": "Settings",
+      "p5.strategy.cta.secondary.escalation": "Adjust manually",
+      "p5.strategy.cta.loading": "Processing...",
+      "p5.strategy.cta.success": "Confirmed",
+      "p5.strategy.cta.error": "Error \u2014 try again",
+
+      // ---- P5: Action Model Reframe (Override staged — Phase 3) ----
+      "p5.strategy.override.staged.trigger": "Override platform decision",
+      "p5.strategy.override.staged.title": "Protection override",
+      "p5.strategy.override.staged.duration.label": "Override duration",
+      "p5.strategy.override.staged.duration.30": "30 min",
+      "p5.strategy.override.staged.duration.60": "1 hour",
+      "p5.strategy.override.staged.duration.120": "2 hours",
+      "p5.strategy.override.staged.duration.240": "4 hours",
+      "p5.strategy.override.staged.confirm": "Confirm override for {duration}",
+      "p5.strategy.override.staged.warning":
+        "Override will expire automatically after the selected period",
+      "p5.strategy.override.staged.success":
+        "Override active \u2014 expires in {time}",
+      "p5.strategy.override.staged.error": "Error creating override",
+      "p5.strategy.override.staged.loading": "Creating override...",
+
+      // ---- P5: Action Model Reframe (Defer Flow — Phase 12) ----
+      "p5.strategy.defer.label": "Defer review for:",
+      "p5.strategy.defer.toast":
+        "\u23F8 Review deferred for {duration}. Returns at {time} or sooner if conditions worsen.",
+      "p5.strategy.defer.error": "Failed to defer \u2014 try again",
+
+      // ---- P5: Deferred state rendering (Phase 13) ----
+      "p5.strategy.hero.deferred.title": "Review deferred until {time}",
+      "p5.strategy.hero.deferred.narrative":
+        "{reason}. Condition still active \u2014 review scheduled.",
+      "p5.strategy.hero.deferred.countdown": "Returns in {countdown}",
+      "p5.strategy.hero.reescalated":
+        "Review expired \u2014 condition still active.",
+      "p5.strategy.defer.badge": "Deferred",
+      "p5.strategy.cta.resume": "Resume now",
+      "p5.strategy.cta.resume.secondary": "Adjust manually",
+      "p5.strategy.defer.resume.toast":
+        "Review resumed. Escalation active again.",
+      "p5.strategy.defer.resume.error": "Failed to resume \u2014 try again",
+
+      // ---- P5: Action Model Reframe (Alert Control — Phase 4) ----
+      "p5.strategy.alert.silence.trigger": "Silence repeated alerts",
+      "p5.strategy.alert.silence.title": "Alert control",
+      "p5.strategy.alert.silence.duration.label": "Silence for",
+      "p5.strategy.alert.silence.confirm": "Silence for {duration}",
+      "p5.strategy.alert.silence.warning":
+        "Alerts will return automatically after the period",
+      "p5.strategy.alert.silence.success": "Alerts silenced for {duration}",
+      "p5.strategy.alert.silence.error": "Error silencing alerts",
+      "p5.strategy.alert.silence.loading": "Silencing...",
+
+      // ---- P5: Result Preview ----
+      "p5.strategy.preview.title": "What happens next",
+      "p5.strategy.preview.default":
+        "Select an action above to see the impact on operations.",
+      "p5.strategy.preview.tag.decision": "Decision confirmed",
+      "p5.strategy.preview.tag.navigate": "Navigation",
+      "p5.strategy.preview.tag.defer": "Review deferred",
+      "p5.strategy.preview.tag.override": "Override active",
+      "p5.strategy.preview.tag.alert": "Alerts",
+      "p5.strategy.preview.keep.item1": "Reserve protection maintained",
+      "p5.strategy.preview.keep.item2": "Economic dispatches remain suspended",
+      "p5.strategy.preview.keep.item3": "Tariff arbitrage remains blocked",
+      "p5.strategy.preview.keep.item4":
+        "Automatic recovery when SoC exceeds {threshold}%",
+      "p5.strategy.preview.adjust.item1":
+        "HEMS panel opens with loaded context (current SoC, limits, active trigger)",
+      "p5.strategy.preview.adjust.item2":
+        "Adjust dispatch parameters or reserve limits",
+      "p5.strategy.preview.adjust.item3":
+        "On save, strategy will be re-evaluated automatically",
+      "p5.strategy.preview.defer.item1": "Escalation deferred for {duration}",
+      "p5.strategy.preview.defer.item2":
+        "Underlying condition remains active \u2014 not resolved",
+      "p5.strategy.preview.defer.item3":
+        "Homepage returns to escalation if conditions worsen",
+      "p5.strategy.preview.defer.item4": "Decision recorded for audit",
+      "p5.strategy.preview.override.item1":
+        "Reserve protection disabled for {duration}",
+      "p5.strategy.preview.override.item2":
+        "Economic dispatches and arbitrage released during window",
+      "p5.strategy.preview.override.item3":
+        "Protection returns automatically on expiry",
+      "p5.strategy.preview.alert.item1":
+        "Repeated same-level alerts silenced for {duration}",
+      "p5.strategy.preview.alert.item2": "No change to platform operations",
+      "p5.strategy.preview.alert.item3": "Higher-severity alerts remain active",
+
       // ---- P6: Performance ----
       "perf.obj1": "OBJECTIVE 1: Hardware",
       "perf.obj2": "OBJECTIVE 2: Optimization",
@@ -1596,6 +1723,144 @@ var I18n = (function () {
       "p5.strategy.trace.platformHandling": "plataforma tratando autonomamente",
       "p5.strategy.urgency.immediate": "Imediato",
       "p5.strategy.urgency.watch": "Observar",
+
+      // ---- P5: Action Model Reframe (hero + impact strip) ----
+      "p5.strategy.hero.rec.protective":
+        "Recomenda\u00e7\u00e3o: manter prote\u00e7\u00e3o de reserva ativa",
+      "p5.strategy.hero.rec.approval":
+        "Recomenda\u00e7\u00e3o: avaliar {family}",
+      "p5.strategy.hero.rec.calm": "Sistema operando normalmente",
+      "p5.strategy.hero.rec.escalation":
+        "Recomenda\u00e7\u00e3o: avaliar situa\u00e7\u00e3o em HEMS",
+      "p5.strategy.hero.narrative.protective":
+        "Reserva em {soc}% SoC \u2014 abaixo do limite de {threshold}%. Despachos econ\u00f4micos suspensos para proteger capacidade de backup.",
+      "p5.strategy.hero.narrative.protective.noMetrics":
+        "Prote\u00e7\u00e3o de reserva ativa. Despachos econ\u00f4micos suspensos para proteger capacidade de backup.",
+      "p5.strategy.hero.narrative.approval":
+        "{title}. {reason}. Requer aprova\u00e7\u00e3o do operador.",
+      "p5.strategy.hero.narrative.calm.default":
+        "Todas as estrat\u00e9gias operando dentro dos par\u00e2metros normais. Nenhuma a\u00e7\u00e3o de governan\u00e7a necess\u00e1ria.",
+      "p5.strategy.hero.narrative.escalation":
+        "{reason}. Resolu\u00e7\u00e3o autom\u00e1tica n\u00e3o \u00e9 poss\u00edvel \u2014 ajuste manual recomendado.",
+      "p5.strategy.hero.narrative.escalation.default":
+        "Uma situa\u00e7\u00e3o requer escala\u00e7\u00e3o. Ajuste manual recomendado.",
+      "p5.strategy.impact.label": "{strategy}: suspensa",
+      "p5.strategy.impact.causal":
+        "\u2014 {condition} impede despachos econ\u00f4micos",
+      "p5.strategy.impact.recovery": "Retorna quando {condition}",
+      "p5.strategy.impact.moreStrategies":
+        "+ {count} estrat\u00e9gias adicionais afetadas",
+      "p5.strategy.impact.causal.generic":
+        "\u2014 prote\u00e7\u00e3o ativa impede opera\u00e7\u00e3o",
+      "p5.strategy.family.tariff_arbitrage": "Arbitragem tarif\u00e1ria",
+
+      // ---- P5: Action Model Reframe (CTA pair — Phase 2) ----
+      "p5.strategy.cta.primary.protective": "Manter prote\u00e7\u00e3o",
+      "p5.strategy.cta.primary.approval": "Aprovar {family}",
+      "p5.strategy.cta.primary.escalation": "Ajustar manualmente",
+      "p5.strategy.cta.defer.escalation": "\u23F8 Pular por agora",
+      "p5.strategy.cta.tertiary.escalation": "Abrir painel HEMS para ajustar",
+      "p5.strategy.cta.secondary.protective": "Ajustar no HEMS",
+      "p5.strategy.cta.secondary.approval": "Ver detalhes",
+      "p5.strategy.cta.secondary.calm": "Configura\u00e7\u00f5es",
+      "p5.strategy.cta.secondary.escalation": "Ajustar manualmente",
+      "p5.strategy.cta.loading": "Processando...",
+      "p5.strategy.cta.success": "Confirmado",
+      "p5.strategy.cta.error": "Erro \u2014 tente novamente",
+
+      // ---- P5: Action Model Reframe (Override staged — Phase 3) ----
+      "p5.strategy.override.staged.trigger":
+        "Substituir decis\u00e3o da plataforma",
+      "p5.strategy.override.staged.title": "Override de prote\u00e7\u00e3o",
+      "p5.strategy.override.staged.duration.label":
+        "Dura\u00e7\u00e3o do override",
+      "p5.strategy.override.staged.duration.30": "30 min",
+      "p5.strategy.override.staged.duration.60": "1 hora",
+      "p5.strategy.override.staged.duration.120": "2 horas",
+      "p5.strategy.override.staged.duration.240": "4 horas",
+      "p5.strategy.override.staged.confirm":
+        "Confirmar override por {duration}",
+      "p5.strategy.override.staged.warning":
+        "Override expirar\u00e1 automaticamente ap\u00f3s o per\u00edodo selecionado",
+      "p5.strategy.override.staged.success":
+        "Override ativo \u2014 expira em {time}",
+      "p5.strategy.override.staged.error": "Erro ao criar override",
+      "p5.strategy.override.staged.loading": "Criando override...",
+
+      // ---- P5: Action Model Reframe (Defer Flow — Phase 12) ----
+      "p5.strategy.defer.label": "Adiar revis\u00e3o por:",
+      "p5.strategy.defer.toast":
+        "\u23F8 Revis\u00e3o adiada por {duration}. Retorna \u00e0s {time} ou antes se condi\u00e7\u00f5es piorarem.",
+      "p5.strategy.defer.error": "Falha ao adiar \u2014 tente novamente",
+
+      // ---- P5: Deferred state rendering (Phase 13) ----
+      "p5.strategy.hero.deferred.title": "Revis\u00e3o adiada at\u00e9 {time}",
+      "p5.strategy.hero.deferred.narrative":
+        "{reason}. Condi\u00e7\u00e3o ainda ativa \u2014 revis\u00e3o agendada.",
+      "p5.strategy.hero.deferred.countdown": "Retorna em {countdown}",
+      "p5.strategy.hero.reescalated":
+        "Revis\u00e3o expirou \u2014 condi\u00e7\u00e3o ainda ativa.",
+      "p5.strategy.defer.badge": "Adiado",
+      "p5.strategy.cta.resume": "Retomar agora",
+      "p5.strategy.cta.resume.secondary": "Ajustar manualmente",
+      "p5.strategy.defer.resume.toast":
+        "Revis\u00e3o retomada. Escala\u00e7\u00e3o ativa novamente.",
+      "p5.strategy.defer.resume.error":
+        "Falha ao retomar \u2014 tente novamente",
+
+      // ---- P5: Action Model Reframe (Alert Control — Phase 4) ----
+      "p5.strategy.alert.silence.trigger": "Silenciar alertas repetidos",
+      "p5.strategy.alert.silence.title": "Controle de alertas",
+      "p5.strategy.alert.silence.duration.label": "Silenciar por",
+      "p5.strategy.alert.silence.confirm": "Silenciar por {duration}",
+      "p5.strategy.alert.silence.warning":
+        "Alertas voltar\u00e3o automaticamente ap\u00f3s o per\u00edodo",
+      "p5.strategy.alert.silence.success": "Alertas silenciados por {duration}",
+      "p5.strategy.alert.silence.error": "Erro ao silenciar alertas",
+      "p5.strategy.alert.silence.loading": "Silenciando...",
+
+      // ---- P5: Result Preview ----
+      "p5.strategy.preview.title": "O que acontece a seguir",
+      "p5.strategy.preview.default":
+        "Selecione uma a\u00e7\u00e3o acima para ver o impacto na opera\u00e7\u00e3o.",
+      "p5.strategy.preview.tag.decision": "Decis\u00e3o confirmada",
+      "p5.strategy.preview.tag.navigate": "Navega\u00e7\u00e3o",
+      "p5.strategy.preview.tag.defer": "Revis\u00e3o adiada",
+      "p5.strategy.preview.tag.override": "Override ativo",
+      "p5.strategy.preview.tag.alert": "Alertas",
+      "p5.strategy.preview.keep.item1": "Prote\u00e7\u00e3o de reserva mantida",
+      "p5.strategy.preview.keep.item2":
+        "Despachos econ\u00f4micos permanecem suspensos",
+      "p5.strategy.preview.keep.item3":
+        "Arbitragem tarif\u00e1ria continua bloqueada",
+      "p5.strategy.preview.keep.item4":
+        "Retomada autom\u00e1tica quando SoC ultrapassar {threshold}%",
+      "p5.strategy.preview.adjust.item1":
+        "Painel HEMS abre com contexto carregado (SoC atual, limites, gatilho ativo)",
+      "p5.strategy.preview.adjust.item2":
+        "Ajuste par\u00e2metros de despacho ou limites de reserva",
+      "p5.strategy.preview.adjust.item3":
+        "Ao salvar, a estrat\u00e9gia ser\u00e1 reavaliada automaticamente",
+      "p5.strategy.preview.defer.item1":
+        "Escala\u00e7\u00e3o adiada por {duration}",
+      "p5.strategy.preview.defer.item2":
+        "Condi\u00e7\u00e3o subjacente permanece ativa \u2014 n\u00e3o resolvida",
+      "p5.strategy.preview.defer.item3":
+        "Homepage retorna ao estado de escala\u00e7\u00e3o se condi\u00e7\u00f5es piorarem",
+      "p5.strategy.preview.defer.item4":
+        "Decis\u00e3o registrada para auditoria",
+      "p5.strategy.preview.override.item1":
+        "Prote\u00e7\u00e3o de reserva desativada por {duration}",
+      "p5.strategy.preview.override.item2":
+        "Despachos econ\u00f4micos e arbitragem liberados durante a janela",
+      "p5.strategy.preview.override.item3":
+        "Prote\u00e7\u00e3o retorna automaticamente ao expirar",
+      "p5.strategy.preview.alert.item1":
+        "Alertas repetidos de mesmo n\u00edvel silenciados por {duration}",
+      "p5.strategy.preview.alert.item2":
+        "Nenhuma mudan\u00e7a na opera\u00e7\u00e3o da plataforma",
+      "p5.strategy.preview.alert.item3":
+        "Alertas de maior severidade continuam ativos",
 
       // ---- P6: Performance ----
       "perf.obj1": "OBJETIVO 1: Hardware",
@@ -2519,6 +2784,155 @@ var I18n = (function () {
         "\u5e73\u53f0\u81ea\u4e3b\u5904\u7406\u4e2d",
       "p5.strategy.urgency.immediate": "\u7acb\u5373",
       "p5.strategy.urgency.watch": "\u89c2\u5bdf",
+
+      // ---- P5: Action Model Reframe (hero + impact strip) ----
+      "p5.strategy.hero.rec.protective":
+        "\u5efa\u8bae\uff1a\u4fdd\u6301\u50a8\u5907\u4fdd\u62a4\u6d3b\u52a8",
+      "p5.strategy.hero.rec.approval":
+        "\u5efa\u8bae\uff1a\u8bc4\u4f30 {family}",
+      "p5.strategy.hero.rec.calm": "\u7cfb\u7edf\u6b63\u5e38\u8fd0\u884c",
+      "p5.strategy.hero.rec.escalation":
+        "\u5efa\u8bae\uff1a\u5728 HEMS \u4e2d\u8bc4\u4f30\u60c5\u51b5",
+      "p5.strategy.hero.narrative.protective":
+        "\u50a8\u5907 {soc}% SoC \u2014 \u4f4e\u4e8e {threshold}% \u9650\u5236\u3002\u7ecf\u6d4e\u8c03\u5ea6\u5df2\u6682\u505c\u4ee5\u4fdd\u62a4\u5907\u7528\u5bb9\u91cf\u3002",
+      "p5.strategy.hero.narrative.protective.noMetrics":
+        "\u50a8\u5907\u4fdd\u62a4\u6d3b\u52a8\u3002\u7ecf\u6d4e\u8c03\u5ea6\u5df2\u6682\u505c\u4ee5\u4fdd\u62a4\u5907\u7528\u5bb9\u91cf\u3002",
+      "p5.strategy.hero.narrative.approval":
+        "{title}\u3002{reason}\u3002\u9700\u8981\u64cd\u4f5c\u5458\u5ba1\u6279\u3002",
+      "p5.strategy.hero.narrative.calm.default":
+        "\u6240\u6709\u7b56\u7565\u5728\u6b63\u5e38\u53c2\u6570\u5185\u8fd0\u884c\u3002\u65e0\u9700\u6cbb\u7406\u64cd\u4f5c\u3002",
+      "p5.strategy.hero.narrative.escalation":
+        "{reason}\u3002\u65e0\u6cd5\u81ea\u52a8\u89e3\u51b3 \u2014 \u5efa\u8bae\u624b\u52a8\u8c03\u6574\u3002",
+      "p5.strategy.hero.narrative.escalation.default":
+        "\u60c5\u51b5\u9700\u8981\u5347\u7ea7\u3002\u5efa\u8bae\u624b\u52a8\u8c03\u6574\u3002",
+      "p5.strategy.impact.label": "{strategy}\uff1a\u5df2\u6682\u505c",
+      "p5.strategy.impact.causal":
+        "\u2014 {condition} \u963b\u6b62\u7ecf\u6d4e\u8c03\u5ea6",
+      "p5.strategy.impact.recovery":
+        "\u6062\u590d\u6761\u4ef6\uff1a{condition}",
+      "p5.strategy.impact.moreStrategies":
+        "+ {count} \u4e2a\u989d\u5916\u7b56\u7565\u53d7\u5f71\u54cd",
+      "p5.strategy.impact.causal.generic":
+        "\u2014 \u6d3b\u52a8\u4fdd\u62a4\u963b\u6b62\u64cd\u4f5c",
+      "p5.strategy.family.tariff_arbitrage": "\u7535\u4ef7\u5957\u5229",
+
+      // ---- P5: Action Model Reframe (CTA pair — Phase 2) ----
+      "p5.strategy.cta.primary.protective": "\u4fdd\u6301\u4fdd\u62a4",
+      "p5.strategy.cta.primary.approval": "\u6279\u51c6 {family}",
+      "p5.strategy.cta.primary.escalation": "\u624B\u52A8\u8C03\u6574",
+      "p5.strategy.cta.defer.escalation": "\u23F8 \u7A0D\u540E\u518D\u770B",
+      "p5.strategy.cta.tertiary.escalation":
+        "\u6253\u5F00 HEMS \u9762\u677F\u8FDB\u884C\u8C03\u6574",
+      "p5.strategy.cta.secondary.protective": "\u5728HEMS\u4e2d\u8c03\u6574",
+      "p5.strategy.cta.secondary.approval": "\u67e5\u770b\u8be6\u60c5",
+      "p5.strategy.cta.secondary.calm": "\u8bbe\u7f6e",
+      "p5.strategy.cta.secondary.escalation": "\u624b\u52a8\u8c03\u6574",
+      "p5.strategy.cta.loading": "\u5904\u7406\u4e2d...",
+      "p5.strategy.cta.success": "\u5df2\u786e\u8ba4",
+      "p5.strategy.cta.error": "\u9519\u8bef \u2014 \u8bf7\u91cd\u8bd5",
+
+      // ---- P5: Action Model Reframe (Override staged — Phase 3) ----
+      "p5.strategy.override.staged.trigger":
+        "\u8986\u76d6\u5e73\u53f0\u51b3\u7b56",
+      "p5.strategy.override.staged.title": "\u4fdd\u62a4\u8986\u76d6",
+      "p5.strategy.override.staged.duration.label":
+        "\u8986\u76d6\u6301\u7eed\u65f6\u95f4",
+      "p5.strategy.override.staged.duration.30": "30 \u5206\u949f",
+      "p5.strategy.override.staged.duration.60": "1 \u5c0f\u65f6",
+      "p5.strategy.override.staged.duration.120": "2 \u5c0f\u65f6",
+      "p5.strategy.override.staged.duration.240": "4 \u5c0f\u65f6",
+      "p5.strategy.override.staged.confirm":
+        "\u786e\u8ba4\u8986\u76d6 {duration}",
+      "p5.strategy.override.staged.warning":
+        "\u8986\u76d6\u5c06\u5728\u6240\u9009\u65f6\u6bb5\u540e\u81ea\u52a8\u8fc7\u671f",
+      "p5.strategy.override.staged.success":
+        "\u8986\u76d6\u5df2\u6fc0\u6d3b \u2014 {time} \u540e\u8fc7\u671f",
+      "p5.strategy.override.staged.error":
+        "\u521b\u5efa\u8986\u76d6\u65f6\u51fa\u9519",
+      "p5.strategy.override.staged.loading":
+        "\u6b63\u5728\u521b\u5efa\u8986\u76d6...",
+
+      // ---- P5: Action Model Reframe (Defer Flow — Phase 12) ----
+      "p5.strategy.defer.label": "\u5EF6\u8FDF\u5BA1\u67E5:",
+      "p5.strategy.defer.toast":
+        "\u23F8 \u5DF2\u5EF6\u8FDF {duration}\u3002\u5C06\u4E8E {time} \u8FD4\u56DE\uFF0C\u6216\u5728\u6761\u4EF6\u6076\u5316\u65F6\u66F4\u65E9\u8FD4\u56DE\u3002",
+      "p5.strategy.defer.error":
+        "\u5EF6\u8FDF\u5931\u8D25 \u2014 \u8BF7\u91CD\u8BD5",
+
+      // ---- P5: Deferred state rendering (Phase 13) ----
+      "p5.strategy.hero.deferred.title":
+        "\u5BA1\u67E5\u5DF2\u5EF6\u8FDF\u81F3 {time}",
+      "p5.strategy.hero.deferred.narrative":
+        "{reason}\u3002\u6761\u4EF6\u4ECD\u7136\u6D3B\u8DC3 \u2014 \u5BA1\u67E5\u5DF2\u5B89\u6392\u3002",
+      "p5.strategy.hero.deferred.countdown": "{countdown} \u540E\u8FD4\u56DE",
+      "p5.strategy.hero.reescalated":
+        "\u5BA1\u67E5\u5DF2\u8FC7\u671F \u2014 \u6761\u4EF6\u4ECD\u7136\u6D3B\u8DC3\u3002",
+      "p5.strategy.defer.badge": "\u5DF2\u5EF6\u8FDF",
+      "p5.strategy.cta.resume": "\u7ACB\u5373\u6062\u590D",
+      "p5.strategy.cta.resume.secondary": "\u624B\u52A8\u8C03\u6574",
+      "p5.strategy.defer.resume.toast":
+        "\u5BA1\u67E5\u5DF2\u6062\u590D\u3002\u5347\u7EA7\u518D\u6B21\u6FC0\u6D3B\u3002",
+      "p5.strategy.defer.resume.error":
+        "\u6062\u590D\u5931\u8D25 \u2014 \u8BF7\u91CD\u8BD5",
+
+      // ---- P5: Action Model Reframe (Alert Control — Phase 4) ----
+      "p5.strategy.alert.silence.trigger":
+        "\u9759\u97f3\u91cd\u590d\u8b66\u62a5",
+      "p5.strategy.alert.silence.title": "\u8b66\u62a5\u63a7\u5236",
+      "p5.strategy.alert.silence.duration.label": "\u9759\u97f3\u65f6\u957f",
+      "p5.strategy.alert.silence.confirm": "\u9759\u97f3 {duration}",
+      "p5.strategy.alert.silence.warning":
+        "\u8b66\u62a5\u5c06\u5728\u671f\u9650\u540e\u81ea\u52a8\u6062\u590d",
+      "p5.strategy.alert.silence.success":
+        "\u8b66\u62a5\u5df2\u9759\u97f3 {duration}",
+      "p5.strategy.alert.silence.error":
+        "\u9759\u97f3\u8b66\u62a5\u65f6\u51fa\u9519",
+      "p5.strategy.alert.silence.loading": "\u6b63\u5728\u9759\u97f3...",
+
+      // ---- P5: Result Preview ----
+      "p5.strategy.preview.title":
+        "\u63A5\u4E0B\u6765\u4F1A\u53D1\u751F\u4EC0\u4E48",
+      "p5.strategy.preview.default":
+        "\u9009\u62E9\u4E0A\u65B9\u7684\u64CD\u4F5C\u67E5\u770B\u5BF9\u8FD0\u884C\u7684\u5F71\u54CD\u3002",
+      "p5.strategy.preview.tag.decision": "\u51B3\u7B56\u5DF2\u786E\u8BA4",
+      "p5.strategy.preview.tag.navigate": "\u5BFC\u822A",
+      "p5.strategy.preview.tag.defer": "\u5BA1\u67E5\u5DF2\u5EF6\u8FDF",
+      "p5.strategy.preview.tag.override": "Override \u6D3B\u8DC3",
+      "p5.strategy.preview.tag.alert": "\u8B66\u62A5",
+      "p5.strategy.preview.keep.item1":
+        "\u50A8\u5907\u4FDD\u62A4\u5DF2\u7EF4\u6301",
+      "p5.strategy.preview.keep.item2":
+        "\u7ECF\u6D4E\u8C03\u5EA6\u7EE7\u7EED\u6682\u505C",
+      "p5.strategy.preview.keep.item3":
+        "\u5957\u5229\u4EA4\u6613\u7EE7\u7EED\u963B\u6B62",
+      "p5.strategy.preview.keep.item4":
+        "SoC \u8D85\u8FC7 {threshold}% \u65F6\u81EA\u52A8\u6062\u590D",
+      "p5.strategy.preview.adjust.item1":
+        "HEMS \u9762\u677F\u5C06\u52A0\u8F7D\u5F53\u524D\u4E0A\u4E0B\u6587\uFF08SoC\u3001\u9650\u5236\u3001\u6D3B\u8DC3\u89E6\u53D1\u5668\uFF09",
+      "p5.strategy.preview.adjust.item2":
+        "\u8C03\u6574\u8C03\u5EA6\u53C2\u6570\u6216\u50A8\u5907\u9650\u5236",
+      "p5.strategy.preview.adjust.item3":
+        "\u4FDD\u5B58\u540E\u7B56\u7565\u5C06\u81EA\u52A8\u91CD\u65B0\u8BC4\u4F30",
+      "p5.strategy.preview.defer.item1":
+        "\u5347\u7EA7\u5DF2\u5EF6\u8FDF {duration}",
+      "p5.strategy.preview.defer.item2":
+        "\u6F5C\u5728\u6761\u4EF6\u4ECD\u7136\u6D3B\u8DC3 \u2014 \u672A\u89E3\u51B3",
+      "p5.strategy.preview.defer.item3":
+        "\u6761\u4EF6\u6076\u5316\u65F6\u9996\u9875\u5C06\u8FD4\u56DE\u5347\u7EA7\u72B6\u6001",
+      "p5.strategy.preview.defer.item4":
+        "\u51B3\u7B56\u5DF2\u8BB0\u5F55\u7528\u4E8E\u5BA1\u8BA1",
+      "p5.strategy.preview.override.item1":
+        "\u50A8\u5907\u4FDD\u62A4\u5DF2\u7981\u7528 {duration}",
+      "p5.strategy.preview.override.item2":
+        "\u7ECF\u6D4E\u8C03\u5EA6\u548C\u5957\u5229\u5728\u7A97\u53E3\u671F\u95F4\u5DF2\u91CA\u653E",
+      "p5.strategy.preview.override.item3":
+        "\u4FDD\u62A4\u5230\u671F\u540E\u81EA\u52A8\u6062\u590D",
+      "p5.strategy.preview.alert.item1":
+        "\u540C\u7EA7\u91CD\u590D\u8B66\u62A5\u5DF2\u9759\u97F3 {duration}",
+      "p5.strategy.preview.alert.item2":
+        "\u5E73\u53F0\u8FD0\u884C\u65E0\u53D8\u5316",
+      "p5.strategy.preview.alert.item3":
+        "\u66F4\u9AD8\u4E25\u91CD\u7EA7\u522B\u7684\u8B66\u62A5\u4ECD\u7136\u6D3B\u8DC3",
 
       // ---- P6: Performance ----
       "perf.obj1": "\u76ee\u6807 1\uff1a\u786c\u4ef6",

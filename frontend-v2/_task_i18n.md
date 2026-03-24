@@ -1,7 +1,7 @@
 # Task: i18n — Three-Language Support (pt-BR / en / zh-CN)
 
 ## Working Directory
-`/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/frontend-v2/`
+`/tmp/retired-solfacil/2026-02-15_SOLFACIL_VPP_Demo/frontend-v2/`
 
 ## Context
 The Admin Portal has 6 working pages with hardcoded English UI labels. We need to add i18n support for 3 languages:

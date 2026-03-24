@@ -1,13 +1,13 @@
 # Task: Phase 0 (Foundation) + Phase 1 (Fleet Overview)
 
 ## CRITICAL: Read these reference files FIRST before writing any code
-1. `/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Pages_v1.2.html` — Design spec (component definitions, fields, colors, role visibility)
-2. `/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Build_Plan_v1.0.html` — Build plan (mock data, acceptance criteria, engineering constraints)
+1. `/tmp/retired-solfacil/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Pages_v1.2.html` — Design spec (component definitions, fields, colors, role visibility)
+2. `/tmp/retired-solfacil/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Build_Plan_v1.0.html` — Build plan (mock data, acceptance criteria, engineering constraints)
 
 Read BOTH files completely before starting. They contain mandatory engineering constraints (8 critical pitfalls marked with 🚨) that you MUST follow.
 
 ## Working Directory
-`/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/frontend-v2/`
+`/tmp/retired-solfacil/2026-02-15_SOLFACIL_VPP_Demo/frontend-v2/`
 
 ## Goal
 Build the foundation CSS/JS framework + the Fleet Overview page (landing page) as a static SPA with mock data. This sets the visual tone for the entire Admin Portal.

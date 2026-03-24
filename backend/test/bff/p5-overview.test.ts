@@ -9,6 +9,7 @@ import type { APIGatewayProxyEventV2 } from "aws-lambda";
 const mockEvaluateStrategies = jest.fn();
 const mockResolvePosture = jest.fn();
 const mockGetActiveOverrides = jest.fn();
+const mockGetActiveIntents = jest.fn();
 const mockQueryWithOrg = jest.fn();
 
 jest.mock("../../src/optimization-engine/services/strategy-evaluator", () => ({
@@ -21,7 +22,7 @@ jest.mock("../../src/optimization-engine/services/posture-resolver", () => ({
 
 jest.mock("../../src/shared/p5-db", () => ({
   getActiveOverrides: mockGetActiveOverrides,
-  getActiveIntents: jest.fn().mockResolvedValue([]),
+  getActiveIntents: mockGetActiveIntents,
 }));
 
 jest.mock("../../src/shared/db", () => ({
@@ -106,6 +107,8 @@ function makeIntent(overrides: Partial<StrategyIntent> = {}): StrategyIntent {
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     expires_at: new Date(Date.now() + 7200000).toISOString(),
+    defer_until: null,
+    deferred_by: null,
     ...overrides,
   };
 }
@@ -114,6 +117,7 @@ beforeEach(() => {
   jest.clearAllMocks();
   mockQueryWithOrg.mockResolvedValue({ rows: [] });
   mockGetActiveOverrides.mockResolvedValue([]);
+  mockGetActiveIntents.mockResolvedValue([]);
 });
 
 describe("GET /api/p5/overview", () => {
@@ -421,5 +425,433 @@ describe("GET /api/p5/overview", () => {
     const { body } = parse(await handler(makeEvent()));
     expect(body.data.hero.posture).toBe("protective");
     expect(body.data.calm_explanation).toBeNull();
+  });
+
+  // ── T-DEFER-1: Baseline — no deferrals, defer_context is null ────────
+  it("T-DEFER-1: no deferrals — defer_context null, escalation intent in need_decision_now", async () => {
+    const intent = makeIntent({
+      id: 100,
+      family: "peak_shaving",
+      governance_mode: "escalate",
+      status: "active",
+      urgency: "immediate",
+      title: "Scope collision detected",
+      scope_gateway_ids: ["gw-1"],
+    });
+    mockEvaluateStrategies.mockResolvedValue([intent]);
+    mockResolvePosture.mockResolvedValue([intent]);
+
+    const { body } = parse(await handler(makeEvent()));
+    expect(body.data.defer_context).toBeNull();
+    expect(body.data.need_decision_now).toEqual(
+      expect.arrayContaining([expect.objectContaining({ id: 100 })]),
+    );
+    expect(body.data.hero.posture).toBe("escalation");
+  });
+
+  // ── T-DEFER-2: Deferred case — both intents move to watch_next ───────
+  it("T-DEFER-2: deferred case suppresses same-fingerprint intents from need_decision_now", async () => {
+    const futureDate = new Date(Date.now() + 86400000).toISOString();
+    // Intent A is deferred in DB (operator action), not returned by evaluator
+    const intentA = makeIntent({
+      id: 101,
+      family: "peak_shaving",
+      governance_mode: "escalate",
+      status: "deferred",
+      urgency: "immediate",
+      title: "Peak shaving deferred",
+      scope_gateway_ids: ["gw-1"],
+      defer_until: futureDate,
+      deferred_by: "operator",
+      decided_at: new Date().toISOString(),
+    });
+    // Intent B is active (re-created by evaluator with same fingerprint)
+    const intentB = makeIntent({
+      id: 102,
+      family: "peak_shaving",
+      governance_mode: "escalate",
+      status: "active",
+      urgency: "immediate",
+      title: "Peak shaving active sibling",
+      scope_gateway_ids: ["gw-1"],
+    });
+    // Evaluator returns only the active intent
+    mockEvaluateStrategies.mockResolvedValue([intentB]);
+    mockResolvePosture.mockResolvedValue([intentB]);
+    // DB returns both (deferred + active)
+    mockGetActiveIntents.mockResolvedValue([intentA, intentB]);
+
+    const { body } = parse(await handler(makeEvent()));
+
+    // Neither should be in need_decision_now
+    const nddIds = body.data.need_decision_now.map((c: { id: number }) => c.id);
+    expect(nddIds).not.toContain(101);
+    expect(nddIds).not.toContain(102);
+
+    // Both should be in watch_next
+    const wnIds = body.data.watch_next.map((c: { id: number }) => c.id);
+    expect(wnIds).toContain(101);
+    expect(wnIds).toContain(102);
+
+    // Posture should NOT be escalation (all escalation intents are deferred-case)
+    expect(body.data.hero.posture).not.toBe("escalation");
+
+    // defer_context should be populated
+    expect(body.data.defer_context).not.toBeNull();
+    expect(body.data.defer_context.deferred_intent_id).toBe(101);
+    expect(body.data.defer_context.defer_until).toBe(futureDate);
+  });
+
+  // ── T-DEFER-3: Hero governance_summary excludes deferred-case intents ─
+  it("T-DEFER-3: governance_summary excludes deferred-case escalation intents", async () => {
+    const futureDate = new Date(Date.now() + 86400000).toISOString();
+    const intentA = makeIntent({
+      id: 110,
+      family: "peak_shaving",
+      governance_mode: "escalate",
+      status: "deferred",
+      urgency: "immediate",
+      title: "Peak shaving deferred",
+      scope_gateway_ids: ["gw-1"],
+      defer_until: futureDate,
+      deferred_by: "operator",
+    });
+    const intentB = makeIntent({
+      id: 111,
+      family: "peak_shaving",
+      governance_mode: "escalate",
+      status: "active",
+      urgency: "immediate",
+      title: "Peak shaving active sibling",
+      scope_gateway_ids: ["gw-1"],
+    });
+    mockEvaluateStrategies.mockResolvedValue([intentB]);
+    mockResolvePosture.mockResolvedValue([intentB]);
+    mockGetActiveIntents.mockResolvedValue([intentA, intentB]);
+
+    const { body } = parse(await handler(makeEvent()));
+    expect(body.data.hero.governance_summary).not.toContain(
+      "requiring operator arbitration",
+    );
+  });
+
+  // ── T-DEFER-4: Mixed — one deferred case, one independent escalation ──
+  it("T-DEFER-4: independent escalation stays in need_decision_now while deferred case moves", async () => {
+    const futureDate = new Date(Date.now() + 86400000).toISOString();
+    const intentA = makeIntent({
+      id: 120,
+      family: "peak_shaving",
+      governance_mode: "escalate",
+      status: "deferred",
+      urgency: "immediate",
+      title: "Peak shaving deferred",
+      scope_gateway_ids: ["gw-1"],
+      defer_until: futureDate,
+      deferred_by: "operator",
+    });
+    const intentB = makeIntent({
+      id: 121,
+      family: "peak_shaving",
+      governance_mode: "escalate",
+      status: "active",
+      urgency: "immediate",
+      title: "Peak shaving active sibling",
+      scope_gateway_ids: ["gw-1"],
+    });
+    const intentC = makeIntent({
+      id: 122,
+      family: "tariff_arbitrage",
+      governance_mode: "escalate",
+      status: "active",
+      urgency: "soon",
+      title: "Tariff collision independent",
+      scope_gateway_ids: ["gw-2"],
+    });
+    // Evaluator returns active intents (B + C), not the deferred A
+    mockEvaluateStrategies.mockResolvedValue([intentB, intentC]);
+    mockResolvePosture.mockResolvedValue([intentB, intentC]);
+    // DB returns all three
+    mockGetActiveIntents.mockResolvedValue([intentA, intentB, intentC]);
+
+    const { body } = parse(await handler(makeEvent()));
+
+    // Intent B (deferred case) in watch_next, NOT in need_decision_now
+    const nddIds = body.data.need_decision_now.map((c: { id: number }) => c.id);
+    const wnIds = body.data.watch_next.map((c: { id: number }) => c.id);
+    expect(nddIds).not.toContain(121);
+    expect(wnIds).toContain(121);
+
+    // Intent C (independent) in need_decision_now
+    expect(nddIds).toContain(122);
+
+    // Posture is escalation because C is still active
+    expect(body.data.hero.posture).toBe("escalation");
+  });
+
+  // ── T-DEFER-5: Expired deferral — intent returns to normal ────────────
+  it("T-DEFER-5: expired deferral does not suppress same-fingerprint intents", async () => {
+    const pastDate = new Date(Date.now() - 86400000).toISOString();
+    const intentA = makeIntent({
+      id: 130,
+      family: "peak_shaving",
+      governance_mode: "escalate",
+      status: "deferred",
+      urgency: "immediate",
+      title: "Peak shaving expired defer",
+      scope_gateway_ids: ["gw-1"],
+      defer_until: pastDate,
+      deferred_by: "operator",
+    });
+    const intentB = makeIntent({
+      id: 131,
+      family: "peak_shaving",
+      governance_mode: "escalate",
+      status: "active",
+      urgency: "immediate",
+      title: "Peak shaving active sibling",
+      scope_gateway_ids: ["gw-1"],
+    });
+    // Evaluator returns only intent B (active)
+    mockEvaluateStrategies.mockResolvedValue([intentB]);
+    mockResolvePosture.mockResolvedValue([intentB]);
+    // DB returns both (expired deferred + active)
+    mockGetActiveIntents.mockResolvedValue([intentA, intentB]);
+
+    const { body } = parse(await handler(makeEvent()));
+
+    // defer_context should be null (expired)
+    expect(body.data.defer_context).toBeNull();
+
+    // Intent A (expired deferred) in watch_next (status is still "deferred")
+    const wnIds = body.data.watch_next.map((c: { id: number }) => c.id);
+    expect(wnIds).toContain(130);
+
+    // Intent B should NOT be suppressed — it should be in need_decision_now
+    const nddIds = body.data.need_decision_now.map((c: { id: number }) => c.id);
+    expect(nddIds).toContain(131);
+  });
+
+  // ── T-WORSEN-1: SoC drops ≥ 10pp from defer-time → defer broken ──────
+  it("T-WORSEN-1: SoC drops ≥ 10pp from defer-time breaks defer", async () => {
+    const futureDate = new Date(Date.now() + 86400000).toISOString();
+    const deferredIntent = makeIntent({
+      id: 200,
+      family: "reserve_protection",
+      governance_mode: "escalate",
+      status: "deferred",
+      urgency: "immediate",
+      title: "Reserve protection deferred",
+      scope_gateway_ids: ["gw-1"],
+      evidence_snapshot: { avg_soc: 20 },
+      defer_until: futureDate,
+      deferred_by: "operator",
+      decided_at: new Date().toISOString(),
+    });
+    const activeIntent = makeIntent({
+      id: 201,
+      family: "reserve_protection",
+      governance_mode: "escalate",
+      status: "active",
+      urgency: "immediate",
+      title: "Reserve protection worsened",
+      scope_gateway_ids: ["gw-1"],
+      evidence_snapshot: { avg_soc: 9 },
+    });
+    mockEvaluateStrategies.mockResolvedValue([activeIntent]);
+    mockResolvePosture.mockResolvedValue([activeIntent]);
+    mockGetActiveIntents.mockResolvedValue([deferredIntent, activeIntent]);
+
+    const { body } = parse(await handler(makeEvent()));
+
+    const nddIds = body.data.need_decision_now.map((c: { id: number }) => c.id);
+    expect(nddIds).toContain(201);
+    expect(body.data.hero.posture).toBe("escalation");
+    expect(body.data.defer_context).toBeNull();
+  });
+
+  // ── T-WORSEN-2: SoC drops < 10pp → defer honored ─────────────────────
+  it("T-WORSEN-2: SoC drops < 10pp keeps defer honored", async () => {
+    const futureDate = new Date(Date.now() + 86400000).toISOString();
+    const deferredIntent = makeIntent({
+      id: 210,
+      family: "reserve_protection",
+      governance_mode: "escalate",
+      status: "deferred",
+      urgency: "immediate",
+      title: "Reserve protection deferred",
+      scope_gateway_ids: ["gw-1"],
+      evidence_snapshot: { avg_soc: 20 },
+      defer_until: futureDate,
+      deferred_by: "operator",
+      decided_at: new Date().toISOString(),
+    });
+    const activeIntent = makeIntent({
+      id: 211,
+      family: "reserve_protection",
+      governance_mode: "escalate",
+      status: "active",
+      urgency: "immediate",
+      title: "Reserve protection stable",
+      scope_gateway_ids: ["gw-1"],
+      evidence_snapshot: { avg_soc: 18 },
+    });
+    mockEvaluateStrategies.mockResolvedValue([activeIntent]);
+    mockResolvePosture.mockResolvedValue([activeIntent]);
+    mockGetActiveIntents.mockResolvedValue([deferredIntent, activeIntent]);
+
+    const { body } = parse(await handler(makeEvent()));
+
+    const wnIds = body.data.watch_next.map((c: { id: number }) => c.id);
+    expect(wnIds).toContain(211);
+    expect(body.data.hero.posture).not.toBe("escalation");
+    expect(body.data.defer_context).not.toBeNull();
+  });
+
+  // ── T-WORSEN-3: SoC below emergency 15% → defer broken regardless ────
+  it("T-WORSEN-3: SoC below emergency 15% breaks defer regardless of delta", async () => {
+    const futureDate = new Date(Date.now() + 86400000).toISOString();
+    const deferredIntent = makeIntent({
+      id: 220,
+      family: "reserve_protection",
+      governance_mode: "escalate",
+      status: "deferred",
+      urgency: "immediate",
+      title: "Reserve protection deferred",
+      scope_gateway_ids: ["gw-1"],
+      evidence_snapshot: { avg_soc: 20 },
+      defer_until: futureDate,
+      deferred_by: "operator",
+      decided_at: new Date().toISOString(),
+    });
+    const activeIntent = makeIntent({
+      id: 221,
+      family: "reserve_protection",
+      governance_mode: "escalate",
+      status: "active",
+      urgency: "immediate",
+      title: "Reserve protection emergency",
+      scope_gateway_ids: ["gw-1"],
+      evidence_snapshot: { avg_soc: 14 },
+    });
+    mockEvaluateStrategies.mockResolvedValue([activeIntent]);
+    mockResolvePosture.mockResolvedValue([activeIntent]);
+    mockGetActiveIntents.mockResolvedValue([deferredIntent, activeIntent]);
+
+    const { body } = parse(await handler(makeEvent()));
+
+    const nddIds = body.data.need_decision_now.map((c: { id: number }) => c.id);
+    expect(nddIds).toContain(221);
+    expect(body.data.hero.posture).toBe("escalation");
+  });
+
+  // ── T-WORSEN-4: Peak shaving demand ratio crosses to immediate ────────
+  it("T-WORSEN-4: peak shaving demand ratio crosses to immediate breaks defer", async () => {
+    const futureDate = new Date(Date.now() + 86400000).toISOString();
+    const deferredIntent = makeIntent({
+      id: 230,
+      family: "peak_shaving",
+      governance_mode: "escalate",
+      status: "deferred",
+      urgency: "immediate",
+      title: "Peak shaving deferred",
+      scope_gateway_ids: ["gw-1"],
+      evidence_snapshot: { demand_ratio: 82 },
+      defer_until: futureDate,
+      deferred_by: "operator",
+      decided_at: new Date().toISOString(),
+    });
+    const activeIntent = makeIntent({
+      id: 231,
+      family: "peak_shaving",
+      governance_mode: "escalate",
+      status: "active",
+      urgency: "immediate",
+      title: "Peak shaving immediate",
+      scope_gateway_ids: ["gw-1"],
+      evidence_snapshot: { demand_ratio: 91 },
+    });
+    mockEvaluateStrategies.mockResolvedValue([activeIntent]);
+    mockResolvePosture.mockResolvedValue([activeIntent]);
+    mockGetActiveIntents.mockResolvedValue([deferredIntent, activeIntent]);
+
+    const { body } = parse(await handler(makeEvent()));
+
+    const nddIds = body.data.need_decision_now.map((c: { id: number }) => c.id);
+    expect(nddIds).toContain(231);
+    expect(body.data.hero.posture).toBe("escalation");
+  });
+
+  // ── T-WORSEN-5: Peak shaving demand stays below immediate → honored ───
+  it("T-WORSEN-5: peak shaving demand ratio stays below immediate keeps defer", async () => {
+    const futureDate = new Date(Date.now() + 86400000).toISOString();
+    const deferredIntent = makeIntent({
+      id: 240,
+      family: "peak_shaving",
+      governance_mode: "escalate",
+      status: "deferred",
+      urgency: "immediate",
+      title: "Peak shaving deferred",
+      scope_gateway_ids: ["gw-1"],
+      evidence_snapshot: { demand_ratio: 82 },
+      defer_until: futureDate,
+      deferred_by: "operator",
+      decided_at: new Date().toISOString(),
+    });
+    const activeIntent = makeIntent({
+      id: 241,
+      family: "peak_shaving",
+      governance_mode: "escalate",
+      status: "active",
+      urgency: "immediate",
+      title: "Peak shaving stable",
+      scope_gateway_ids: ["gw-1"],
+      evidence_snapshot: { demand_ratio: 85 },
+    });
+    mockEvaluateStrategies.mockResolvedValue([activeIntent]);
+    mockResolvePosture.mockResolvedValue([activeIntent]);
+    mockGetActiveIntents.mockResolvedValue([deferredIntent, activeIntent]);
+
+    const { body } = parse(await handler(makeEvent()));
+
+    const wnIds = body.data.watch_next.map((c: { id: number }) => c.id);
+    expect(wnIds).toContain(241);
+    expect(body.data.defer_context).not.toBeNull();
+  });
+
+  // ── T-WORSEN-6: No evidence snapshot → defer honored (safe default) ───
+  it("T-WORSEN-6: no evidence snapshot on newer intent keeps defer honored", async () => {
+    const futureDate = new Date(Date.now() + 86400000).toISOString();
+    const deferredIntent = makeIntent({
+      id: 250,
+      family: "reserve_protection",
+      governance_mode: "escalate",
+      status: "deferred",
+      urgency: "immediate",
+      title: "Reserve protection deferred",
+      scope_gateway_ids: ["gw-1"],
+      evidence_snapshot: { avg_soc: 20 },
+      defer_until: futureDate,
+      deferred_by: "operator",
+      decided_at: new Date().toISOString(),
+    });
+    const activeIntent = makeIntent({
+      id: 251,
+      family: "reserve_protection",
+      governance_mode: "escalate",
+      status: "active",
+      urgency: "immediate",
+      title: "Reserve protection no snapshot",
+      scope_gateway_ids: ["gw-1"],
+      evidence_snapshot: {},
+    });
+    mockEvaluateStrategies.mockResolvedValue([activeIntent]);
+    mockResolvePosture.mockResolvedValue([activeIntent]);
+    mockGetActiveIntents.mockResolvedValue([deferredIntent, activeIntent]);
+
+    const { body } = parse(await handler(makeEvent()));
+
+    const wnIds = body.data.watch_next.map((c: { id: number }) => c.id);
+    expect(wnIds).toContain(251);
+    expect(body.data.defer_context).not.toBeNull();
   });
 });

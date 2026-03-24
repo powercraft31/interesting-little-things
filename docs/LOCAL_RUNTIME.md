@@ -1,22 +1,29 @@
 # SOLFACIL Local Runtime — Single Source of Truth
 
 **Status:** Active
-**Last Updated:** 2026-03-18
-**Purpose:** Prevent environment drift, dual-runtime confusion, and repeated debugging of the wrong stack.
+**Last Updated:** 2026-03-19
+**Purpose:** Prevent environment drift, dual-runtime confusion, and accidental resurrection of retired host paths.
 
 ---
 
 ## 1. Canonical Local Runtime
 
-Solfacil local development and UI/runtime validation must use **one** environment only:
+Solfacil local development and validation must use **one environment only**.
 
-### App / BFF
-- **Primary URL:** `http://152.42.235.155:3100`
-- **Host-equivalent probe URL:** `http://127.0.0.1:3100`
+### Public human-facing URL
+- **Primary URL:** `http://152.42.235.155`
+
+### Host-local service probe
+- **BFF/UI bind:** `http://127.0.0.1:3100`
 
 ### Database
 - **Canonical DB:** Docker `solfacil-db`
 - **Host mapping:** `127.0.0.1:5433`
+
+### Public entry chain
+- `http://152.42.235.155`
+- → nginx on `:80`
+- → reverse proxy to `127.0.0.1:3100`
 
 ### Containers
 - `solfacil-db`
@@ -25,74 +32,83 @@ Solfacil local development and UI/runtime validation must use **one** environmen
 
 ---
 
-## 2. What is NOT the canonical runtime
+## 2. What is retired / non-canonical
 
-### A. Host bare-run backend / DB
-The following path is considered a **legacy / non-canonical runtime path** and must not be used as the primary validation target:
+### A. Host bare-run backend / host DB
+The following path is **retired** and must not be used for validation or deployment:
 
 - `backend/scripts/local-server.ts`
-- Host Postgres on `127.0.0.1:5432`
+- host BFF on `:3000`
+- host Postgres on `127.0.0.1:5432`
+- legacy `solfacil-bff.service`
 
-This path may still exist on the machine, but it is **not** the source of truth for Solfacil page validation.
+These paths are no longer part of the active Solfacil runtime.
 
-### B. File-server demo snapshots
+### B. Direct public access to `:3100`
+The following is **not** the public entry anymore:
+
+- `http://152.42.235.155:3100`
+
+`3100` is now host-local only and is intentionally bound to `127.0.0.1`.
+
+### C. File-server demo snapshots
 Any `8443` file-server path such as:
 - `https://152.42.235.155:8443/.../frontend-v2`
 
 is a **static shared demo/archive path**, not the live application runtime.
 
-Do not use it to answer questions like:
-- “Is Fleet working now?”
-- “Did Devices break after this code change?”
-- “Is login working?”
-
 ---
 
 ## 3. Operational Rule
 
-When validating Solfacil UI changes:
+When validating Solfacil UI or BFF changes:
 
 1. Use Docker runtime only
-2. Use `http://152.42.235.155:3100` as the human-facing URL
-3. Treat `5433` as the only local dev DB
-4. Do not switch to `3000 + 5432` mid-debug
-5. Do not use `8443 demo` as evidence of current runtime behavior
+2. Use `http://152.42.235.155` as the human-facing URL
+3. Use `http://127.0.0.1:3100` only as a host-local service probe
+4. Treat `5433` as the only local Solfacil DB
+5. Do not switch back to `3000 + 5432`
+6. Do not use `8443 demo` as runtime evidence
 
 ---
 
 ## 4. Why this rule exists
 
-Historically, two local runtime paths coexisted:
+Historically, multiple local paths coexisted:
 
-- Docker-aligned runtime (`3100 + 5433`)
+- Docker-aligned runtime (`127.0.0.1:3100` + `127.0.0.1:5433`)
 - Host bare-run runtime (`3000 + 5432`)
+- File-server demo snapshots (`8443`)
 
-This caused repeated confusion where:
-- code was changed in one runtime assumption
-- validation happened against another runtime
-- file-server demo pages were mistaken for the current live app
+This caused repeated confusion, false regressions, and wasted debugging cycles.
 
-Result: wasted debugging cycles, false regression signals, and repeated rediscovery of the same environment split.
+The environment has now been closed so that only one real runtime remains.
 
 ---
 
-## 5. Immediate implication for v6.2 Devices
+## 5. Immediate implication
 
-All remaining runtime validation for v6.2 Devices must be performed against:
+For current local usage, the only authoritative live path is:
 
-- `http://152.42.235.155:3100`
-- backed by Docker DB on `5433`
+- `http://152.42.235.155`
 
-No other path is considered authoritative.
+backed by:
+
+- BFF on `127.0.0.1:3100`
+- Docker DB on `127.0.0.1:5433`
+
+No other path should be treated as authoritative.
 
 ---
 
-## 6. Recommended future cleanup
+## 6. Future HTTPS
 
-A future cleanup task should:
-- retire bare-run local-server as a primary path
-- retire or archive `8443` demo frontend as non-runtime-only content
-- remove ambiguous host-DB defaults where safe
-- enforce Docker-only local validation in docs and scripts
+This local machine currently has **no formal DNS hostname** attached to it.
 
-Until that cleanup is fully executed, this document is the rulebook.
+If a future subdomain is added, HTTPS can later be introduced by attaching:
+
+- `443`
+- → reverse proxy
+- → `127.0.0.1:3100`
+
+Until then, the canonical public entry remains plain HTTP via the machine IP.

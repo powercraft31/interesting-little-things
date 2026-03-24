@@ -16,7 +16,7 @@
 
 import { getPool } from "../src/shared/db";
 
-const BASE_URL = process.env.BFF_URL ?? "http://localhost:3000";
+const BASE_URL = process.env.BFF_URL ?? "http://127.0.0.1:3100";
 const INTERVAL_MS = 10_000; // 10 seconds
 
 const ASSET_IDS = [

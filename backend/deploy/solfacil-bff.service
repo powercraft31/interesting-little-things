@@ -1,29 +1,14 @@
-[Unit]
-Description=Solfacil VPP BFF Server (TypeScript Express)
-After=network.target postgresql.service
-Wants=postgresql.service
-
-[Service]
-Type=simple
-User=root
-WorkingDirectory=/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend
-
-# ts-node 用絕對路徑（systemd 沒有完整 PATH）
-ExecStart=/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/backend/node_modules/.bin/ts-node scripts/local-server.ts
-
-# 環境變數
-Environment=NODE_ENV=production
-Environment=PORT=3000
-Environment=DATABASE_URL=postgresql://solfacil_app:solfacil_vpp_2026@localhost:5432/solfacil_vpp
-
-# 崩潰自動重啟
-Restart=always
-RestartSec=5
-
-# 輸出導向 journal（用 journalctl -u solfacil-bff 查看）
-StandardOutput=journal
-StandardError=journal
-SyslogIdentifier=solfacil-bff
-
-[Install]
-WantedBy=multi-user.target
+# RETIRED — DO NOT USE
+#
+# This legacy systemd unit belonged to the old host bare-run path:
+#   - backend/scripts/local-server.ts
+#   - host BFF on :3000
+#   - host PostgreSQL on :5432
+#
+# As of 2026-03-19, local Solfacil runtime has been closed to:
+#   - public entry: http://152.42.235.155 (nginx :80 reverse proxy)
+#   - BFF bind:    http://127.0.0.1:3100
+#   - DB bind:     postgresql://127.0.0.1:5433/solfacil_vpp
+#
+# DO NOT install or re-enable a host systemd BFF service from this file.
+# The canonical local runtime is Docker-only via /tmp/solfacil/docker-compose.yml.

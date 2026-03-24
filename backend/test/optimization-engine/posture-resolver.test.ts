@@ -43,11 +43,15 @@ function makeIntent(overrides: Partial<StrategyIntent> = {}): StrategyIntent {
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     expires_at: null,
+    defer_until: null,
+    deferred_by: null,
     ...overrides,
   };
 }
 
-function makeOverride(overrides: Partial<PostureOverride> = {}): PostureOverride {
+function makeOverride(
+  overrides: Partial<PostureOverride> = {},
+): PostureOverride {
   return {
     id: 1,
     org_id: ORG_ID,
@@ -78,7 +82,11 @@ describe("posture-resolver", () => {
 
     const intents = [
       makeIntent({ family: "peak_shaving" }),
-      makeIntent({ id: 2, family: "reserve_protection", governance_mode: "auto_governed" }),
+      makeIntent({
+        id: 2,
+        family: "reserve_protection",
+        governance_mode: "auto_governed",
+      }),
     ];
 
     const result = await resolvePosture(ORG_ID, intents);
@@ -92,9 +100,21 @@ describe("posture-resolver", () => {
     ]);
 
     const intents = [
-      makeIntent({ id: 1, family: "peak_shaving", governance_mode: "approval_required" }),
-      makeIntent({ id: 2, family: "tariff_arbitrage", governance_mode: "approval_required" }),
-      makeIntent({ id: 3, family: "reserve_protection", governance_mode: "auto_governed" }),
+      makeIntent({
+        id: 1,
+        family: "peak_shaving",
+        governance_mode: "approval_required",
+      }),
+      makeIntent({
+        id: 2,
+        family: "tariff_arbitrage",
+        governance_mode: "approval_required",
+      }),
+      makeIntent({
+        id: 3,
+        family: "reserve_protection",
+        governance_mode: "auto_governed",
+      }),
     ];
 
     const result = await resolvePosture(ORG_ID, intents);
@@ -118,7 +138,11 @@ describe("posture-resolver", () => {
     const intents = [
       makeIntent({ id: 1, family: "peak_shaving" }),
       makeIntent({ id: 2, family: "tariff_arbitrage" }),
-      makeIntent({ id: 3, family: "reserve_protection", governance_mode: "auto_governed" }),
+      makeIntent({
+        id: 3,
+        family: "reserve_protection",
+        governance_mode: "auto_governed",
+      }),
     ];
 
     const result = await resolvePosture(ORG_ID, intents);
@@ -138,8 +162,16 @@ describe("posture-resolver", () => {
     ]);
 
     const intents = [
-      makeIntent({ id: 1, family: "reserve_protection", governance_mode: "auto_governed" }),
-      makeIntent({ id: 2, family: "peak_shaving", governance_mode: "approval_required" }),
+      makeIntent({
+        id: 1,
+        family: "reserve_protection",
+        governance_mode: "auto_governed",
+      }),
+      makeIntent({
+        id: 2,
+        family: "peak_shaving",
+        governance_mode: "approval_required",
+      }),
     ];
 
     const result = await resolvePosture(ORG_ID, intents);
@@ -163,9 +195,21 @@ describe("posture-resolver", () => {
     ]);
 
     const intents = [
-      makeIntent({ id: 1, family: "peak_shaving", scope_gateway_ids: ["GW-001"] }),
-      makeIntent({ id: 2, family: "peak_shaving", scope_gateway_ids: ["GW-002"] }),
-      makeIntent({ id: 3, family: "tariff_arbitrage", scope_gateway_ids: ["GW-001", "GW-002"] }),
+      makeIntent({
+        id: 1,
+        family: "peak_shaving",
+        scope_gateway_ids: ["GW-001"],
+      }),
+      makeIntent({
+        id: 2,
+        family: "peak_shaving",
+        scope_gateway_ids: ["GW-002"],
+      }),
+      makeIntent({
+        id: 3,
+        family: "tariff_arbitrage",
+        scope_gateway_ids: ["GW-001", "GW-002"],
+      }),
     ];
 
     const result = await resolvePosture(ORG_ID, intents);
@@ -190,7 +234,10 @@ describe("posture-resolver", () => {
     ]);
 
     const intents = [
-      makeIntent({ family: "reserve_protection", governance_mode: "auto_governed" }),
+      makeIntent({
+        family: "reserve_protection",
+        governance_mode: "auto_governed",
+      }),
     ];
 
     const result = await resolvePosture(ORG_ID, intents);

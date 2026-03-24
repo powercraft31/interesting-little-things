@@ -111,6 +111,8 @@ export async function updateIntentStatus(
   status: IntentStatus,
   actor: string,
   reason?: string,
+  deferUntil?: string,
+  deferredBy?: string,
 ): Promise<StrategyIntent | null> {
   const sql = `
     UPDATE strategy_intents
@@ -118,13 +120,23 @@ export async function updateIntentStatus(
         actor          = $4,
         arbitration_note = COALESCE($5, arbitration_note),
         decided_at     = NOW(),
-        updated_at     = NOW()
+        updated_at     = NOW(),
+        defer_until    = $6,
+        deferred_by    = $7
     WHERE org_id = $1 AND id = $2
     RETURNING *
   `;
   const { rows } = await queryWithOrg<IntentRow>(
     sql,
-    [orgId, id, status, actor, reason ?? null],
+    [
+      orgId,
+      id,
+      status,
+      actor,
+      reason ?? null,
+      deferUntil ?? null,
+      deferredBy ?? null,
+    ],
     orgId,
   );
   return rows[0] ?? null;
@@ -154,7 +166,10 @@ export async function expireStaleIntents(orgId: string): Promise<number> {
 
 export async function createPostureOverride(
   orgId: string,
-  override: Omit<PostureOverride, "id" | "created_at" | "cancelled_at" | "cancelled_by" | "active">,
+  override: Omit<
+    PostureOverride,
+    "id" | "created_at" | "cancelled_at" | "cancelled_by" | "active"
+  >,
 ): Promise<PostureOverride> {
   const sql = `
     INSERT INTO posture_overrides (

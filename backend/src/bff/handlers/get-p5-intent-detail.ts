@@ -21,6 +21,32 @@ import type {
   IntentEvent,
 } from "../../shared/types/p5";
 
+const RESERVE_WARNING_SOC = 30;
+
+function computeRecoveryCondition(intent: StrategyIntent): string | null {
+  const evidence = intent.evidence_snapshot;
+
+  if (intent.family === "reserve_protection" && evidence?.avg_soc != null) {
+    return `SoC > ${RESERVE_WARNING_SOC}%`;
+  }
+
+  if (
+    intent.family === "peak_shaving" &&
+    evidence?.contracted_demand_kw != null
+  ) {
+    return "Demanda < contratada";
+  }
+
+  if (
+    intent.status === "deferred" &&
+    intent.arbitration_note?.includes("reserve_protection")
+  ) {
+    return `SoC > ${RESERVE_WARNING_SOC}%`;
+  }
+
+  return null;
+}
+
 function computeAvailableActions(intent: StrategyIntent): string[] {
   const { status, governance_mode } = intent;
 
@@ -141,6 +167,7 @@ export async function handler(
       reason_summary: intent.reason_summary,
       scope_summary: intent.scope_summary,
       time_pressure: computeTimePressure(intent),
+      recovery_condition: computeRecoveryCondition(intent),
       created_at: intent.created_at,
       evidence_snapshot: intent.evidence_snapshot,
       constraints: intent.constraints,

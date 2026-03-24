@@ -79,14 +79,6 @@ var PAGES = [
     navKey: "nav.vpp",
     roles: ["admin"],
   },
-  {
-    id: "performance",
-    hash: "#performance",
-    labelKey: "page.performance",
-    icon: "\u{1F3AF}",
-    navKey: "nav.performance",
-    roles: ["admin", "integrador", "customer"],
-  },
 ];
 
 // =========================================================
@@ -240,7 +232,7 @@ window.addEventListener("hashchange", function () {
   var page = PAGES.find(function (p) {
     return p.hash === hash;
   });
-  if (page) navigateTo(page.id);
+  navigateTo(page ? page.id : "fleet");
 });
 
 // =========================================================
@@ -262,12 +254,10 @@ function switchRole(role) {
     var roleKeys = {
       admin: "role.admin",
       integrador: "role.integrador",
-      customer: "role.customer",
     };
     var roleClasses = {
       admin: "role-badge-admin",
       integrador: "role-badge-integrador",
-      customer: "role-badge-customer",
     };
     badgeEl.className = "role-badge " + (roleClasses[role] || "");
     badgeEl.textContent = t(roleKeys[role]) || role;
@@ -303,8 +293,7 @@ function switchRole(role) {
     return p.id === currentPage;
   });
   if (currentPageDef && !currentPageDef.roles.includes(role)) {
-    // Customer → Performance; others → Fleet
-    var fallback = role === "customer" ? "performance" : "fleet";
+    var fallback = "fleet";
     navigateTo(fallback);
     return;
   }
@@ -372,7 +361,6 @@ function updateSidebarLabels() {
   if (roleSelect) {
     roleSelect.options[0].textContent = t("role.admin");
     roleSelect.options[1].textContent = t("role.integrador");
-    roleSelect.options[2].textContent = t("role.customer");
   }
 }
 

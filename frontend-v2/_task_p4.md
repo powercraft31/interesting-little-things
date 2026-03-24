@@ -1,11 +1,11 @@
 # Task: Phase 4 — HEMS Control (Optimization Rules)
 
 ## CRITICAL: Read reference files FIRST
-1. `/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Pages_v1.2.html` — Design spec (P4 HEMS Control section)
-2. `/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Build_Plan_v1.0.html` — Build plan (Phase 4 section)
+1. `/tmp/retired-solfacil/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Pages_v1.2.html` — Design spec (P4 HEMS Control section)
+2. `/tmp/retired-solfacil/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Build_Plan_v1.0.html` — Build plan (Phase 4 section)
 
 ## Working Directory
-`/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/frontend-v2/`
+`/tmp/retired-solfacil/2026-02-15_SOLFACIL_VPP_Demo/frontend-v2/`
 
 ## Existing Code — Follow the Pattern
 Look at `p1-fleet.js`, `p2-devices.js`, `p3-energy.js` for the pattern:

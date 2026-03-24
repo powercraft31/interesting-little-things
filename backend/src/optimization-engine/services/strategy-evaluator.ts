@@ -608,6 +608,8 @@ async function persistIntents(
       actor: "platform",
       decided_at: null,
       expires_at: new Date(Date.now() + 2 * 60 * 60 * 1000).toISOString(), // 2h TTL
+      defer_until: null,
+      deferred_by: null,
     });
     results.push(persisted);
   }

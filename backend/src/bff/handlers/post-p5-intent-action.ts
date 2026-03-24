@@ -28,6 +28,12 @@ const ACTION_TO_STATUS: Record<ActionType, IntentStatus> = {
 
 function getAllowedActions(intent: StrategyIntent): string[] {
   const { status, governance_mode } = intent;
+
+  // Deferred intents can be resumed (escalated back to active review)
+  if (status === "deferred") {
+    return ["escalate"];
+  }
+
   if (status !== "active") return [];
 
   switch (governance_mode) {
@@ -38,7 +44,7 @@ function getAllowedActions(intent: StrategyIntent): string[] {
     case "observe":
       return ["defer", "suppress"];
     case "escalate":
-      return ["escalate"];
+      return ["defer", "escalate"];
     default:
       return [];
   }
@@ -72,7 +78,10 @@ export async function handler(
     }
 
     if (!VALID_ACTIONS.includes(action)) {
-      return apiError(400, `Invalid action: ${action}. Must be one of: ${VALID_ACTIONS.join(", ")}`);
+      return apiError(
+        400,
+        `Invalid action: ${action}. Must be one of: ${VALID_ACTIONS.join(", ")}`,
+      );
     }
 
     // Parse body
@@ -103,6 +112,20 @@ export async function handler(
       return apiError(400, "Reason is required for suppress action");
     }
 
+    // Defer requires valid future defer_until
+    if (action === "defer") {
+      if (!body.defer_until) {
+        return apiError(400, "defer_until is required for defer action");
+      }
+      const deferUntil = new Date(body.defer_until);
+      if (isNaN(deferUntil.getTime())) {
+        return apiError(400, "defer_until must be a valid ISO 8601 timestamp");
+      }
+      if (deferUntil.getTime() <= Date.now()) {
+        return apiError(400, "defer_until must be in the future");
+      }
+    }
+
     const actor = `operator:${ctx.userId}`;
     const newStatus = ACTION_TO_STATUS[action];
 
@@ -112,6 +135,8 @@ export async function handler(
       newStatus,
       actor,
       body.reason,
+      action === "defer" ? body.defer_until : undefined,
+      action === "defer" ? actor : undefined,
     );
 
     if (!updated) {

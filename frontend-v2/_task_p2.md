@@ -1,13 +1,13 @@
 # Task: Phase 2 — Device Management + Commissioning Wizard
 
 ## CRITICAL: Read reference files FIRST
-1. `/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Pages_v1.2.html` — Design spec
-2. `/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Build_Plan_v1.0.html` — Build plan (Phase 2 section)
+1. `/tmp/retired-solfacil/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Pages_v1.2.html` — Design spec
+2. `/tmp/retired-solfacil/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Build_Plan_v1.0.html` — Build plan (Phase 2 section)
 
 Read BOTH before writing code. They contain mandatory constraints.
 
 ## Working Directory
-`/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/frontend-v2/`
+`/tmp/retired-solfacil/2026-02-15_SOLFACIL_VPP_Demo/frontend-v2/`
 
 ## Existing Code Context
 Phase 0+1 is COMPLETE. The following files already exist and work:

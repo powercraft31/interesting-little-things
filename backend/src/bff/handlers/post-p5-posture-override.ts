@@ -14,10 +14,7 @@ import {
   requireRole,
   apiError,
 } from "../middleware/auth";
-import {
-  createPostureOverride,
-  cancelOverride,
-} from "../../shared/p5-db";
+import { createPostureOverride, cancelOverride } from "../../shared/p5-db";
 import type { OverrideType } from "../../shared/types/p5";
 
 const VALID_OVERRIDE_TYPES: OverrideType[] = [
@@ -25,6 +22,7 @@ const VALID_OVERRIDE_TYPES: OverrideType[] = [
   "suppress_economic",
   "force_approval_gate",
   "manual_escalation_note",
+  "suppress_alerts",
 ];
 
 const MAX_DURATION_MINUTES = 480; // 8 hours

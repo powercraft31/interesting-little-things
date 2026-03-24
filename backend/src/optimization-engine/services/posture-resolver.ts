@@ -81,6 +81,11 @@ function applyOverride(
       };
     }
 
+    case "suppress_alerts": {
+      // Alert suppression does not change posture or intent state
+      return intent;
+    }
+
     default:
       return intent;
   }
@@ -98,7 +103,9 @@ export async function resolvePosture(
 
   for (const override of overrides) {
     adjusted = adjusted.map((intent) => {
-      if (!scopeOverlaps(override.scope_gateway_ids, intent.scope_gateway_ids)) {
+      if (
+        !scopeOverlaps(override.scope_gateway_ids, intent.scope_gateway_ids)
+      ) {
         return intent;
       }
       return applyOverride(intent, override);

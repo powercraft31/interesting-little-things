@@ -1,7 +1,7 @@
 # Task: Phase 7 — Integration, Polish & Cross-Page Navigation
 
 ## Working Directory
-`/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/frontend-v2/`
+`/tmp/retired-solfacil/2026-02-15_SOLFACIL_VPP_Demo/frontend-v2/`
 
 ## Context
 All 6 pages (P1-P6) are complete and working independently. This phase focuses on:

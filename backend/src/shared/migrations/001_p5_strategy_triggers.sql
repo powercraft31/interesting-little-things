@@ -106,3 +106,7 @@ BEGIN
   END IF;
 END
 $$;
+
+-- ── 4. v0.1b additions: defer_until + deferred_by ───────────────────────
+ALTER TABLE strategy_intents ADD COLUMN IF NOT EXISTS defer_until TIMESTAMPTZ DEFAULT NULL;
+ALTER TABLE strategy_intents ADD COLUMN IF NOT EXISTS deferred_by TEXT DEFAULT NULL;

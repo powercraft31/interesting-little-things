@@ -4,12 +4,12 @@ import { Pool, type PoolClient } from "pg";
 const APP_DATABASE_URL =
   process.env.APP_DATABASE_URL ??
   process.env.DATABASE_URL ??
-  "postgresql://solfacil_app:solfacil_vpp_2026@localhost:5432/solfacil_vpp";
+  "postgresql://solfacil_app:solfacil_vpp_2026@127.0.0.1:5433/solfacil_vpp";
 
 const SERVICE_DATABASE_URL =
   process.env.SERVICE_DATABASE_URL ??
   process.env.DATABASE_URL ??
-  "postgresql://solfacil_service:solfacil_service_2026@localhost:5432/solfacil_vpp";
+  "postgresql://solfacil_service:solfacil_service_2026@127.0.0.1:5433/solfacil_vpp";
 
 // ── Singleton Pools ─────────────────────────────────────────────────────
 let _appPool: Pool | null = null;

@@ -11,7 +11,7 @@
  *   - Updates pld_horario / weather_cache so M2 Scheduler reads fresh data
  */
 
-const BASE_URL    = process.env.BFF_URL ?? 'http://localhost:3000';
+const BASE_URL    = process.env.BFF_URL ?? 'http://127.0.0.1:3100';
 const WH_SECRET   = process.env.WEBHOOK_SECRET ?? 'dev-secret-2026';
 const PLD_INTERVAL_MS     = 30_000;   // 30s
 const WEATHER_INTERVAL_MS = 90_000;   // 90s

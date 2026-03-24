@@ -1,11 +1,11 @@
 # Task: Phase 5 (VPP & DR) + Phase 6 (Performance)
 
 ## CRITICAL: Read reference files FIRST
-1. `/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Pages_v1.2.html` — Design spec (P5 VPP & DR + P6 Performance sections)
-2. `/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Build_Plan_v1.0.html` — Build plan (Phase 5 + Phase 6 sections)
+1. `/tmp/retired-solfacil/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Pages_v1.2.html` — Design spec (P5 VPP & DR + P6 Performance sections)
+2. `/tmp/retired-solfacil/2026-02-15_SOLFACIL_VPP_Demo/design/Admin_Portal_Build_Plan_v1.0.html` — Build plan (Phase 5 + Phase 6 sections)
 
 ## Working Directory
-`/tmp/ashe_share/2026-02-15_SOLFACIL_VPP_Demo/frontend-v2/`
+`/tmp/retired-solfacil/2026-02-15_SOLFACIL_VPP_Demo/frontend-v2/`
 
 ## Existing Code — Follow the Pattern
 Look at `p4-hems.js` for the latest pattern:

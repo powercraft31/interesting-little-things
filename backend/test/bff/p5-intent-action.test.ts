@@ -92,6 +92,8 @@ function makeIntent(overrides: Partial<StrategyIntent> = {}): StrategyIntent {
     created_at: new Date().toISOString(),
     updated_at: new Date().toISOString(),
     expires_at: null,
+    defer_until: null,
+    deferred_by: null,
     ...overrides,
   };
 }
@@ -119,6 +121,8 @@ describe("POST /api/p5/intents/:intentId/:action", () => {
       "approved",
       "operator:user-1",
       undefined,
+      undefined, // defer_until
+      undefined, // deferred_by
     );
   });
 
@@ -165,6 +169,8 @@ describe("POST /api/p5/intents/:intentId/:action", () => {
       "escalated",
       "operator:user-1",
       "Need manager review",
+      undefined, // defer_until
+      undefined, // deferred_by
     );
   });
 
@@ -173,5 +179,55 @@ describe("POST /api/p5/intents/:intentId/:action", () => {
 
     const { statusCode } = parse(await handler(makeEvent(999, "approve")));
     expect(statusCode).toBe(404);
+  });
+
+  // ── Deferred intent resume tests ────────────────────────────────────
+
+  it("resumes a deferred intent via escalate", async () => {
+    const intent = makeIntent({
+      status: "deferred",
+      governance_mode: "escalate",
+    });
+    mockGetIntentById.mockResolvedValue(intent);
+    mockUpdateIntentStatus.mockResolvedValue({
+      ...intent,
+      status: "escalated",
+      actor: "operator:user-1",
+    });
+
+    const { statusCode, body } = parse(
+      await handler(makeEvent(1, "escalate", { reason: "Retomar agora" })),
+    );
+    expect(statusCode).toBe(200);
+    expect(body.data.intent.status).toBe("escalated");
+  });
+
+  it("rejects approve on a deferred intent", async () => {
+    const intent = makeIntent({
+      status: "deferred",
+      governance_mode: "escalate",
+    });
+    mockGetIntentById.mockResolvedValue(intent);
+
+    const { statusCode } = parse(await handler(makeEvent(1, "approve")));
+    expect(statusCode).toBe(400);
+  });
+
+  it("rejects re-defer on a deferred intent", async () => {
+    const intent = makeIntent({
+      status: "deferred",
+      governance_mode: "escalate",
+    });
+    mockGetIntentById.mockResolvedValue(intent);
+
+    const { statusCode } = parse(
+      await handler(
+        makeEvent(1, "defer", {
+          reason: "test",
+          defer_until: new Date(Date.now() + 3600000).toISOString(),
+        }),
+      ),
+    );
+    expect(statusCode).toBe(400);
   });
 });
