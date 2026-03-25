@@ -50,6 +50,23 @@
   /* Transitions */
   --transition-fast: 150ms ease;
   --transition-normal: 200ms ease;
+
+  /* ---- P1/P2 Unification Tokens (v6.x visual sync with P3-P5) ---- */
+
+  /* Surface hierarchy */
+  --surface-0: var(--bg);          /* page background */
+  --surface-1: var(--card);        /* primary cards */
+  --surface-2: #1e2130;            /* elevated / hero panels */
+  --surface-3: #252839;            /* nested / inset panels */
+
+  /* Shadow system */
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.2);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.25);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.3);
+
+  /* Extended spacing */
+  --space-2xl: 40px;
+  --space-3xl: 56px;
 }
 
 /* Breakpoints (used as literals in @media — CSS vars not supported in queries)
@@ -81,4 +98,11 @@
   --cyan-bg: rgba(8, 145, 178, 0.1);
   --pink: #db2777;
   --pink-bg: rgba(219, 39, 119, 0.1);
+  --surface-0: #f8f9fa;
+  --surface-1: #ffffff;
+  --surface-2: #f0f2f5;
+  --surface-3: #e8eaee;
+  --shadow-sm: 0 1px 3px rgba(0,0,0,0.06);
+  --shadow-md: 0 4px 12px rgba(0,0,0,0.08);
+  --shadow-lg: 0 8px 24px rgba(0,0,0,0.1);
 }

@@ -710,14 +710,16 @@ var DevicesPage = {
     var controlReadonly = (!isOnline && hasSchedule) || isPending;
     var controlUnavailable = isOfflineNoSnapshot;
 
-    // Data Lane (left, 50%): energy flow → telemetry → device health → gateway health
+    // Object Hero Bar (SUMMARY LAYER — non-authoritative)
+    var objectHero = this._buildObjectHero(gw, state, syncStatus);
+
+    // Scene narrative (SUMMARY LAYER — client-side only)
+    var sceneNarrative = this._buildSceneNarrative(state, isOnline);
+
+    // Data Lane (left, 50%): energy flow + live metrics
     var dataLane =
       '<div class="workbench-data-lane">' +
       this._buildEnergyFlow(state) +
-      this._buildBatteryStatus(state) +
-      this._buildInverterGrid(state, extra) +
-      this._buildDeviceComposition(devices) +
-      this._buildGatewayHealth(gw.emsHealth) +
       "</div>";
 
     // Control Lane (right, 50%): mode summary → config params → schedule → confirmation → apply
@@ -733,9 +735,98 @@ var DevicesPage = {
       this._buildConfirmationArea() +
       "</div>";
 
-    return (
-      '<div class="workbench-content">' + dataLane + controlLane + "</div>"
-    );
+    // Diagnostics accordion (AUTHORITATIVE data in SUMMARY presentation)
+    var diagnostics = this._buildDiagnosticsAccordion(state, extra, devices, gw.emsHealth);
+
+    return objectHero + sceneNarrative +
+      '<div class="workbench-content">' + dataLane + controlLane + "</div>" +
+      diagnostics;
+  },
+
+  // ---- Object Hero Bar (SUMMARY LAYER) ----
+  _buildObjectHero: function (gw, state, syncStatus) {
+    var homeAlias = gw.homeAlias || gw.name || gw.gatewayId;
+    var statusClass = gw.status === "online" ? "positive" : "negative";
+    var statusLabel = gw.status === "online" ? t("devices.online") : t("devices.offline");
+
+    var chips = '<span class="vu-chip ' + statusClass + '">' + statusLabel + '</span>';
+
+    if (state.batterySoc != null) {
+      chips += '<span class="vu-chip accent">SoC ' + Math.round(state.batterySoc) + '%</span>';
+    }
+
+    // Mode chip from pending config
+    var cfg = this._pendingConfig;
+    if (cfg && cfg.slots && cfg.slots.length > 0) {
+      var purposes = {};
+      cfg.slots.forEach(function (s) { purposes[s.purpose] = true; });
+      var uniquePurposes = Object.keys(purposes);
+      var modeLabels = {
+        self_consumption: t("devices.selfConsumption"),
+        peak_shaving: t("devices.peakShaving"),
+        tariff: t("devices.schedule.tariff"),
+      };
+      var modeDisplay = uniquePurposes.length === 1
+        ? modeLabels[uniquePurposes[0]] || uniquePurposes[0]
+        : t("devices.wb.modeMixed");
+      chips += '<span class="vu-chip neutral">' + modeDisplay + '</span>';
+    }
+
+    // Sync chip
+    if (syncStatus === "pending") {
+      chips += '<span class="vu-chip warning">' + t("devices.wb.syncPending") + '</span>';
+    } else if (syncStatus === "failed") {
+      chips += '<span class="vu-chip negative">' + t("devices.wb.syncFailed") + '</span>';
+    }
+
+    chips += '<span class="vu-chip">' + gw.gatewayId + '</span>';
+
+    return '<div class="vu-object-hero">' +
+      '<div class="vu-object-hero-title">' + homeAlias + '</div>' +
+      '<div class="vu-object-hero-chips">' + chips + '</div>' +
+      '</div>';
+  },
+
+  // ---- Scene Narrative (SUMMARY LAYER — client-side derived) ----
+  _buildSceneNarrative: function (state, isOnline) {
+    if (!isOnline) {
+      return '<div class="vu-scene-narrative">' + t("devices.sceneOffline") + '</div>';
+    }
+    var parts = [];
+    if (state.pvPower > 0.01) {
+      parts.push(t("devices.sceneSolar") + ' ' + formatNumber(state.pvPower, 1) + ' kW');
+    }
+    if (state.batteryPower > 0.05) {
+      parts.push(t("devices.sceneCharging"));
+    } else if (state.batteryPower < -0.05) {
+      parts.push(t("devices.sceneDischarging"));
+    }
+    if (state.gridPowerKw > 0) {
+      parts.push(t("devices.sceneImporting") + ' ' + formatNumber(state.gridPowerKw, 1) + ' kW');
+    } else if (state.gridPowerKw < 0) {
+      parts.push(t("devices.sceneExporting") + ' ' + formatNumber(Math.abs(state.gridPowerKw), 1) + ' kW');
+    }
+    var text = parts.length > 0 ? parts.join(' · ') : t("devices.sceneIdle");
+    return '<div class="vu-scene-narrative">' + text + '</div>';
+  },
+
+  // ---- Live Metrics Row (SUMMARY LAYER — derived from existing state) ----
+  _buildLiveMetrics: function (state, extra) {
+    var metrics = [
+      { label: 'SoC', value: state.batterySoc != null ? state.batterySoc + '%' : '--' },
+      { label: t("devices.pvPower"), value: state.pvPower != null ? formatNumber(state.pvPower, 1) + ' kW' : '--' },
+      { label: t("devices.batteryPower"), value: state.batteryPower != null ? formatNumber(Math.abs(state.batteryPower), 1) + ' kW' : '--' },
+      { label: t("devices.homeLoad"), value: state.loadPower != null ? formatNumber(state.loadPower, 1) + ' kW' : '--' },
+      { label: t("devices.gridPower"), value: state.gridPowerKw != null ? formatNumber(state.gridPowerKw, 1) + ' kW' : '--' },
+    ];
+    return '<div class="vu-live-metrics">' +
+      metrics.map(function (m) {
+        return '<div class="vu-live-metric">' +
+          '<span class="vu-live-metric-value">' + m.value + '</span>' +
+          '<span class="vu-live-metric-label">' + m.label + '</span>' +
+          '</div>';
+      }).join('') +
+      '</div>';
   },
 
   // =========================================================
@@ -1139,18 +1230,18 @@ var DevicesPage = {
       "</table>" +
       "" + // v6.2: "Add Slot" removed — use Split on existing slots instead
       "</div>" +
-      '<div class="sync-status ' +
+      '<div class="vu-sync-status ' +
       syncBadgeClass +
       '">' +
-      '<span class="sync-dot"></span> ' +
+      '<span class="vu-sync-dot"></span> ' +
       syncLabel +
-      '<span class="sync-ack">' +
+      '<span class="sync-ack" style="margin-left:auto;font-size:0.78rem;color:var(--muted)">' +
       t("devices.syncedLastAck") +
       ": " +
       lastAck +
       "</span>" +
       "</div>" +
-      '<div class="schedule-apply-row">' +
+      '<div class="vu-apply-row">' +
       '<button class="btn btn-primary" id="schedule-apply"' +
       (applyDisabled ? " disabled" : "") +
       ">" +
@@ -1875,62 +1966,70 @@ var DevicesPage = {
 
     var markerDefs =
       "<defs>" +
-      '<marker id="arrow-pv" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">' +
-      '<path d="M0,0 L8,3 L0,6 Z" class="ef-arrow-positive"/></marker>' +
-      '<marker id="arrow-bat" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">' +
-      '<path d="M0,0 L8,3 L0,6 Z" class="ef-arrow-neutral"/></marker>' +
-      '<marker id="arrow-load" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">' +
-      '<path d="M0,0 L8,3 L0,6 Z" class="ef-arrow-text"/></marker>' +
-      '<marker id="arrow-grid" markerWidth="8" markerHeight="6" refX="8" refY="3" orient="auto">' +
-      '<path d="M0,0 L8,3 L0,6 Z" class="ef-arrow-accent"/></marker>' +
+      '<marker id="arrow-pv" markerWidth="4" markerHeight="3" refX="1" refY="1.5" orient="auto">' +
+      '<path d="M0,0 L4,1.5 L0,3 Z" class="ef-arrow-positive"/></marker>' +
+      '<marker id="arrow-bat" markerWidth="4" markerHeight="3" refX="1" refY="1.5" orient="auto">' +
+      '<path d="M0,0 L4,1.5 L0,3 Z" class="ef-arrow-neutral"/></marker>' +
+      '<marker id="arrow-load" markerWidth="4" markerHeight="3" refX="1" refY="1.5" orient="auto">' +
+      '<path d="M0,0 L4,1.5 L0,3 Z" class="ef-arrow-text"/></marker>' +
+      '<marker id="arrow-grid" markerWidth="4" markerHeight="3" refX="1" refY="1.5" orient="auto">' +
+      '<path d="M0,0 L4,1.5 L0,3 Z" class="ef-arrow-accent"/></marker>' +
       "</defs>";
 
-    // PV line: always PV→Hub (solar generates into hub)
+    // 4-corner diamond using percentage-based coords for fluid sizing
+    // PV always supplies → ef-supply
+    // Load always consumes → ef-demand
+    // Battery: charging(>0) = demand, discharging(<0) = supply
+    // Grid: importing(>0) = supply, exporting(<0) = demand
+    var batGroup = (state.batteryPower > 0.05) ? 'ef-demand' : 'ef-supply';
+    var gridGroup = (state.gridPowerKw > 0) ? 'ef-supply' : 'ef-demand';
+
+    // PV line: PV→Hub (always supply)
     if (showTop) {
       svgLines.push(
-        '<line x1="140" y1="76" x2="140" y2="108" class="ef-line-pv" marker-end="url(#arrow-pv)"/>',
+        '<line x1="22" y1="22" x2="42" y2="42" class="ef-line-pv ef-supply" marker-end="url(#arrow-pv)"/>',
       );
     }
 
     // Battery line: direction depends on charge/discharge
     if (showLeft) {
       if (state.batteryPower > 0.05) {
-        // Charging: Hub→Battery
+        // Charging: Hub→Battery (demand)
         svgLines.push(
-          '<line x1="120" y1="140" x2="56" y2="140" class="ef-line-bat" marker-end="url(#arrow-bat)"/>',
+          '<line x1="42" y1="58" x2="22" y2="78" class="ef-line-bat ' + batGroup + '" marker-end="url(#arrow-bat)"/>',
         );
       } else {
-        // Discharging: Battery→Hub
+        // Discharging: Battery→Hub (supply)
         svgLines.push(
-          '<line x1="56" y1="140" x2="120" y2="140" class="ef-line-bat" marker-end="url(#arrow-bat)"/>',
+          '<line x1="22" y1="78" x2="42" y2="58" class="ef-line-bat ' + batGroup + '" marker-end="url(#arrow-bat)"/>',
         );
       }
     }
 
-    // Load line: always Hub→Load (hub feeds load)
+    // Load line: Hub→Load (always demand)
     if (showRight) {
       svgLines.push(
-        '<line x1="160" y1="140" x2="224" y2="140" class="ef-line-load" marker-end="url(#arrow-load)"/>',
+        '<line x1="58" y1="42" x2="78" y2="22" class="ef-line-load ef-demand" marker-end="url(#arrow-load)"/>',
       );
     }
 
     // Grid line: direction depends on import/export
     if (showBottom) {
       if (state.gridPowerKw > 0) {
-        // Importing: Grid→Hub
+        // Importing: Grid→Hub (supply)
         svgLines.push(
-          '<line x1="140" y1="224" x2="140" y2="160" class="ef-line-grid" marker-end="url(#arrow-grid)"/>',
+          '<line x1="78" y1="78" x2="58" y2="58" class="ef-line-grid ' + gridGroup + '" marker-end="url(#arrow-grid)"/>',
         );
       } else {
-        // Exporting: Hub→Grid
+        // Exporting: Hub→Grid (demand)
         svgLines.push(
-          '<line x1="140" y1="160" x2="140" y2="224" class="ef-line-grid" marker-end="url(#arrow-grid)"/>',
+          '<line x1="58" y1="58" x2="78" y2="78" class="ef-line-grid ' + gridGroup + '" marker-end="url(#arrow-grid)"/>',
         );
       }
     }
 
     var svgOverlay =
-      '<svg class="ef-svg-overlay" viewBox="0 0 280 280" xmlns="http://www.w3.org/2000/svg">' +
+      '<svg class="ef-svg-overlay" viewBox="0 0 100 100" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg">' +
       markerDefs +
       svgLines.join("") +
       "</svg>";
@@ -1962,6 +2061,15 @@ var DevicesPage = {
       gridSub +
       "</div></div>" +
       "</div>";
+
+    // Stop breathing after 3 cycles (12s), set all lines to full opacity
+    setTimeout(function () {
+      var lines = document.querySelectorAll('.ef-svg-overlay line');
+      lines.forEach(function (l) {
+        l.style.animation = 'none';
+        l.style.opacity = '1';
+      });
+    }, 12000);
 
     return Components.sectionCard(t("devices.ef.title"), body);
   },
@@ -2167,6 +2275,187 @@ var DevicesPage = {
   // =========================================================
   // TOAST
   // =========================================================
+
+  // =========================================================
+  // DIAGNOSTICS ACCORDION (v6.x — AUTHORITATIVE data, SUMMARY presentation)
+  // All data from current flat rendering preserved; accessible via expand.
+  // =========================================================
+
+  _buildDiagnosticsAccordion: function (state, extra, devices, emsHealth) {
+    var panels = [];
+
+    // 1. Battery Telemetry
+    var batTags = [];
+    if (state.batterySoc != null) batTags.push('SoC ' + state.batterySoc + '%');
+    if (state.batteryVoltage != null) batTags.push(formatNumber(state.batteryVoltage, 1) + ' V');
+    if (state.batteryPower != null) batTags.push(formatNumber(state.batteryPower, 2) + ' kW');
+    var batItems = [
+      { label: t("devices.soc"), value: state.batterySoc != null ? state.batterySoc + '%' : '--', id: 'tv-batterySoc' },
+      { label: t("devices.soh"), value: state.batSoh != null ? state.batSoh + '%' : '--', id: 'tv-batSoh' },
+      { label: t("devices.voltage"), value: state.batteryVoltage != null ? formatNumber(state.batteryVoltage, 1) + ' V' : '--', id: 'tv-batteryVoltage' },
+      { label: t("devices.current"), value: state.batteryCurrent != null ? formatNumber(state.batteryCurrent, 1) + ' A' : '--', id: 'tv-batteryCurrent' },
+      { label: t("devices.temperature"), value: state.batteryTemperature != null ? state.batteryTemperature + '\u00b0C' : '--', id: 'tv-batteryTemperature' },
+      { label: t("devices.chargeRate"), value: state.batteryPower != null ? formatNumber(state.batteryPower, 2) + ' kW' : '--', id: 'tv-batteryPowerRate' },
+      { label: t("devices.maxChargeCurrent"), value: state.maxChargeCurrent != null ? state.maxChargeCurrent + ' A' : '--', id: 'tv-maxChargeCurrent' },
+      { label: t("devices.maxDischargeCurrent"), value: state.maxDischargeCurrent != null ? state.maxDischargeCurrent + ' A' : '--', id: 'tv-maxDischargeCurrent' },
+    ];
+    panels.push({ icon: '\ud83d\udd0b', title: t("devices.diagBattery"), tags: batTags, items: batItems });
+
+    // 2. Inverter & Grid Detail
+    var invTags = [];
+    if (state.pvPower != null) invTags.push('PV ' + formatNumber(state.pvPower, 1) + ' kW');
+    if (state.gridPowerKw != null) invTags.push('Grid ' + formatNumber(state.gridPowerKw, 1) + ' kW');
+    var invItems = [
+      { label: t("devices.pvPower"), value: state.pvPower != null ? formatNumber(state.pvPower, 2) + ' kW' : '--', id: 'tv-pvPowerDetail' },
+      { label: t("devices.inverterTemp"), value: state.inverterTemp != null ? state.inverterTemp + '\u00b0C' : '--', id: 'tv-inverterTemp' },
+      { label: t("devices.gridPower"), value: state.gridPowerKw != null ? formatNumber(state.gridPowerKw, 2) + ' kW' : '--', id: 'tv-gridPowerDetail' },
+      { label: t("devices.homeLoad"), value: state.loadPower != null ? formatNumber(state.loadPower, 2) + ' kW' : '--', id: 'tv-loadPowerDetail' },
+      { label: t("devices.gridVoltage"), value: extra.gridVoltageR != null ? formatNumber(extra.gridVoltageR, 1) + ' V' : '--', id: 'tv-gridVoltageR' },
+      { label: t("devices.gridCurrent"), value: extra.gridCurrentR != null ? formatNumber(extra.gridCurrentR, 1) + ' A' : '--', id: 'tv-gridCurrentR' },
+      { label: t("devices.powerFactor"), value: extra.gridPf != null ? formatNumber(extra.gridPf, 2) : '--', id: 'tv-gridPf' },
+      { label: t("devices.totalBuy"), value: extra.totalBuyKwh != null ? formatNumber(extra.totalBuyKwh, 1) + ' kWh' : '--', id: 'tv-totalBuyKwh' },
+      { label: t("devices.totalSell"), value: extra.totalSellKwh != null ? formatNumber(extra.totalSellKwh, 1) + ' kWh' : '--', id: 'tv-totalSellKwh' },
+    ];
+    panels.push({ icon: '\u26a1', title: t("devices.diagInverter"), tags: invTags, items: invItems });
+
+    // 3. Gateway Health
+    var h = emsHealth || {};
+    var healthTags = [];
+    if (h.cpuUsage || h.CPU_usage) healthTags.push('CPU ' + (h.cpuUsage || h.CPU_usage));
+    if (h.memoryUsage || h.memory_usage) healthTags.push('Mem ' + (h.memoryUsage || h.memory_usage));
+    var healthItems = [
+      { label: t("devices.health.wifi"), value: parseSignalStrength(h.wifi_signal_strength || h.wifiSignalStrength || ''), id: 'hv-wifiSignalStrength' },
+      { label: t("devices.health.cpuTemp"), value: h.cpuTemp || h.CPU_temp || '--', id: 'hv-cpuTemp' },
+      { label: t("devices.health.cpuUsage"), value: h.cpuUsage || h.CPU_usage || '--', id: 'hv-cpuUsage' },
+      { label: t("devices.health.memory"), value: h.memoryUsage || h.memory_usage || '--', id: 'hv-memoryUsage' },
+      { label: t("devices.health.disk"), value: h.diskUsage || h.disk_usage || '--', id: 'hv-diskUsage' },
+      { label: t("devices.health.uptime"), value: parseChineseRuntime(h.system_runtime || h.systemRuntime || ''), id: 'hv-systemRuntime' },
+      { label: t("devices.health.emsTemp"), value: h.emsTemp || h.ems_temp || '--', id: 'hv-emsTemp' },
+      { label: t("devices.health.sim"), value: parseFirmwareStatus(h.SIM_status || h.simStatus || ''), id: 'hv-simStatus' },
+    ];
+    panels.push({ icon: '\ud83d\udcf6', title: t("devices.diagHealth"), tags: healthTags, items: healthItems });
+
+    // 4. Device Composition
+    var devTags = [];
+    if (devices && devices.length > 0) {
+      var onlineCount = devices.filter(function (d) { return d.state && d.state.isOnline; }).length;
+      devTags.push(devices.length + ' ' + t("shared.devices"));
+      devTags.push(onlineCount + ' ' + t("devices.online"));
+    }
+    panels.push({ icon: '\ud83d\udd0c', title: t("devices.diagDevices"), tags: devTags, devices: devices });
+
+    // 5. Full Schedule Detail (read-only rendering)
+    var schedTags = [];
+    var bs = this._currentSchedule ? this._currentSchedule.batterySchedule : null;
+    if (bs && bs.slots) schedTags.push(bs.slots.length + ' slots');
+    panels.push({ icon: '\ud83d\udcc5', title: t("devices.diagSchedule"), tags: schedTags, scheduleData: bs });
+
+    // Render accordion
+    var html = '<div class="vu-diagnostics">' +
+      '<div class="vu-diagnostics-header">' +
+        '<span class="vu-diagnostics-title">' + t("devices.diagTitle") + '</span>' +
+        '<span class="vu-diagnostics-count">' + panels.length + ' ' + t("devices.diagSections") + '</span>' +
+      '</div>';
+
+    panels.forEach(function (panel, idx) {
+      var tagsHtml = (panel.tags || []).map(function (tag) {
+        return '<span class="vu-diag-tag">' + tag + '</span>';
+      }).join('');
+
+      var bodyHtml = '';
+      if (panel.items) {
+        bodyHtml = '<div class="vu-diag-grid">' +
+          panel.items.map(function (item) {
+            return '<div class="vu-diag-item">' +
+              '<span class="vu-diag-item-label">' + item.label + '</span>' +
+              '<span class="vu-diag-item-value" id="' + item.id + '">' + item.value + '</span>' +
+              '</div>';
+          }).join('') +
+          '</div>';
+      } else if (panel.devices) {
+        if (!panel.devices || panel.devices.length === 0) {
+          bodyHtml = '<div class="vu-priority-empty">' + t("devices.noDevicesUnderGw") + '</div>';
+        } else {
+          var typeIcons = {
+            INVERTER_BATTERY: '\ud83d\udd0b', SMART_METER: '\ud83d\udcca',
+            AC: '\u2744\ufe0f', HVAC: '\u2744\ufe0f', EV_CHARGER: '\ud83d\udd0c', SOLAR_PANEL: '\u2600\ufe0f',
+          };
+          bodyHtml = '<div class="device-comp-list">' +
+            panel.devices.map(function (dev) {
+              var st = dev.state || {};
+              var icon = typeIcons[dev.assetType] || '\ud83d\udd0c';
+              var statusClass = st.isOnline ? 'online' : 'offline';
+              var statsHtml = '';
+              if (dev.assetType === 'INVERTER_BATTERY' && st.batterySoc != null) {
+                statsHtml = '<span class="dev-stat">SoC ' + st.batterySoc + '%</span>';
+              } else if (dev.assetType === 'SMART_METER' && st.gridPowerKw != null) {
+                statsHtml = '<span class="dev-stat">Grid ' + formatNumber(st.gridPowerKw, 1) + ' kW</span>';
+              }
+              return '<div class="device-comp-row">' +
+                '<span class="dev-icon">' + icon + '</span>' +
+                '<div class="dev-comp-info"><span class="dev-comp-name">' + (dev.name || dev.assetId) + '</span>' +
+                '<span class="dev-comp-type">' + (dev.brand || '') + ' ' + (dev.model || '') + '</span></div>' +
+                '<div class="dev-comp-status"><span class="gw-status ' + statusClass + '"></span>' + statsHtml + '</div>' +
+                '</div>';
+            }).join('') +
+            '</div>';
+        }
+      } else if (panel.scheduleData) {
+        var sched = panel.scheduleData;
+        var schedItems = [
+          { label: t("devices.schedule.socMin"), value: sched.socMinLimit != null ? sched.socMinLimit + '%' : '--' },
+          { label: t("devices.schedule.socMax"), value: sched.socMaxLimit != null ? sched.socMaxLimit + '%' : '--' },
+          { label: t("devices.schedule.maxCharge"), value: sched.maxChargeCurrent != null ? sched.maxChargeCurrent + ' A' : '--' },
+          { label: t("devices.schedule.maxDischarge"), value: sched.maxDischargeCurrent != null ? sched.maxDischargeCurrent + ' A' : '--' },
+          { label: t("devices.schedule.gridImportLimit"), value: sched.gridImportLimitKw != null ? sched.gridImportLimitKw + ' W' : '--' },
+        ];
+        bodyHtml = '<div class="vu-diag-grid">' +
+          schedItems.map(function (si) {
+            return '<div class="vu-diag-item"><span class="vu-diag-item-label">' + si.label + '</span><span class="vu-diag-item-value">' + si.value + '</span></div>';
+          }).join('') +
+          '</div>';
+        if (sched.slots && sched.slots.length > 0) {
+          var purposeLabels = {
+            self_consumption: t("devices.selfConsumption"),
+            peak_shaving: t("devices.peakShaving"),
+            tariff: t("devices.schedule.tariff"),
+          };
+          bodyHtml += '<table class="data-table" style="margin-top:8px"><thead><tr>' +
+            '<th>' + t("devices.schedStart") + '</th><th>' + t("devices.schedEnd") + '</th><th>' + t("devices.schedMode") + '</th>' +
+            '<th>' + t("devices.schedule.direction") + '</th><th>' + t("devices.schedule.exportPolicy") + '</th></tr></thead><tbody>' +
+            sched.slots.map(function (slot) {
+              var sH = String(Math.floor(slot.startMinute / 60)).padStart(2, '0');
+              var eH = String(Math.floor(slot.endMinute / 60)).padStart(2, '0');
+              return '<tr><td>' + sH + ':00</td><td>' + eH + ':00</td><td>' + (purposeLabels[slot.purpose] || slot.purpose) + '</td>' +
+                '<td>' + (slot.direction || '--') + '</td><td>' + (slot.exportPolicy || '--') + '</td></tr>';
+            }).join('') +
+            '</tbody></table>';
+        }
+      } else {
+        bodyHtml = '<div class="vu-priority-empty">--</div>';
+      }
+
+      html += '<div class="vu-diag-panel" data-diag-index="' + idx + '">' +
+        '<div class="vu-diag-panel-header" onclick="DevicesPage._toggleDiagPanel(this)">' +
+          '<span class="vu-diag-chevron">\u25b6</span>' +
+          '<span class="vu-diag-panel-icon">' + panel.icon + '</span>' +
+          '<span class="vu-diag-panel-title">' + panel.title + '</span>' +
+          '<div class="vu-diag-tags">' + tagsHtml + '</div>' +
+        '</div>' +
+        '<div class="vu-diag-panel-body">' + bodyHtml + '</div>' +
+        '</div>';
+    });
+
+    html += '</div>';
+    return html;
+  },
+
+  _toggleDiagPanel: function (headerEl) {
+    var panel = headerEl.closest('.vu-diag-panel');
+    if (panel) {
+      panel.classList.toggle('expanded');
+    }
+  },
 
   _showToast: function (message, type) {
     type = type || "info";

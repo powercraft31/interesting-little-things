@@ -65,14 +65,138 @@ const FleetPage = {
   // =========================================================
   _buildContent() {
     return [
+      this._buildPageHeader(),
+      this._buildHeroSummary(),
+      this._buildPriorityStack(),
+      '<div class="vu-section-label">' + t("fleet.realTimeKpis") + '</div>',
       this._buildKPIStrip(),
+      '<div class="vu-section">',
       '<div class="two-col">',
       this._buildGwStatusChartCard(),
       this._buildBrandDistChartCard(),
       "</div>",
+      "</div>",
+      '<div class="vu-section">',
       this._buildOrgTable(),
+      "</div>",
+      '<div class="vu-section">',
       this._buildOutageTable(),
+      "</div>",
     ].join("");
+  },
+
+  // ---- Page Header (SUMMARY LAYER, non-authoritative) ----
+  _buildPageHeader() {
+    return '<div class="vu-page-header">' +
+      '<div class="vu-page-title">' + t("fleet.pageTitle") + '</div>' +
+      '<div class="vu-page-mission">' + t("fleet.pageMission") + '</div>' +
+      '</div>';
+  },
+
+  // ---- Hero Summary (SUMMARY LAYER, non-authoritative) ----
+  // Derived from the same overview data as the real KPI strip.
+  // Does NOT replace the 6 KPI strip below.
+  _buildHeroSummary() {
+    var d = this._data ? this._data.overview : {};
+    var total = d.totalGateways || 0;
+    var offline = d.offlineGateways || 0;
+    var rate = d.gatewayOnlineRate != null ? d.gatewayOnlineRate : 0;
+    var bp = d.backfillPressure || { count: 0, hasFailure: false };
+
+    // Determine verdict
+    var verdictClass = 'healthy';
+    var verdictText = t("fleet.verdictHealthy");
+    if (offline > 0 && bp.hasFailure) {
+      verdictClass = 'critical';
+      verdictText = t("fleet.verdictCritical");
+    } else if (offline > 0 || bp.count > 0) {
+      verdictClass = 'warning';
+      verdictText = t("fleet.verdictWarning");
+    }
+
+    return '<div class="vu-hero">' +
+      '<div class="vu-hero-verdict">' +
+        '<span class="vu-hero-badge ' + verdictClass + '">' + verdictText + '</span>' +
+      '</div>' +
+      '<div class="vu-hero-kpis">' +
+        '<div class="vu-hero-kpi"><span class="vu-hero-kpi-value">' + (rate != null ? rate + '%' : '\u2014') + '</span><span class="vu-hero-kpi-label">' + t("fleet.onlineRate") + '</span></div>' +
+        '<div class="vu-hero-kpi"><span class="vu-hero-kpi-value' + (offline > 0 ? ' negative' : '') + '">' + offline + '</span><span class="vu-hero-kpi-label">' + t("fleet.offlineGateways") + '</span></div>' +
+        '<div class="vu-hero-kpi"><span class="vu-hero-kpi-value' + (bp.count > 0 ? ' warning' : '') + '">' + bp.count + '</span><span class="vu-hero-kpi-label">' + t("fleet.backfillPressure") + '</span></div>' +
+        '<div class="vu-hero-kpi"><span class="vu-hero-kpi-value">' + total + '</span><span class="vu-hero-kpi-label">' + t("fleet.totalGateways") + '</span></div>' +
+      '</div>' +
+      '</div>';
+  },
+
+  // ---- Priority Stack (SUMMARY LAYER, non-authoritative) ----
+  // Client-side sorting only; labeled indicative, not authoritative.
+  _buildPriorityStack() {
+    var offlineEvents = this._data ? this._data.offlineEvents : [];
+    var integradores = this._data ? this._data.integradores : [];
+
+    // Priority Sites: gateways currently offline or with backfill issues
+    var prioritySites = [];
+    if (offlineEvents && offlineEvents.length > 0) {
+      var seen = {};
+      offlineEvents.forEach(function(ev) {
+        if (!seen[ev.gatewayName]) {
+          seen[ev.gatewayName] = true;
+          prioritySites.push({
+            name: ev.gatewayName,
+            org: ev.orgName,
+            status: ev.backfillStatus,
+            duration: ev.durationMinutes,
+          });
+        }
+      });
+    }
+
+    // Critical events: recent outages, limited to 5
+    var critEvents = (offlineEvents || []).slice(0, 5);
+
+    var sitesHtml = '';
+    if (prioritySites.length === 0) {
+      sitesHtml = '<div class="vu-priority-empty">' + t("fleet.noPrioritySites") + '</div>';
+    } else {
+      sitesHtml = '<div class="vu-priority-list">' +
+        prioritySites.slice(0, 5).map(function(s) {
+          var dotClass = s.status === 'failed' ? 'negative' : 'warning';
+          var meta = s.duration != null ? (s.duration < 60 ? s.duration + 'm' : Math.floor(s.duration/60) + 'h') : t("fleet.status.ongoing");
+          return '<div class="vu-priority-item">' +
+            '<span class="vu-priority-dot ' + dotClass + '"></span>' +
+            '<span class="vu-priority-label">' + s.name + ' &middot; ' + (s.org || '') + '</span>' +
+            '<span class="vu-priority-meta">' + meta + '</span>' +
+            '</div>';
+        }).join('') +
+        '</div>';
+    }
+
+    var eventsHtml = '';
+    if (critEvents.length === 0) {
+      eventsHtml = '<div class="vu-priority-empty">' + t("fleet.noOutages") + '</div>';
+    } else {
+      eventsHtml = '<div class="vu-priority-list">' +
+        critEvents.map(function(ev) {
+          var dotClass = ev.backfillStatus === 'failed' ? 'negative' : 'warning';
+          var dur = ev.durationMinutes != null ? (ev.durationMinutes < 60 ? ev.durationMinutes + 'm' : Math.floor(ev.durationMinutes/60) + 'h') : t("fleet.status.ongoing");
+          return '<div class="vu-priority-item">' +
+            '<span class="vu-priority-dot ' + dotClass + '"></span>' +
+            '<span class="vu-priority-label">' + (ev.gatewayName || '') + '</span>' +
+            '<span class="vu-priority-meta">' + dur + '</span>' +
+            '</div>';
+        }).join('') +
+        '</div>';
+    }
+
+    return '<div class="vu-priority-stack">' +
+      '<div class="vu-priority-card">' +
+        '<div class="vu-priority-card-header">' + t("fleet.prioritySites") + '<span class="vu-count">' + prioritySites.length + '</span></div>' +
+        sitesHtml +
+      '</div>' +
+      '<div class="vu-priority-card">' +
+        '<div class="vu-priority-card-header">' + t("fleet.criticalEvents") + '<span class="vu-count">' + critEvents.length + '</span></div>' +
+        eventsHtml +
+      '</div>' +
+      '</div>';
   },
 
   // ---- KPI Strip (6 cards, REQ order) ----
@@ -113,7 +237,7 @@ const FleetPage = {
       }),
     ];
 
-    return '<div class="kpi-grid kpi-grid-6">' + cards.join("") + "</div>";
+    return '<div class="kpi-grid kpi-grid-6 vu-kpi-grid">' + cards.join("") + "</div>";
   },
 
   // ---- Left Chart: Gateway Status Distribution ----
