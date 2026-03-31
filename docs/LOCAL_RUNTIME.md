@@ -1,34 +1,27 @@
 # SOLFACIL Local Runtime — Single Source of Truth
 
 **Status:** Active
-**Last Updated:** 2026-03-19
+**Last Updated:** 2026-03-31
 **Purpose:** Prevent environment drift, dual-runtime confusion, and accidental resurrection of retired host paths.
 
 ---
 
-## 1. Canonical Local Runtime
+## 1. Canonical Runtime Environments
 
-Solfacil local development and validation must use **one environment only**.
+### Production
+- **URL:** `https://solfacil.alwayscontrol.net/`
 
-### Public human-facing URL
-- **Primary URL:** `http://152.42.235.155`
+### Development (EC2)
+- **URL:** `http://188.166.184.87/solfacil/`
 
-### Host-local service probe
+### Local Development
 - **BFF/UI bind:** `http://127.0.0.1:3100`
+- **Database:** Docker `solfacil-db` on `127.0.0.1:5433`
 
-### Database
-- **Canonical DB:** Docker `solfacil-db`
-- **Host mapping:** `127.0.0.1:5433`
-
-### Public entry chain
-- `http://152.42.235.155`
-- → nginx on `:80`
-- → reverse proxy to `127.0.0.1:3100`
-
-### Containers
-- `solfacil-db`
-- `solfacil-bff`
-- `solfacil-m1`
+### Docker Containers
+- `solfacil-db` — PostgreSQL 15
+- `solfacil-bff` — BFF + static frontend
+- `solfacil-m1` — MQTT↔DB pipeline
 
 ---
 
@@ -45,17 +38,10 @@ The following path is **retired** and must not be used for validation or deploym
 These paths are no longer part of the active Solfacil runtime.
 
 ### B. Direct public access to `:3100`
-The following is **not** the public entry anymore:
+`3100` is host-local only and is intentionally bound to `127.0.0.1`.
 
-- `http://152.42.235.155:3100`
-
-`3100` is now host-local only and is intentionally bound to `127.0.0.1`.
-
-### C. File-server demo snapshots
-Any `8443` file-server path such as:
-- `https://152.42.235.155:8443/.../frontend-v2`
-
-is a **static shared demo/archive path**, not the live application runtime.
+### C. Old IP `152.42.235.155`
+All references to `152.42.235.155` are **retired**. Production now uses `https://solfacil.alwayscontrol.net/`.
 
 ---
 
@@ -64,7 +50,7 @@ is a **static shared demo/archive path**, not the live application runtime.
 When validating Solfacil UI or BFF changes:
 
 1. Use Docker runtime only
-2. Use `http://152.42.235.155` as the human-facing URL
+2. Use `https://solfacil.alwayscontrol.net/` (production) or `http://188.166.184.87/solfacil/` (dev) as the human-facing URL
 3. Use `http://127.0.0.1:3100` only as a host-local service probe
 4. Treat `5433` as the only local Solfacil DB
 5. Do not switch back to `3000 + 5432`
@@ -88,27 +74,12 @@ The environment has now been closed so that only one real runtime remains.
 
 ## 5. Immediate implication
 
-For current local usage, the only authoritative live path is:
+The authoritative live paths are:
 
-- `http://152.42.235.155`
-
-backed by:
-
-- BFF on `127.0.0.1:3100`
-- Docker DB on `127.0.0.1:5433`
+- **Production:** `https://solfacil.alwayscontrol.net/`
+- **Dev:** `http://188.166.184.87/solfacil/`
+- **Local:** `http://127.0.0.1:3100` backed by Docker DB on `127.0.0.1:5433`
 
 No other path should be treated as authoritative.
 
----
-
-## 6. Future HTTPS
-
-This local machine currently has **no formal DNS hostname** attached to it.
-
-If a future subdomain is added, HTTPS can later be introduced by attaching:
-
-- `443`
-- → reverse proxy
-- → `127.0.0.1:3100`
-
-Until then, the canonical public entry remains plain HTTP via the machine IP.
+> **Note:** The old IP `152.42.235.155` is retired. Production now uses the `solfacil.alwayscontrol.net` subdomain with HTTPS.
