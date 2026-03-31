@@ -10,7 +10,7 @@ export interface WeatherPayload {
   forecast_time: string; // ISO 8601, e.g. '2026-02-28T17:00:00-03:00'
   temperature_c: number;
   irradiance_w_m2: number;
-  cloud_cover_pct: number;
+  cloud_cover_pct?: number;
   source?: string; // e.g. 'mock-weather-publisher'
 }
 
