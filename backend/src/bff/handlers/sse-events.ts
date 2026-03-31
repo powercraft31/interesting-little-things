@@ -13,13 +13,10 @@ import type { Request, Response } from "express";
  * lifetime of the SSE session.
  */
 
-const DB_CONFIG = {
-  host: process.env.DB_HOST || "localhost",
-  port: parseInt(process.env.DB_PORT || "5432", 10),
-  database: "solfacil_vpp",
-  user: "solfacil_app",
-  password: "solfacil_vpp_2026",
-};
+const LISTEN_CONNECTION_STRING =
+  process.env.APP_DATABASE_URL ??
+  process.env.DATABASE_URL ??
+  "postgresql://solfacil_app:solfacil_vpp_2026@127.0.0.1:5433/solfacil_vpp";
 
 const KEEPALIVE_INTERVAL_MS = 30_000;
 
@@ -33,7 +30,7 @@ export function createSseHandler(_pool: Pool) {
     res.flushHeaders();
 
     // Dedicated LISTEN connection — NOT from the pool
-    const listenClient = new Client(DB_CONFIG);
+    const listenClient = new Client({ connectionString: LISTEN_CONNECTION_STRING });
 
     try {
       await listenClient.connect();
