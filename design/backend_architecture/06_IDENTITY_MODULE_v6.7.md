@@ -1,9 +1,9 @@
 # Module 6: Identity Module (M6)
 
-> **Module Version**: v6.6
-> **Git HEAD**: `4ec191a`
-> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.6.md](./00_MASTER_ARCHITECTURE_v6.6.md)
-> **Last Updated**: 2026-03-31
+> **Module Version**: v6.7
+> **Git HEAD**: `b94adf3`
+> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **Last Updated**: 2026-04-02
 > **Description**: JWT-based authentication shell -- no standalone identity service; auth is handled by BFF middleware + shared layer
 > (**说明**: 基于JWT的认证壳 -- 无独立身份服务；认证由BFF中间件+共享层处理)
 
@@ -359,3 +359,10 @@ export async function queryWithOrg<T>(sql, params, orgId) {
 | v5.2 | 2026-02-27 | Initial: Enterprise auth design (Cognito + SSO + MFA + SAML) -- not implemented |
 | v5.23 | 2026-03-13 | Phase 1 JWT Auth Shell: login endpoint, admin-users endpoint, auth middleware with JWT signature verification, login.html, frontend 401 intercept, logout button |
 | **v6.6** | **2026-03-31** | **Code-aligned rewrite from source: document actual verifyTenantToken() dual-path logic, tenant scope enforcement in admin-users, pool assignment rationale, RLS integration via queryWithOrg()** |
+| **v6.7** | **2026-04-02** | **Version bump for V2.4 protocol upgrade. No M6 code changes — auth/RBAC layer is protocol-agnostic.** |
+
+---
+
+## V2.4 Protocol Impact
+
+**No code changes required.** M6 handles JWT authentication and RBAC enforcement. These are entirely protocol-agnostic — they operate on HTTP headers and database role lookups, not on MQTT payload formats or telemetry value scaling.

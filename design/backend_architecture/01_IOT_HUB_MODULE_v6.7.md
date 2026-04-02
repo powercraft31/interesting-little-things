@@ -1,74 +1,85 @@
 # M1: IoT Hub Module — MQTT 協議接入層
 
-> **Module Version**: v6.6 (gateway outage events + telemetry-triggered backfill)
-> **Git HEAD**: `4ec191a`
-> **Parent**: [00_MASTER_ARCHITECTURE_v6.6.md](./00_MASTER_ARCHITECTURE_v6.6.md)
-> **Last Updated**: 2026-03-31
-> **Description**: Full Solfacil Protocol v1.2 integration — 6 subscribe + 4 publish topics, anti-corruption layer, gateway registry, command pipeline, backfill infrastructure, gateway outage event tracking, telemetry-triggered gap detection
-> **Core Theme**: Adapter-pattern telemetry normalization, fragment assembly pipeline, gateway outage lifecycle management
+> **Module Version**: v6.7 (Protocol V2.4 alignment + alarm handler)
+> **Git HEAD**: `b94adf3`
+> **Parent**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **Last Updated**: 2026-04-02
+> **Description**: Full Solfacil Protocol V2.4 integration — 7 subscribe + 4 publish topics, anti-corruption layer, gateway registry, command pipeline, backfill infrastructure, gateway outage event tracking, telemetry-triggered gap detection, alarm event processing
+> **Core Theme**: Adapter-pattern telemetry normalization, fragment assembly pipeline, gateway outage lifecycle management, V2.4 protocol alignment
 
 ---
 
 ## Changes from v5.22
 
-| Component | Before (v5.22) | After (v6.6) |
+| Component | Before (v5.22) | After (v6.7) |
 |-----------|---------------|--------------|
 | Backfill trigger | HeartbeatHandler reconnect detection（CTE + gap > 2min → `backfill_requests`） | **TelemetryHandler** gap detection: telemetry stream gap > 5 min → `INSERT backfill_requests`（v6.1）；HeartbeatHandler 不再觸發 backfill |
 | HeartbeatHandler | Reconnect detection + backfill_requests INSERT | Connectivity recovery only: close open `gateway_outage_events` on reconnect; **no backfill** trigger（v6.1） |
-| Watchdog threshold | 10 min (`OFFLINE_THRESHOLD_MS = 600_000`) | **15 min** (`OFFLINE_THRESHOLD_MS = 900_000`)（v6.1） |
+| Watchdog threshold | 10 min (`OFFLINE_THRESHOLD_MS = 600_000`) | **30 min** (`OFFLINE_THRESHOLD_MS = 1_800_000`)（v6.7, V2.4 heartbeat 300s × 6） |
 | Gateway outage events | 無 | `gateway_outage_events` 表 + watchdog writes outage on offline + HeartbeatHandler closes on reconnect + **5-min flap consolidation**（v6.1） |
-| Fragment scaling | `safeFloat()` 直接透傳原始值 | Protocol v1.8 scaling helpers: `scaleVoltage(×0.1)`, `scaleCurrent(×0.1)`, `scaleTemp(×0.1)`, `scalePowerKw(÷1000)`, `scaleEnergyKwh(×0.1)`, `scaleFrequency(×0.01)` |
+| Fragment scaling | `safeFloat()` 直接透傳原始值 | Protocol V2.4 scaling helpers: `scaleVoltage(×0.1)`, `scaleCurrent(×0.1)`, `scaleTemp(×0.1)`, `scalePowerKw(÷1000)`, `scaleEnergyKwh(×0.1)`, `scaleFrequency(×0.01)`, `scalePowerFactor(×0.001)` |
 | DynamicAdapter | Phase 6.4: direct mode only | Direct + **Iterator mode**: one payload → N envelopes（e.g. battery array via `rule.iterator` path）（v6.4） |
 | parseTelemetryPayload | Core 大包直接取第一個 pvList item | **findPvSummary / findPvMppt**: 按 `name` 分離 PV summary（`name="pv"`）與 MPPT items（`pv1`/`pv2`）；telemetry_extra 增加 `ems_health` subsection |
 | ingest-telemetry.ts | ACL only（NativeAdapter / HuaweiAdapter） | AppConfig 動態解析規則優先 → DynamicAdapter（Phase 6.4）→ Legacy mapping → ACL fallback |
+| Timestamps | `parseInt(payload.timeStamp, 10)` → epoch ms | `parseProtocolTimestamp()` — V2.4 UTC-3 string + V1.x epoch ms backward compat（shared/protocol-time.ts） |
+| Alarm handler | 無 | **NEW** `alarm-handler.ts`: `device/ems/{cid}/alarm` → `gateway_alarm_events` INSERT + `pg_notify('alarm_event')`（V2.4） |
+| Subscribe topics | 6 per gateway（S1–S6） | **7 per gateway**（S1–S7）：+S7 `device/ems/{cid}/alarm` → `handleAlarm()`（V2.4） |
+| Power factor scaling | 無 | `scalePowerFactor(×0.001)`: grid_factorA/B/C, meter grid_factor/factorA/B/C（V2.4） |
+| Schedule field naming | `gridImportLimitKw` (misnomer) | V2.4: `gridImportLimitW` preferred（value is watts）, `gridImportLimitKw` retained as deprecated alias |
+| Backfill timestamps | `data: { start: String(epochMs), end: String(epochMs) }` | V2.4: `epochMsToProtocolTimestamp()` → UTC-3 business time strings |
+| MissedData progress | 無 | V2.4: `total`/`index` tracking in backfill responses, empty response detection (total=0, index=0) |
+| CommandTracker V2.4 | `set_reply.messageId` echoes original request | V2.4: `set_reply.messageId` is independent; matching on (gateway_id, config_name, command_type, result) |
+| File count | 26 files | **27 files**（+alarm-handler.ts） |
 
 ---
 
 ## 1. Architecture Overview
 
 ```
-                  ┌────────────────────────────────────────────────┐
-                  │              MQTT Broker                        │
-                  │         18.141.63.142:1883                      │
-                  └──┬──────┬──────┬──────┬──────┬──────┬──────────┘
-                     │S1    │S2    │S3    │S4    │S5    │S6
-                     ▼      ▼      ▼      ▼      ▼      ▼
-┌─────────────────────────────────────────────────────────────────────┐
-│                    M1 IoT Hub (v6.6)                                 │
-│                                                                      │
-│  ┌──────────────┐  ┌──────────────────────────────────────────────┐ │
-│  │ Gateway       │  │ Anti-Corruption Layer (ACL)                  │ │
-│  │ Connection    │  │                                              │ │
-│  │ Manager       │  │  S1 → DeviceListHandler  → assets           │ │
-│  │               │  │  S2 → TelemetryHandler   → telemetry_*      │ │
-│  │  reads        │  │       ├─ FragmentAssembler (merge 5 msgs)    │ │
-│  │  gateways     │  │       │   └─ parseTelemetryPayload (shared)  │ │
-│  │  table        │  │       │       └─ Protocol v1.8 scaling       │ │
-│  │               │  │       ├─ EmsListProcessor → gateways         │ │
-│  │  subscribes   │  │       ├─ DidoProcessor    → DO0/DO1          │ │
-│  │  6 topics/gw  │  │       └─ Gap detection (>5min) → backfill    │ │
-│  │               │  │  S3 → CommandTracker     → cmd_logs         │ │
-│  │  watchdog     │  │  S4 → CommandTracker     → cmd_logs         │ │
-│  │  15min        │  │       └─ two-phase: accepted→success/fail    │ │
-│  │               │  │  S5 → HeartbeatHandler   → gateways         │ │
-│  │  outage       │  │       └─ reconnect → close outage_events    │ │
-│  │  events       │  │  S6 → MissedDataHandler  → telemetry_*      │ │
-│  └──────┬───────┘  │       └─ BackfillAssembler (dedup INSERT)     │ │
-│         │          │                                              │ │
-│         ▼          │  P1 ← ScheduleTranslator  ← BFF              │ │
-│    ┌─────────┐     │  P2 ← CommandPublisher    ← poll dispatched   │ │
-│    │gateways │     │  P3 ← SubDevicesPoller    ← Timer/Startup    │ │
-│    │  table  │     │  P4 ← BackfillRequester   ← poll backfill_*  │ │
-│    └─────────┘     └──────────────────────────────────────────────┘ │
-│                                                                      │
-│  ┌──────────────────────────────────────────────────────────────┐   │
-│  │ Services                                                      │   │
-│  │  CommandPublisher   — polls dispatched → MQTT config/set      │   │
-│  │  BackfillRequester  — polls backfill_requests → get_missed    │   │
-│  │  5min Aggregator    — cron */5 → asset_5min_metrics           │   │
-│  │  Hourly Aggregator  — cron :05 → asset_hourly_metrics         │   │
-│  └──────────────────────────────────────────────────────────────┘   │
-└─────────────────────────────────────────────────────────────────────┘
+                  ┌────────────────────────────────────────────────────────┐
+                  │              MQTT Broker                                │
+                  │         18.141.63.142:1883                              │
+                  └──┬──────┬──────┬──────┬──────┬──────┬──────┬──────────┘
+                     │S1    │S2    │S3    │S4    │S5    │S6    │S7
+                     ▼      ▼      ▼      ▼      ▼      ▼      ▼
+┌─────────────────────────────────────────────────────────────────────────────┐
+│                    M1 IoT Hub (v6.7)                                         │
+│                                                                              │
+│  ┌──────────────┐  ┌──────────────────────────────────────────────────────┐ │
+│  │ Gateway       │  │ Anti-Corruption Layer (ACL)                          │ │
+│  │ Connection    │  │                                                      │ │
+│  │ Manager       │  │  S1 → DeviceListHandler  → assets                   │ │
+│  │               │  │  S2 → TelemetryHandler   → telemetry_*              │ │
+│  │  reads        │  │       ├─ FragmentAssembler (merge 5 msgs)            │ │
+│  │  gateways     │  │       │   └─ parseTelemetryPayload (shared)          │ │
+│  │  table        │  │       │       └─ Protocol V2.4 scaling               │ │
+│  │               │  │       ├─ EmsListProcessor → gateways                 │ │
+│  │  subscribes   │  │       ├─ DidoProcessor    → DO0/DO1                  │ │
+│  │  7 topics/gw  │  │       └─ Gap detection (>5min) → backfill            │ │
+│  │               │  │  S3 → CommandTracker     → cmd_logs                 │ │
+│  │  watchdog     │  │  S4 → CommandTracker     → cmd_logs                 │ │
+│  │  30min        │  │       └─ two-phase: accepted→success/fail            │ │
+│  │               │  │  S5 → HeartbeatHandler   → gateways                 │ │
+│  │  outage       │  │       └─ reconnect → close outage_events            │ │
+│  │  events       │  │  S6 → AlarmHandler       → alarm_events             │ │
+│  └──────┬───────┘  │       └─ pg_notify('alarm_event')                    │ │
+│         │          │  S7 → MissedDataHandler  → telemetry_*              │ │
+│         ▼          │       └─ BackfillAssembler (dedup INSERT)             │ │
+│    ┌─────────┐     │                                                      │ │
+│    │gateways │     │  P1 ← ScheduleTranslator  ← BFF                      │ │
+│    │  table  │     │  P2 ← CommandPublisher    ← poll dispatched           │ │
+│    └─────────┘     │  P3 ← SubDevicesPoller    ← Timer/Startup            │ │
+│                    │  P4 ← BackfillRequester   ← poll backfill_*          │ │
+│                    └──────────────────────────────────────────────────────┘ │
+│                                                                              │
+│  ┌──────────────────────────────────────────────────────────────┐           │
+│  │ Services                                                      │           │
+│  │  CommandPublisher   — polls dispatched → MQTT config/set      │           │
+│  │  BackfillRequester  — polls backfill_requests → get_missed    │           │
+│  │  5min Aggregator    — cron */5 → asset_5min_metrics           │           │
+│  │  Hourly Aggregator  — cron :05 → asset_hourly_metrics         │           │
+│  └──────────────────────────────────────────────────────────────┘           │
+└─────────────────────────────────────────────────────────────────────────────┘
          │                    │                    │
          ▼                    ▼                    ▼
     ┌─────────┐         ┌──────────┐         ┌──────────┐
@@ -102,12 +113,12 @@ M1 GatewayConnectionManager.start(pool, handlers)
   │
   ├─ For each gateway:
   │    ├─ mqtt.connect(broker_host:broker_port, {username, password})
-  │    ├─ Subscribe to 6 topics (S1–S6)
+  │    ├─ Subscribe to 7 topics (S1–S7)
   │    ├─ Store client handle in gatewayClients Map
   │    └─ Publish subDevices/get (initial device list pull)
   │
   ├─ Start heartbeat watchdog (60s interval)
-  │    └─ For each gateway: if NOW() - last_seen_at > 900s → status='offline'
+  │    └─ For each gateway: if NOW() - last_seen_at > 1800s → status='offline'
   │       └─ Write gateway_outage_events (with 5-min flap consolidation)
   │
   ├─ Start CommandPublisher (poll every 10s)
@@ -130,6 +141,7 @@ For each gateway with `gateway_id = {cid}`:
 | S4 | `device/ems/{cid}/config/set_reply` | `handleSetReply()` |
 | S5 | `device/ems/{cid}/status` | `handleHeartbeat()` |
 | S6 | `device/ems/{cid}/data/missed` | `handleMissedData()` |
+| S7 | `device/ems/{cid}/alarm` | `handleAlarm()` |
 
 ### 2.3 Per-Gateway Publish Topics
 
@@ -181,6 +193,7 @@ routeMessage(gatewayId, clientId, topic, payload):
   else if (topic.endsWith("/data"))        → onTelemetry
   else if (topic.endsWith("/config/get_reply")) → onGetReply
   else if (topic.endsWith("/config/set_reply")) → onSetReply
+  else if (topic.endsWith("/alarm"))       → onAlarm       // V2.4 NEW
   else if (topic.endsWith("/status"))      → onHeartbeat
 ```
 
@@ -188,7 +201,7 @@ routeMessage(gatewayId, clientId, topic, payload):
 
 ### 2.6 Dynamic Gateway Addition
 
-MVP 方式：M1 每 60s 輪詢 `gateways` 表找新記錄。若發現新網關（不在 `gatewayClients` Map 中），訂閱其 6 個 topic。
+MVP 方式：M1 每 60s 輪詢 `gateways` 表找新記錄。若發現新網關（不在 `gatewayClients` Map 中），訂閱其 7 個 topic。
 
 ---
 
@@ -224,10 +237,11 @@ MVP 方式：M1 每 60s 輪詢 `gateways` 表找新記錄。若發現新網關�
         │
         ├─ Step 2: parseTelemetryPayload() ← shared pure function
         │          │
-        │          ├─ Protocol v1.8 scaling
+        │          ├─ Protocol V2.4 scaling
         │          │   scaleVoltage(×0.1), scaleCurrent(×0.1)
         │          │   scaleTemp(×0.1), scalePowerKw(÷1000)
         │          │   scaleEnergyKwh(×0.1), scaleFrequency(×0.01)
+        │          │   scalePowerFactor(×0.001)
         │          │
         │          ├─ findPvSummary/findPvMppt (name-based PV routing)
         │          │
@@ -315,7 +329,7 @@ classifyAndAccumulate(acc, data):
 | `batList` 到達（MSG#5） | 清除 timer，立即 flush | MSG#5 最後到達（+357ms），前 4 條已在 cache |
 | 3s debounce timer 到期 | flush（僅寫 ems_health） | 防止 MSG#5 丟失時 ems_health 也丟 |
 
-### 3.4 Protocol v1.8 Scaling Helpers
+### 3.4 Protocol V2.4 Scaling Helpers
 
 所有原始欄位均為整數字串，雲端負責套用縮放因子：
 
@@ -328,6 +342,7 @@ classifyAndAccumulate(acc, data):
 | `scalePowerW` | ×1 | per-phase 功率（W，保留於 telemetry_extra） |
 | `scaleEnergyKwh` | ×0.1 | 能量欄位（→kWh） |
 | `scaleFrequency` | ×0.01 | 頻率欄位（Hz） |
+| `scalePowerFactor` | ×0.001 | 功率因數（power factor）— grid_factorA/B/C, meter grid_factor* |
 | `safeFloat` | ×1 | 安全 parseFloat：undefined/null/empty/NaN → 0 |
 
 ### 3.5 PV List Routing
@@ -349,16 +364,16 @@ findPvMppt(pvList, "pv2"): → pvList.find(p => p.name === "pv2")
 **Threshold**: `BACKFILL_GAP_THRESHOLD_MS = 300_000` (5 minutes)
 
 ```typescript
-checkTelemetryGap(pool, gatewayId, currentTs):
-  previousTs = lastTelemetryCache.get(gatewayId)
-  lastTelemetryCache.set(gatewayId, currentTs)
+checkTelemetryGap(pool, gatewayId, currentTime: Date):
+  previousTime = lastTelemetryCache.get(gatewayId)
+  lastTelemetryCache.set(gatewayId, currentTime)
 
-  if (previousTs === undefined) return    // first message since startup
-  gapMs = currentTs - previousTs
+  if (previousTime === undefined) return    // first message since startup
+  gapMs = currentTime.getTime() - previousTime.getTime()
 
   if (gapMs > 300_000):
     INSERT INTO backfill_requests (gateway_id, gap_start, gap_end, status)
-    VALUES ($gatewayId, prev_ts, current_ts, 'pending')
+    VALUES ($gatewayId, prev_time, current_time, 'pending')
 ```
 
 > **v6.1 Design Change**: Backfill trigger 從 HeartbeatHandler 移到 TelemetryHandler。原因：遙測流本身才能準確判斷資料間隙，心跳僅表示連線存活。
@@ -571,7 +586,7 @@ handleTelemetry(pool, gatewayId, _clientId, payload):
 ```
 
 **鐵律 — TimeStamp Rule:**
-所有 `recorded_at` 值必須從 `payload.timeStamp`（epoch ms 字串）解析。伺服器端 `NOW()` **禁止**用於遙測寫入。
+所有 `recorded_at` 值必須從 `payload.timeStamp`（V2.4 UTC-3 string or V1.x epoch ms, parsed via `parseProtocolTimestamp()`）解析。伺服器端 `NOW()` **禁止**用於遙測寫入。
 
 #### 5.2.1 Complete Field Mappings — MSG#5 大包
 
@@ -608,10 +623,12 @@ handleTelemetry(pool, gatewayId, _clientId, payload):
 | `grid_totalReactivePower` | `telemetry_extra.grid.total_reactive_power` | ×1 W | 診斷用 |
 | `grid_apparentPowerA/B/C` | `telemetry_extra.grid.apparent_power_a/b/c` | ×1 W | 診斷用 |
 | `grid_totalApparentPower` | `telemetry_extra.grid.total_apparent_power` | ×1 W | 診斷用 |
-| `grid_factorA/B/C` | `telemetry_extra.grid.factor_a/b/c` | ×1 | 診斷用 |
+| `grid_factorA/B/C` | `telemetry_extra.grid.factor_a/b/c` | ×0.001 | 診斷用（V2.4 `scalePowerFactor`） |
 | `grid_frequency` | `telemetry_extra.grid.frequency` | ×0.01 | 診斷用 |
 | `grid_totalBuyEnergy` | `telemetry_extra.grid.total_buy_kwh` | ×0.1 | 累計值 |
 | `grid_totalSellEnergy` | `telemetry_extra.grid.total_sell_kwh` | ×0.1 | 累計值 |
+
+> **Note**: Meter fields also use `scalePowerFactor(×0.001)` for grid_factor, factorA, factorB, factorC fields.
 
 **pvList (Solar PV)：**
 
@@ -665,7 +682,7 @@ handleTelemetry(pool, gatewayId, _clientId, payload):
 
 ```
 handleHeartbeat(pool, gatewayId, _clientId, payload):
-  1. Parse payload.timeStamp → deviceTimestamp (validate finite > 0)
+  1. Parse payload.timeStamp via `parseProtocolTimestamp()` → deviceTime (V2.4 UTC-3 or V1.x epoch ms)
   2. Atomic CTE: read prev state + update last_seen_at/status
      WITH prev AS (SELECT last_seen_at, status FROM gateways WHERE gateway_id = $2)
      UPDATE gateways SET last_seen_at = ..., status = 'online'
@@ -678,6 +695,8 @@ handleHeartbeat(pool, gatewayId, _clientId, payload):
 
   4. pg_notify('gateway_health', gatewayId)
 ```
+
+> HeartbeatHandler now stores deviceTime as ISO string in `last_seen_at`.
 
 > **v6.1 Design Change**: HeartbeatHandler 不再 INSERT `backfill_requests`。Backfill 觸發責任完全移至 TelemetryHandler（遙測流間隙偵測 > 5 min）。HeartbeatHandler 僅負責連線恢復與 outage event 關閉。
 
@@ -711,6 +730,8 @@ If no matching command found → INSERT standalone `set_reply` record (audit tra
 
 If match found → `pg_notify('command_status', {gatewayId, configName, result})`.
 
+> **V2.4 Note**: `set_reply.messageId` is independent (not echoing the original request). Matching uses (gateway_id, config_name, command_type, result) instead of messageId.
+
 ### 5.5 MissedDataHandler (Backfill Data Path)
 
 **Subscribe**: `device/ems/{gatewayId}/data/missed`
@@ -721,6 +742,10 @@ If match found → `pg_notify('command_status', {gatewayId, configName, result})
 handleMissedData(pool, gatewayId, clientId, payload):
   → BackfillAssembler.receive(clientId, gatewayId, payload)
 ```
+
+**V2.4**: Backfill responses include `total`/`index` progress tracking.
+Empty responses (total=0, index=0) are detected and return early.
+Progress logging: `[MissedData] ${gatewayId}: processing ${index}/${total}`
 
 **BackfillAssembler vs FragmentAssembler:**
 
@@ -733,7 +758,55 @@ handleMissedData(pool, gatewayId, clientId, payload):
 | INSERT 策略 | 一般 INSERT | `ON CONFLICT (asset_id, recorded_at) DO NOTHING` |
 | 解析函式 | `parseTelemetryPayload`（共用） | `parseTelemetryPayload`（共用） |
 
-### 5.6 ScheduleTranslator (Bidirectional)
+### 5.6 AlarmHandler (V2.4 NEW)
+
+**Subscribe**: `device/ems/{gatewayId}/alarm`
+**Source**: `alarm-handler.ts`
+**Persistence**: `gateway_alarm_events` (pure INSERT, no UPSERT)
+
+```
+handleAlarm(pool, gatewayId, _clientId, payload):
+  1. Extract eventinfo from payload.data (SolfacilAlarmPayload)
+  2. Validate eventinfo exists and is object → skip if missing
+  3. Query org_id from gateways table (gateway_alarm_events.org_id NOT NULL)
+  4. Parse event timestamps via parseProtocolTimestamp():
+     - eventCreateTime = parseProtocolTimestamp(ei.createTime)
+     - eventUpdateTime = parseProtocolTimestamp(ei.updateTime) [optional]
+  5. Pure INSERT into gateway_alarm_events:
+     (gateway_id, org_id, device_sn, sub_dev_id, sub_dev_name,
+      product_type, event_id, event_name, event_type, level,
+      status, prop_id, prop_name, prop_value, description,
+      event_create_time, event_update_time)
+  6. pg_notify('alarm_event', {gatewayId, orgId, eventId, status, level, subDevId})
+```
+
+**Design Decision**: Pure INSERT (not UPSERT) — alarm events are audit-complete records. Each event occurrence is a separate row for compliance and historical analysis.
+
+**SolfacilAlarmPayload type:**
+
+```typescript
+interface SolfacilAlarmPayload {
+  readonly eventinfo: {
+    readonly deviceSn: string;
+    readonly subDevId?: string;
+    readonly subDevName?: string;
+    readonly productType: string;
+    readonly eventId: string;
+    readonly eventName: string;
+    readonly eventType: string;
+    readonly level: string;
+    readonly status: string;
+    readonly propId: string;
+    readonly propName: string;
+    readonly propValue: string;
+    readonly description?: string;
+    readonly createTime: string;    // V2.4 UTC-3 timestamp
+    readonly updateTime?: string;   // V2.4 UTC-3 timestamp (optional)
+  };
+}
+```
+
+### 5.7 ScheduleTranslator (Bidirectional)
 
 **Source**: `schedule-translator.ts`
 
@@ -745,8 +818,10 @@ handleMissedData(pool, gatewayId, clientId, payload):
 | `soc_max_limit` (string) | `socMaxLimit` (number) | `parseInt()` |
 | `max_charge_current` (string) | `maxChargeCurrent` (number) | `parseInt()` |
 | `max_discharge_current` (string) | `maxDischargeCurrent` (number) | `parseInt()` |
-| `grid_import_limit` (string) | `gridImportLimitKw` (number) | `parseInt()` |
+| `grid_import_limit` (string) | `gridImportLimitW` (number) | `parseInt()` |
 | `slots[]` | `slots[]` | Per-slot: purpose+direction → mode+action |
+
+> **V2.4**: `gridImportLimitW` is the preferred field name (value is watts, not kW). `gridImportLimitKw` retained as deprecated alias for backward compatibility.
 
 **Write direction**: `buildConfigSetPayload(clientId, schedule, messageId) → MQTT message`
 
@@ -801,7 +876,7 @@ Pipeline: BFF/M3 writes `device_command_logs` result='pending' → BFF sets 'dis
 
 ```
 publishGetMissed(gatewayId, startMs, endMs):
-  Build message with data: { start: String(startMs), end: String(endMs) }
+  Build message with data: { start: epochMsToProtocolTimestamp(startMs), end: epochMsToProtocolTimestamp(endMs) }
   Publish via connectionManager.publishToGateway()
 ```
 
@@ -934,19 +1009,20 @@ Rolls up `asset_5min_metrics` → `asset_hourly_metrics` for the previous hour.
 
 **Core responsibilities:**
 1. Load gateways from DB → connect each to MQTT broker
-2. Subscribe 6 topics per gateway (S1–S6)
+2. Subscribe 7 topics per gateway (S1–S7)
 3. Route messages to appropriate handlers
 4. Poll for new gateways every 60s
-5. Watchdog: mark offline after 15 min without heartbeat
+5. Watchdog: mark offline after 30 min without heartbeat
 6. Hourly poll: `subDevices/get` + `config/get` for all gateways
-7. Expose `publishToGateway()`, `isGatewayConnected()` for services
+7. Route alarm messages to AlarmHandler
+8. Expose `publishToGateway()`, `isGatewayConnected()` for services
 
 **Gateway Outage Event Management (v6.1):**
 
 ```
 heartbeatWatchdog():
   UPDATE gateways SET status = 'offline'
-    WHERE status = 'online' AND last_seen_at < NOW() - 15min
+    WHERE status = 'online' AND last_seen_at < NOW() - 30min
     RETURNING gateway_id, org_id
 
   For each newly-offline gateway:
@@ -1146,11 +1222,47 @@ CREATE POLICY rls_gateway_outage_events_tenant ON gateway_outage_events
 ```
 
 **Outage lifecycle:**
-1. Watchdog detects offline (15 min no heartbeat) → INSERT `started_at=NOW()`
+1. Watchdog detects offline (30 min no heartbeat) → INSERT `started_at=NOW()`
 2. Flap consolidation: if recent outage ended < 5 min ago → reopen (UPDATE `ended_at=NULL`)
 3. HeartbeatHandler detects reconnect → UPDATE `ended_at=NOW()`
 
-### 8.8 `asset_5min_metrics`
+### 8.8 `gateway_alarm_events` (V2.4 NEW)
+
+```sql
+CREATE TABLE IF NOT EXISTS gateway_alarm_events (
+  id                BIGSERIAL    PRIMARY KEY,
+  gateway_id        VARCHAR(100) NOT NULL REFERENCES gateways(gateway_id),
+  org_id            VARCHAR(50)  NOT NULL REFERENCES organizations(org_id),
+  device_sn         VARCHAR(100),
+  sub_dev_id        VARCHAR(100),
+  sub_dev_name      VARCHAR(200),
+  product_type      VARCHAR(50)  NOT NULL,
+  event_id          VARCHAR(100) NOT NULL,
+  event_name        VARCHAR(200) NOT NULL,
+  event_type        VARCHAR(50)  NOT NULL,
+  level             VARCHAR(20)  NOT NULL,
+  status            VARCHAR(20)  NOT NULL,
+  prop_id           VARCHAR(100) NOT NULL,
+  prop_name         VARCHAR(200) NOT NULL,
+  prop_value        VARCHAR(500) NOT NULL,
+  description       TEXT,
+  event_create_time TIMESTAMPTZ  NOT NULL,
+  event_update_time TIMESTAMPTZ,
+  created_at        TIMESTAMPTZ  NOT NULL DEFAULT NOW()
+);
+
+COMMENT ON TABLE gateway_alarm_events IS
+  'V2.4: Device alarm events from device/ems/{cid}/alarm topic. Pure INSERT for audit completeness.';
+
+CREATE INDEX IF NOT EXISTS idx_gae_gateway_created
+  ON gateway_alarm_events (gateway_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gae_org_created
+  ON gateway_alarm_events (org_id, created_at DESC);
+CREATE INDEX IF NOT EXISTS idx_gae_event_id
+  ON gateway_alarm_events (event_id);
+```
+
+### 8.9 `asset_5min_metrics`
 
 ```sql
 asset_5min_metrics.asset_id               VARCHAR FK → assets
@@ -1167,7 +1279,7 @@ asset_5min_metrics.data_points            INTEGER
 -- UNIQUE(asset_id, window_start)
 ```
 
-### 8.9 `asset_hourly_metrics`
+### 8.10 `asset_hourly_metrics`
 
 ```sql
 asset_hourly_metrics.asset_id             VARCHAR FK → assets
@@ -1198,7 +1310,7 @@ interface SolfacilMessage {
   readonly deviceName: string;
   readonly productKey: string;
   readonly messageId: string;
-  readonly timeStamp: string;          // epoch ms as string
+  readonly timeStamp: string;          // V2.4: UTC-3 "YYYY-MM-DD HH:mm:ss" or V1.x epoch ms string
   readonly data: Record<string, unknown>;
 }
 ```
@@ -1252,7 +1364,8 @@ interface DomainSchedule {
   readonly socMaxLimit: number;        // 0-100
   readonly maxChargeCurrent: number;   // A, >=0
   readonly maxDischargeCurrent: number; // A, >=0
-  readonly gridImportLimitKw: number;  // kW, >=0
+  readonly gridImportLimitW?: number;     // V2.4 preferred (value is watts)
+  /** @deprecated */ readonly gridImportLimitKw?: number;  // backward-compat alias
   readonly slots: ReadonlyArray<DomainSlot>;
 }
 
@@ -1299,6 +1412,30 @@ interface BackfillRow {
 }
 ```
 
+### 9.7 SolfacilAlarmPayload (V2.4 NEW)
+
+```typescript
+interface SolfacilAlarmPayload {
+  readonly eventinfo: {
+    readonly deviceSn: string;
+    readonly subDevId?: string;
+    readonly subDevName?: string;
+    readonly productType: string;
+    readonly eventId: string;
+    readonly eventName: string;
+    readonly eventType: string;
+    readonly level: string;
+    readonly status: string;
+    readonly propId: string;
+    readonly propName: string;
+    readonly propValue: string;
+    readonly description?: string;
+    readonly createTime: string;    // V2.4 UTC-3 timestamp
+    readonly updateTime?: string;   // V2.4 UTC-3 timestamp
+  };
+}
+```
+
 ---
 
 ## 10. Pool Assignment
@@ -1309,6 +1446,7 @@ interface BackfillRow {
 | HeartbeatHandler | shared pool | 更新 last_seen_at、close outage events |
 | TelemetryHandler / FragmentAssembler | shared pool | INSERT telemetry_history、UPDATE device_state/gateways |
 | MissedDataHandler / BackfillAssembler | shared pool | INSERT ON CONFLICT telemetry_history |
+| AlarmHandler | shared pool | INSERT gateway_alarm_events |
 | CommandTracker | shared pool | UPDATE device_command_logs |
 | CommandPublisher | shared pool | SELECT/UPDATE device_command_logs |
 | BackfillRequester | shared pool | SELECT/UPDATE backfill_requests |
@@ -1326,13 +1464,14 @@ interface BackfillRow {
 
 | File | Version | Description |
 |------|---------|-------------|
-| `telemetry-handler.ts` | **v6.1** | Fragment-aware telemetry handler + gap detection (>5min → backfill) |
-| `heartbeat-handler.ts` | **v6.1** | Connectivity recovery only: close outage events on reconnect |
-| `command-tracker.ts` | v5.22 | Two-phase set_reply: accepted→success/fail; pg_notify |
-| `missed-data-handler.ts` | v5.22 | Backfill data path: data/missed → BackfillAssembler |
+| `telemetry-handler.ts` | **v6.7** | Fragment-aware telemetry handler + gap detection (>5min → backfill); V2.4 parseProtocolTimestamp |
+| `heartbeat-handler.ts` | **v6.7** | Connectivity recovery only: close outage events on reconnect; V2.4 parseProtocolTimestamp |
+| `command-tracker.ts` | **v6.7** | Two-phase set_reply: accepted→success/fail; pg_notify; V2.4 messageId independence note |
+| `missed-data-handler.ts` | **v6.7** | Backfill data path: data/missed → BackfillAssembler; V2.4 total/index progress tracking |
 | `device-list-handler.ts` | v5.18 | DeviceList → UPSERT assets + soft-delete reconciliation |
-| `schedule-translator.ts` | v5.18 | Bidirectional protocol↔domain translation + validation |
-| `publish-config.ts` | v5.18 | publishConfigGet/Set/SubDevicesGet |
+| `schedule-translator.ts` | **v6.7** | Bidirectional protocol↔domain translation + validation; V2.4 gridImportLimitW preferred |
+| `publish-config.ts` | **v6.7** | publishConfigGet/Set/SubDevicesGet; V2.4 formatProtocolTimestamp |
+| `alarm-handler.ts` | **v6.7** | V2.4 alarm processing: alarm → gateway_alarm_events + pg_notify('alarm_event') |
 | `ingest-telemetry.ts` | **v6.4** | Lambda: AppConfig DynamicAdapter → legacy mapping → ACL fallback |
 | `mqtt-subscriber.ts` | v5.16 | Legacy single-topic subscriber (XuhengAdapter path) |
 | `telemetry-webhook.ts` | v5.16 | POST /api/telemetry/mock (dev/test) |
@@ -1342,9 +1481,9 @@ interface BackfillRow {
 
 | File | Version | Description |
 |------|---------|-------------|
-| `gateway-connection-manager.ts` | **v6.1** | 6 topics/gw, 15min watchdog, outage event management with flap consolidation |
-| `fragment-assembler.ts` | v5.22+ | Per-gateway fragment accumulator + parseTelemetryPayload (shared) + Protocol v1.8 scaling |
-| `backfill-requester.ts` | v5.22 | Poll backfill_requests → chunked get_missed MQTT publish |
+| `gateway-connection-manager.ts` | **v6.7** | 7 topics/gw, 30min watchdog, outage event management with flap consolidation, alarm handler routing |
+| `fragment-assembler.ts` | **v6.7** | Per-gateway fragment accumulator + parseTelemetryPayload (shared) + Protocol V2.4 scaling + V2.4 scalePowerFactor(×0.001) + parseProtocolTimestamp |
+| `backfill-requester.ts` | **v6.7** | Poll backfill_requests → chunked get_missed MQTT publish; V2.4 epochMsToProtocolTimestamp |
 | `command-publisher.ts` | v5.21 | Poll dispatched commands → MQTT config/set |
 | `device-asset-cache.ts` | v5.16 | serial_number → asset_id (5min refresh, XuHeng prefix handling) |
 | `message-buffer.ts` | v5.16 | Per-asset 2s debounce INSERT telemetry_history |
@@ -1362,6 +1501,12 @@ interface BackfillRow {
 | `HuaweiAdapter.ts` | v5.16 | FusionSolar format (devSn + dataItemMap, W→kW) |
 | `DynamicAdapter.ts` | **v6.4** | ParserRule-driven: direct + iterator mode, domain routing |
 | `XuhengAdapter.ts` | v5.18 | Full ACL: batList + pvList + gridList + loadList + flloadList + dido |
+
+### Shared (shared/)
+
+| File | Version | Description |
+|------|---------|-------------|
+| `protocol-time.ts` | **v6.7** | `parseProtocolTimestamp()` (V2.4 UTC-3 + V1.x epoch ms backward compat), `epochMsToProtocolTimestamp()`, `formatProtocolTimestamp()` |
 
 ---
 
@@ -1389,6 +1534,10 @@ interface BackfillRow {
 | DynamicAdapter: iterator not array | Throw TypeError |
 | HeartbeatHandler: invalid timeStamp | Log warning, skip |
 | Telemetry gap > 5min | INSERT backfill_requests with status='pending' |
+| AlarmHandler: missing eventinfo | Log warning, skip message |
+| AlarmHandler: gateway not found | Log warning, skip alarm |
+| AlarmHandler: invalid createTime/updateTime | Log warning, skip alarm |
+| V2.4 timestamp parse failure | `parseProtocolTimestamp()` throws Error; callers handle with try/catch or null check |
 
 ---
 
@@ -1398,7 +1547,7 @@ interface BackfillRow {
 
 | Test Target | Coverage |
 |-------------|----------|
-| `parseTelemetryPayload` | Protocol v1.8 scaling, fragment combinations, missing fields, PV routing |
+| `parseTelemetryPayload` | Protocol V2.4 scaling, fragment combinations, missing fields, PV routing |
 | `classifyAndAccumulate` | All data top-level key combinations |
 | `ScheduleTranslator` | Bidirectional translation, boundary values, slot coverage/overlap |
 | `CommandTracker.handleSetReply` | Two-phase: accepted→success, accepted→fail, dispatched→success |
@@ -1407,6 +1556,8 @@ interface BackfillRow {
 | `BackfillRequester` | Chunk splitting, cooldown, delay_after_reconnect |
 | `DynamicAdapter` | Direct mode, iterator mode, phantom ID protection, nested path resolution |
 | `DeviceAssetCache` | Direct match, XuHeng prefix strip |
+| `AlarmHandler` | Valid alarm → INSERT + pg_notify, missing eventinfo → skip, unknown gateway → skip, invalid timestamps → skip |
+| `parseProtocolTimestamp` | V2.4 UTC-3 string → Date, V1.x epoch ms → Date, invalid → throw |
 
 ### 13.2 Integration Tests
 
@@ -1419,6 +1570,7 @@ interface BackfillRow {
 | Outage lifecycle | Watchdog offline → INSERT outage → heartbeat reconnect → close outage |
 | Flap consolidation | Offline → reconnect < 5min → offline again → reopen same outage |
 | Dispatch guard | Duplicate set while accepted → 409 |
+| Alarm lifecycle | MQTT alarm → gateway_alarm_events INSERT + pg_notify('alarm_event') |
 
 ### 13.3 E2E Tests
 
@@ -1427,7 +1579,7 @@ interface BackfillRow {
 | Live telemetry cycle | MQTT 5-msg burst → FragmentAssembler → telemetry_history + SSE notify |
 | Command round-trip | BFF set → CommandPublisher → accepted → success → SSE notify |
 | Backfill cycle | Telemetry gap > 5min → backfill_requests → chunks sent → missed data received → dedup INSERT |
-| Outage lifecycle | 15min no heartbeat → outage event → reconnect → outage closed |
+| Outage lifecycle | 30min no heartbeat → outage event → reconnect → outage closed |
 
 ---
 
@@ -1447,3 +1599,4 @@ interface BackfillRow {
 | v5.21 | 2026-03-11 | SSE + Command Pipeline: CommandPublisher (pending→dispatched), pg_notify |
 | v5.22 | 2026-03-13 | Two-phase set_reply, backfill infrastructure, parseTelemetryPayload shared, +1 subscribe/publish topic (data/missed), UNIQUE INDEX on telemetry_history |
 | **v6.6** | **2026-03-31** | **Gateway outage event management (writeOutageEvent + 5-min flap consolidation + heartbeat close), backfill trigger moved from HeartbeatHandler to TelemetryHandler (gap > 5min), watchdog 10min→15min, Protocol v1.8 scaling helpers, DynamicAdapter iterator mode (Phase 6.4), PV summary/MPPT routing, telemetry_extra ems_health subsection, gateway_outage_events table with RLS** |
+| **v6.7** | **2026-04-02** | **Protocol V2.4 alignment: shared `parseProtocolTimestamp()`/`formatProtocolTimestamp()` (UTC-3 + V1.x backward compat), alarm-handler.ts (S7 `device/ems/{cid}/alarm` → `gateway_alarm_events` + pg_notify), `scalePowerFactor(×0.001)`, 7 subscribe topics, 30min watchdog threshold, V2.4 `gridImportLimitW` preferred field, backfill epochMsToProtocolTimestamp, MissedData total/index progress, CommandTracker V2.4 messageId independence, `SolfacilAlarmPayload` type** |

@@ -1,9 +1,9 @@
 # Module 3: DR Dispatcher (M3)
 
-> **Module Version**: v6.6
-> **Git HEAD**: `4ec191a`
-> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.6.md](./00_MASTER_ARCHITECTURE_v6.6.md)
-> **Last Updated**: 2026-03-31
+> **Module Version**: v6.7
+> **Git HEAD**: `b94adf3`
+> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **Last Updated**: 2026-04-02
 > **Description**: Demand response dispatch execution pipeline -- converts trade schedules into device commands, tracks execution lifecycle, and handles timeouts
 > (**说明**: 需量响应调度执行管线 -- 将交易排程转化为设备指令、追踪执行生命周期、处理超时)
 
@@ -72,7 +72,7 @@ interface DRCommandDetail {
 ### 2.3 Environment Variables
 
 | Env Var | Purpose |
-|---------|---------|
+|---------|----------|
 | `TABLE_NAME` | DynamoDB table for dispatch records (DynamoDB调度记录表) |
 | `QUEUE_URL` | SQS queue URL for timeout tracking (SQS超时追踪队列) |
 | `IOT_ENDPOINT` | IoT Data Plane endpoint (IoT数据平面端点) |
@@ -116,7 +116,7 @@ interface AckPayload {
 ### 3.3 Response Codes
 
 | Code | Condition |
-|------|-----------|
+|------|----------|
 | 200 | ACK processed successfully (处理成功) |
 | 400 | Missing or invalid fields (字段缺失或无效) |
 | 404 | Dispatch command not found (指令不存在) |
@@ -168,7 +168,6 @@ Promotes due `trade_schedules` into `dispatch_commands`:
 **Peak Shaving `peak_limit_kva` calculation** (需量管理限值计算):
 
 ```typescript
-// Query contracted_demand_kw and billing_power_factor
 const contractedKw = demandResult.rows[0]?.contracted_demand_kw ?? 0;
 const pf = demandResult.rows[0]?.billing_power_factor ?? 0.92;
 const peakLimitKva = pf > 0 ? Math.round((contractedKw / pf) * 100) / 100 : contractedKw;
@@ -321,11 +320,18 @@ This ensures the device knows the maximum apparent power (kVA) it should maintai
 
 ---
 
+## V2.4 Protocol Impact
+
+**No code changes required.** M3 reads from `device_command_logs` (`result`, `created_at`, `device_timestamp`) and `tariff_schedules` (`billing_power_factor`) — none of these are affected by the V2.4 protocol changes. The `device_timestamp` column stores `TIMESTAMPTZ` values regardless of how M1 parsed the original protocol timestamp, so M3's timeout logic works identically.
+
+---
+
 ## Document History
 
 | Version | Date | Summary |
-|---------|------|---------|
+|---------|------|----------|
 | v5.2 | 2026-02-27 | Initial: EventBridge-triggered Lambda dispatch with DynamoDB + MQTT + SQS |
 | v5.9 | 2026-03-02 | Added PostgreSQL-based dispatch path: command-dispatcher.ts, collect-response.ts, timeout-checker.ts |
 | v5.16 | 2026-03-07 | Peak shaving dispatch: compute peak_limit_kva from contracted_demand_kw / billing_power_factor; write dispatch_records |
-| **v6.6** | **2026-03-31** | **Code-aligned rewrite: document all 4 source files, state machines, timeout tiers (90s/20s for device_command_logs), peak shaving kVA computation, DB table schemas** |
+| v6.6 | 2026-03-31 | Code-aligned rewrite: document all 4 source files, state machines, timeout tiers (90s/20s for device_command_logs), peak shaving kVA computation, DB table schemas |
+| **v6.7** | **2026-04-02** | **Version bump for V2.4 protocol upgrade. No M3 code changes — upstream timestamp handling and value scaling are transparent to dispatch logic.** |

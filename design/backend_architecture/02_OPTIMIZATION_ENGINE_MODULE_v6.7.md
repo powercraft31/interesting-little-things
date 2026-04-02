@@ -1,9 +1,9 @@
 # Module 2: Optimization Engine (M2)
 
-> **Module Version**: v6.6
-> **Git HEAD**: `4ec191a`
-> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.6.md](./00_MASTER_ARCHITECTURE_v6.6.md)
-> **Last Updated**: 2026-03-31
+> **Module Version**: v6.7
+> **Git HEAD**: `b94adf3`
+> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **Last Updated**: 2026-04-02
 > **Description**: Strategy evaluation pipeline, trade schedule generation, and real-time tariff arbitrage optimization
 > (**说明**: 策略评估管线、交易排程产生、即时电价套利优化)
 
@@ -411,6 +411,12 @@ For assets with `contracted_demand_kw IS NOT NULL`:
 
 ---
 
+## V2.4 Protocol Impact
+
+**No code changes required.** M2 reads from `device_state` columns (`battery_soc`, `pv_power`, `battery_power`, `grid_power_kw`, `load_power`, `is_online`, `updated_at`) whose names and semantics are unchanged by the V2.4 upgrade. Values stored by M1 are now more accurately scaled (proper ×0.1 voltage, ×0.001 power factor), which transparently improves M2's decision quality without requiring any code modification.
+
+---
+
 ## Document History
 
 | Version | Date | Summary |
@@ -422,4 +428,5 @@ For assets with `contracted_demand_kw IS NOT NULL`:
 | v5.9 | 2026-03-02 | SoC-aware scheduling, schedule generator cron |
 | v5.16 | 2026-03-07 | PS schedule generation: read gateways.contracted_demand_kw; insert peak_shaving slots for BRT 18:00-22:00 |
 | v5.22 | 2026-03-13 | Documentation fix: add run-optimization.ts handler docs |
-| **v6.6** | **2026-03-31** | **Code-aligned rewrite: strategy-evaluator.ts (6-step pipeline), posture-resolver.ts (5 override types), new DB tables (strategy_intents, posture_overrides, tariff_schedules). Schedule generator and real-time arbitrage handler unchanged.** |
+| v6.6 | 2026-03-31 | Code-aligned rewrite: strategy-evaluator.ts (6-step pipeline), posture-resolver.ts (5 override types), new DB tables (strategy_intents, posture_overrides, tariff_schedules). Schedule generator and real-time arbitrage handler unchanged. |
+| **v6.7** | **2026-04-02** | **Version bump for V2.4 protocol upgrade. No M2 code changes — upstream M1 values now more accurately scaled, transparently improving decision quality.** |

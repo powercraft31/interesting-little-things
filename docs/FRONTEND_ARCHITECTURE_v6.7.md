@@ -1,8 +1,8 @@
 # Frontend Architecture — SOLFACIL VPP Admin Portal
 
-**Version:** v6.6
-**Git HEAD:** `4ec191a`
-**Date:** 2026-03-31
+**Version:** v6.7
+**Git HEAD:** `b94adf3`
+**Date:** 2026-04-02
 
 ---
 
@@ -686,3 +686,9 @@ P1 Fleet adopted VU with:
 │              SSE: /api/events                            │
 └─────────────────────────────────────────────────────────┘
 ```
+
+---
+
+## V2.4 Protocol Impact
+
+**No frontend code changes required.** The frontend consumes BFF REST API responses and SSE events — it never directly parses MQTT payloads, protocol timestamps, or raw telemetry values. All V2.4 adaptations (timestamp format auto-detection, value scaling corrections, dual-key field fallback, alarm event ingestion) are handled entirely in the backend layers (M1, M5, M9). The BFF API contract — endpoint paths, response shapes, field names — is unchanged.

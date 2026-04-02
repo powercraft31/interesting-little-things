@@ -1,9 +1,9 @@
 # 09 Shared Layer Architecture
 
-> **Version**: v6.6
-> **Parent**: [00_MASTER_ARCHITECTURE_v6.6.md](./00_MASTER_ARCHITECTURE_v6.6.md)
-> **Date**: 2026-03-31
-> **Git HEAD**: `4ec191a`
+> **Version**: v6.7
+> **Parent**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **Date**: 2026-04-02
+> **Git HEAD**: `b94adf3`
 > **Scope**: Cross-cutting utilities, connection management, type definitions, middleware, and migrations shared by all backend modules (M1-M8).
 
 ---
@@ -23,6 +23,7 @@
 | v5.22 | 2026-03-13 | solfacil-protocol.ts, ParsedTelemetry 34 fields, tenant-context.ts JWT support |
 | v5.24 | 2026-03-13 | Tariff helper evaluation: decision to keep tariff SQL inline |
 | **v6.6** | **2026-03-31** | **p5-db.ts NEW; types/p5.ts NEW; migrations/001_p5_strategy_triggers.sql NEW (P5 Strategy Triggers full-stack persistence)** |
+| **v6.7** | **2026-04-02** | **V2.4 protocol upgrade: NEW `protocol-time.ts` (parseProtocolTimestamp dual-format auto-detect); updated `solfacil-protocol.ts` types for V2.4 alarm/scaling fields. File count 9→10.** |
 
 ---
 
@@ -459,5 +460,18 @@ Key design constraint: `middleware/tenant-context.ts` has zero HTTP/cloud framew
 | `middleware/tenant-context.ts` | unchanged | v5.23 | --- |
 | `types/auth.ts` | unchanged | v5.2 | --- |
 | `types/api.ts` | unchanged | v5.5 | --- |
-| `types/solfacil-protocol.ts` | unchanged | v5.22 | --- |
+| `types/solfacil-protocol.ts` | **UPDATED** | v6.7 | V2.4 type additions: alarm event types, scaling factor constants, lowercase key aliases |
 | `types/telemetry.ts` | unchanged | v5.18 | --- |
+| `protocol-time.ts` | **NEW** | v6.7 | `parseProtocolTimestamp()`: auto-detects ISO 8601 (V2.4) vs legacy numeric epoch (V1.x), returns `Date`. Used by M1 heartbeat/telemetry/alarm handlers |
+
+---
+
+## V2.4 Protocol Impact
+
+**Two files added/changed in M9 for V2.4:**
+
+1. **`protocol-time.ts` (NEW)** — Exports `parseProtocolTimestamp(raw: string \| number): Date` which auto-detects ISO 8601 strings (V2.4: `"2026-04-02T03:15:00Z"`) vs Unix epoch numbers (V1.x: `1743566100`). All M1 handlers import this instead of doing inline timestamp parsing. This is the single point of V1.x/V2.4 coexistence logic for time handling.
+
+2. **`types/solfacil-protocol.ts` (UPDATED)** — Added V2.4-specific type definitions: `GatewayAlarmEvent` interface, scaling factor constants (`VOLTAGE_SCALE = 0.1`, `POWER_FACTOR_SCALE = 0.001`, `ENERGY_DIVISOR = 10`), lowercase key type aliases for dual-key compatibility in BFF handlers.
+
+File count: 9 → 10 (+1 `protocol-time.ts`).

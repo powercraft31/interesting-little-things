@@ -1,9 +1,9 @@
 # M5: BFF Module — Backend for Frontend (BFF 后端网关层)
 
-> **Module Version**: v6.6
-> **Git HEAD**: `4ec191a`
-> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.6.md](./00_MASTER_ARCHITECTURE_v6.6.md)
-> **Last Updated**: 2026-03-31
+> **Module Version**: v6.7
+> **Git HEAD**: `b94adf3`
+> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **Last Updated**: 2026-04-02
 > **Description**: 47 route endpoints (45 unique handler files) + SSE + middleware — complete Express API surface for the Solfacil VPP platform
 
 ---
@@ -405,6 +405,18 @@ Started from `backend/scripts/local-server.ts` alongside the Express server:
 
 ---
 
+## V2.4 Protocol Impact
+
+**Two BFF handlers required changes for V2.4 compatibility:**
+
+1. **`get-ems-health.ts`** — Added dual-key fallback for `ems_health` JSON field access. V2.4 gateways send lowercase keys (`battery_voltage`, `grid_frequency`, etc.) while V1.x gateways use uppercase (`Battery_Voltage`, `Grid_Frequency`). The handler now tries lowercase first, falls back to uppercase. This ensures P2 Device panel displays EMS health metrics correctly regardless of gateway firmware version.
+
+2. **`get-telemetry-extra.ts`** — Fixed nested JSONB navigation for `telemetry_extra` payload. V2.4 restructured the telemetry extension fields into a nested object; the handler now navigates the correct path for both flat (V1.x) and nested (V2.4) layouts.
+
+**No route additions or removals.** The 47 route / 45 handler count is unchanged. All other handlers read from PostgreSQL columns whose names and semantics are unaffected by V2.4.
+
+---
+
 ## Document History (文档历史)
 
 | Version | Date | Summary |
@@ -418,3 +430,4 @@ Started from `backend/scripts/local-server.ts` alongside the Express server:
 | v6.4 | 2026-03-25 | HEMS targeting workbench |
 | v6.5 | 2026-03-28 | P5 Strategy Triggers: 4 handlers, 5 routes |
 | **v6.6** | **2026-03-31** | Full BFF inventory audit — 47 route endpoints (45 unique handler files) + SSE + middleware (Git HEAD `4ec191a`) |
+| **v6.7** | **2026-04-02** | **V2.4 protocol alignment: `get-ems-health.ts` dual-key fallback (V2.4 lowercase + V1.x uppercase), `get-telemetry-extra.ts` nested JSONB navigation fix. No route count change (47/45). Git HEAD `b94adf3`.** |

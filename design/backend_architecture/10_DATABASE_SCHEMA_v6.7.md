@@ -1,9 +1,9 @@
 # Database Schema — Solfacil VPP Platform 完整資料庫結構
 
-> **Version**: v6.6
-> **Parent**: [00_MASTER_ARCHITECTURE_v6.6.md](./00_MASTER_ARCHITECTURE_v6.6.md)
-> **Last Updated**: 2026-03-31
-> **Git HEAD**: `4ec191a`
+> **Version**: v6.7
+> **Parent**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **Last Updated**: 2026-04-02
+> **Git HEAD**: `b94adf3`
 > **PostgreSQL**: 16.13
 > **Tables**: 29 (excluding partition children)
 > **Core Theme**: Comprehensive DDL reference — dual-pool RLS, native partitioning, P5 strategy triggers
@@ -20,6 +20,7 @@
 | v6.2 | 2026-03-22 | gateways.home_alias column (VARCHAR(100), nullable) |
 | v6.5 | 2026-03-28 | P5 Strategy Triggers: strategy_intents, posture_overrides (migration 001) |
 | **v6.6** | **2026-03-31** | **Full schema document rewrite from DDL source of truth. 29 tables catalogued.** |
+| **v6.7** | **2026-04-02** | **V2.4 protocol upgrade: +1 table `gateway_alarm_events` (migration_v7.0.sql); `assets.asset_type` CHECK expanded for ESS subtypes; column comments updated for V2.4 scaling semantics. 29→30 tables.** |
 
 ---
 
@@ -830,4 +831,20 @@ P3 queries all use `WHERE asset_id = $1 AND recorded_at >= $2 AND recorded_at < 
 
 ---
 
-*End of document — 29 tables, 35 indexes, 15 RLS policies, 2 partition strategies.*
+---
+
+## V2.4 Protocol Impact
+
+**Three DDL changes in `migration_v7.0.sql`:**
+
+1. **`gateway_alarm_events` (NEW TABLE)** — Stores alarm events from V2.4 MSG#5. Columns: `id`, `gateway_id` (FK), `alarm_code`, `alarm_level`, `alarm_message`, `triggered_at` (TIMESTAMPTZ), `resolved_at`, `org_id`, `created_at`. RLS policy on `org_id`. Partitioned by RANGE on `triggered_at` (monthly).
+
+2. **`assets.asset_type` CHECK constraint** — Expanded from `('inverter','battery','meter','gateway')` to include `'ess'` (Energy Storage System) as V2.4 introduces ESS as a first-class asset type distinct from standalone battery.
+
+3. **Column comments** — Updated on `telemetry_history` and `device_state` columns to document V2.4 scaling semantics (e.g., `-- V2.4: raw value ×0.1 for voltage`, `-- V2.4: raw value ×0.001 for power factor`).
+
+**Table count: 29 → 30.** Index count: 35 → 37 (+2 on `gateway_alarm_events`). RLS policy count: 15 → 16.
+
+---
+
+*End of document — 30 tables, 37 indexes, 16 RLS policies, 2 partition strategies.*

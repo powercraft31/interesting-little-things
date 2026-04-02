@@ -1,16 +1,16 @@
 # Module 8: Admin Control Plane — Global Control Plane (全局控制面)
 
-> **模組版本**: v6.6
-> **Git HEAD**: `4ec191a`
-> **上層文件**: [00_MASTER_ARCHITECTURE_v6.6.md](./00_MASTER_ARCHITECTURE_v6.6.md)
-> **最後更新**: 2026-03-31
-> **說明**: 全局控制面 — Parser Rules CRUD、Data Dictionary 管理、VPP 策略管理、RBAC 約束、Dependency Lock 安全機制、**v6.6: 完整 handler 盤點與 API 更新**
+> **模組版本**: v6.7
+> **Git HEAD**: `b94adf3`
+> **上層文件**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **最後更新**: 2026-04-02
+> **說明**: 全局控制面 — Parser Rules CRUD、Data Dictionary 管理、VPP 策略管理、RBAC 約束、Dependency Lock 安全機制、**v6.7: 完整 handler 盤點與 API 更新**
 
 ---
 
 ## Changes since v5.10 (v5.10 以來的變更)
 
-| Area | v5.10 | v6.6 |
+| Area | v5.10 | v6.7 |
 |------|-------|------|
 | Data Dictionary storage | DynamoDB (GET + POST) | DynamoDB (GET + POST + **DELETE**) |
 | Data Dictionary handlers | `get-data-dictionary.ts`, `create-data-dictionary.ts` | `get-data-dictionary.ts`, **`create-dictionary-field.ts`** (renamed), **`delete-dictionary-field.ts`** (new) |
@@ -422,3 +422,10 @@ All imports verified at v6.6:
 | v5.3 | 2026-02-27 | Data Dictionary seed records、HEMS 對齊 |
 | v5.10 | 2026-03-05 | 架構邊界修復：4 個 handler 文件 import 路徑從 `../../bff/middleware/tenant-context` 改為 `../../shared/middleware/tenant-context` |
 | **v6.6** | **2026-03-31** | **完整 handler 盤點：新增 `delete-dictionary-field.ts` (Dependency Lock)、`create-dictionary-field.ts` (renamed)、`DataDictionaryEntry` model 抽取；Feature Flags handlers 與測試文件已移除；新增 `CreateVppStrategyRequest` 類型；完整 API 規格、RBAC 矩陣、DB schema 文檔化** |
+| **v6.7** | **2026-04-02** | **版本升級配合 V2.4 協議對齊。M8 無程式碼變更 — Parser Rules / VPP Strategies / Data Dictionary CRUD 與 MQTT 協議版本無關。** |
+
+---
+
+## V2.4 協議影響
+
+**M8 無需任何程式碼變更。** M8 處理 Parser Rule、VPP Strategy 和 Data Dictionary 的 CRUD 操作，這些均是純 HTTP/SQL 層的配置管理，不涉及 MQTT 協議解析或遍測數值處理。
