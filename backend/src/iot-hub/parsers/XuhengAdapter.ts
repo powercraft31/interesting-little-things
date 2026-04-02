@@ -2,6 +2,7 @@ import type {
   XuhengRawMessage,
   ParsedTelemetry,
 } from "../../shared/types/telemetry";
+import { parseProtocolTimestamp } from "../../shared/protocol-time";
 
 /**
  * Parse Xuheng MSG#4 into canonical ParsedTelemetry.
@@ -24,10 +25,18 @@ export class XuhengAdapter {
     const do0 = doList.find((d) => d.id === "DO0");
     const do1 = doList.find((d) => d.id === "DO1");
 
+    let recordedAt: Date;
+    try {
+      recordedAt = parseProtocolTimestamp(raw.timeStamp);
+    } catch {
+      console.warn(`[XuhengAdapter] Invalid timeStamp "${raw.timeStamp}", using epoch 0`);
+      recordedAt = new Date(0);
+    }
+
     return {
       clientId: raw.clientId,
       deviceSn: bat.deviceSn,
-      recordedAt: new Date(parseInt(raw.timeStamp, 10)),
+      recordedAt,
       batterySoc: safeFloat(bat.properties.total_bat_soc),
       batteryPowerKw: safeFloat(bat.properties.total_bat_power),
       dailyChargeKwh: safeFloat(bat.properties.total_bat_dailyChargedEnergy),
@@ -43,7 +52,7 @@ export class XuhengAdapter {
       flloadPowerKw: safeFloat(flload?.properties.flload_totalPower),
       // v5.14: 9 new bat.properties fields
       batterySoh: safeFloat(bat.properties.total_bat_soh),
-      batteryVoltage: safeFloat(bat.properties.total_bat_vlotage), // note: source typo "vlotage"
+      batteryVoltage: safeFloat(bat.properties.total_bat_voltage ?? bat.properties.total_bat_vlotage),
       batteryCurrent: safeFloat(bat.properties.total_bat_current),
       batteryTemperature: safeFloat(bat.properties.total_bat_temperature),
       maxChargeVoltage: safeFloat(bat.properties.total_bat_maxChargeVoltage),

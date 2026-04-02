@@ -2,6 +2,7 @@ import { Pool } from "pg";
 import type { SolfacilMessage } from "../../shared/types/solfacil-protocol";
 import { validateSchedule, buildConfigSetPayload } from "./schedule-translator";
 import type { DomainSchedule } from "./schedule-translator";
+import { formatProtocolTimestamp } from "../../shared/protocol-time";
 
 /**
  * PR5: Publish Functions
@@ -25,7 +26,7 @@ export async function publishConfigGet(
   publish: MqttPublishFn,
 ): Promise<string> {
   const messageId = String(Date.now());
-  const now = String(Date.now());
+  const now = formatProtocolTimestamp();
 
   const message: SolfacilMessage = {
     DS: 0,
@@ -72,7 +73,7 @@ export function publishSubDevicesGet(
   publish: MqttPublishFn,
 ): void {
   const messageId = String(Date.now());
-  const now = String(Date.now());
+  const now = formatProtocolTimestamp();
 
   const message: SolfacilMessage = {
     DS: 0,

@@ -71,6 +71,7 @@ function createNoopHandlers(): TopicHandlers {
     onSetReply: jest.fn().mockResolvedValue(undefined),
     onHeartbeat: jest.fn().mockResolvedValue(undefined),
     onMissedData: jest.fn().mockResolvedValue(undefined),
+    onAlarm: jest.fn().mockResolvedValue(undefined),
   };
 }
 
@@ -122,7 +123,7 @@ describe("GatewayConnectionManager", () => {
     mgr.stop();
   });
 
-  it("subscribes to 6 topics per gateway (v5.22: added data/missed)", async () => {
+  it("subscribes to 7 topics per gateway (V2.4: added alarm)", async () => {
     const pool = createMockPool([GATEWAY_FIXTURE]);
     const handlers = createNoopHandlers();
     const mgr = new GatewayConnectionManager(pool, handlers);
@@ -139,14 +140,15 @@ describe("GatewayConnectionManager", () => {
         "device/ems/gw-001/config/set_reply",
         "device/ems/gw-001/status",
         "device/ems/gw-001/data/missed",
+        "device/ems/gw-001/alarm",
       ]),
       { qos: 1 },
       expect.any(Function),
     );
 
-    // Verify exactly 6 topics
+    // Verify exactly 7 topics
     const subscribedTopics = mockSubscribe.mock.calls[0][0];
-    expect(subscribedTopics).toHaveLength(6);
+    expect(subscribedTopics).toHaveLength(7);
 
     mgr.stop();
   });

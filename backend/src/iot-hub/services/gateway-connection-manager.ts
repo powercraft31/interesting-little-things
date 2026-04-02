@@ -10,8 +10,8 @@ import { publishConfigGet } from "../handlers/publish-config";
  * PR3: MQTT Connection Manager
  *
  * Reads gateways table at startup, connects to each gateway's MQTT broker,
- * subscribes to 6 topics per gateway (Solfacil Protocol v1.2).
- * Polls every 60s for new gateways. Marks offline after 10min without heartbeat.
+ * subscribes to 7 topics per gateway (Solfacil Protocol v2.4).
+ * Polls every 60s for new gateways. Marks offline after 30min without heartbeat.
  */
 
 export type TopicHandler = (
@@ -28,6 +28,7 @@ export interface TopicHandlers {
   readonly onSetReply: TopicHandler;
   readonly onHeartbeat: TopicHandler;
   readonly onMissedData: TopicHandler;
+  readonly onAlarm: TopicHandler;
 }
 
 interface GatewayClient {
@@ -37,7 +38,7 @@ interface GatewayClient {
 }
 
 const POLL_INTERVAL_MS = 60_000;
-const OFFLINE_THRESHOLD_MS = 900_000; // 15 minutes (REQ v6.1)
+const OFFLINE_THRESHOLD_MS = 1_800_000; // 30 minutes (V2.4 heartbeat 300s × 6)
 const HOURLY_POLL_MS = 3_600_000;
 
 export class GatewayConnectionManager {
@@ -70,7 +71,7 @@ export class GatewayConnectionManager {
       POLL_INTERVAL_MS,
     );
 
-    // Watchdog: mark offline if no heartbeat for 10 minutes
+    // Watchdog: mark offline if no heartbeat for 30 minutes
     this.watchdogTimer = setInterval(
       () => this.heartbeatWatchdog(),
       POLL_INTERVAL_MS,
@@ -121,7 +122,7 @@ export class GatewayConnectionManager {
     return result.rows;
   }
 
-  /** Connect to a single gateway's MQTT broker and subscribe to 6 topics. */
+  /** Connect to a single gateway's MQTT broker and subscribe to 7 topics. */
   private async connectGateway(gw: GatewayRecord): Promise<void> {
     if (this.gatewayClients.has(gw.gateway_id)) return;
 
@@ -149,6 +150,7 @@ export class GatewayConnectionManager {
       `device/ems/${cid}/config/set_reply`,
       `device/ems/${cid}/status`,
       `device/ems/${cid}/data/missed`,
+      `device/ems/${cid}/alarm`,
     ];
 
     client.on("connect", () => {
@@ -240,6 +242,13 @@ export class GatewayConnectionManager {
         await this.handlers.onGetReply(this.pool, gatewayId, clientId, payload);
       } else if (topic.endsWith("/config/set_reply")) {
         await this.handlers.onSetReply(this.pool, gatewayId, clientId, payload);
+      } else if (topic.endsWith("/alarm")) {
+        await this.handlers.onAlarm(
+          this.pool,
+          gatewayId,
+          clientId,
+          payload,
+        );
       } else if (topic.endsWith("/status")) {
         await this.handlers.onHeartbeat(
           this.pool,
@@ -275,7 +284,7 @@ export class GatewayConnectionManager {
     }
   }
 
-  /** Mark gateways offline if no heartbeat for >15min. Write outage events. */
+  /** Mark gateways offline if no heartbeat for >30min. Write outage events. */
   private async heartbeatWatchdog(): Promise<void> {
     try {
       // Find gateways that just went offline and update their status

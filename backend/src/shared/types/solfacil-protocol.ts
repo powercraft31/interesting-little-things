@@ -55,6 +55,27 @@ export interface SolfacilListItem {
   readonly vendor?: string;
 }
 
+/** Alarm eventinfo payload from device/ems/{cid}/alarm topic. */
+export interface SolfacilAlarmPayload {
+  readonly eventinfo: {
+    readonly deviceSn: string;
+    readonly subDevId?: string;
+    readonly subDevName?: string;
+    readonly productType: string;
+    readonly eventId: string;
+    readonly eventName: string;
+    readonly eventType: string;
+    readonly level: string;
+    readonly status: string;
+    readonly propId: string;
+    readonly propName: string;
+    readonly propValue: string;
+    readonly description?: string;
+    readonly createTime: string;
+    readonly updateTime?: string;
+  };
+}
+
 /** Gateway row from the gateways table. */
 export interface GatewayRecord {
   readonly gateway_id: string;

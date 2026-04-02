@@ -2,6 +2,7 @@ import { Pool } from "pg";
 import type { SolfacilMessage, SolfacilListItem } from "../../shared/types/solfacil-protocol";
 import { parseTelemetryPayload } from "../services/fragment-assembler";
 import { DeviceAssetCache } from "../services/device-asset-cache";
+import { parseProtocolTimestamp } from "../../shared/protocol-time";
 
 /**
  * BackfillAssembler — Accumulates fragmented backfill messages per clientId.
@@ -85,7 +86,13 @@ class BackfillAssembler {
       return;
     }
 
-    const recordedAt = new Date(parseInt(payload.timeStamp, 10));
+    let recordedAt: Date;
+    try {
+      recordedAt = parseProtocolTimestamp(payload.timeStamp);
+    } catch {
+      console.warn(`[BackfillAssembler] Invalid timeStamp "${payload.timeStamp}" for ${gatewayId}, skipping`);
+      return;
+    }
     const acc = this.getOrCreateAccumulator(clientId, recordedAt);
     const isCoreMessage = this.classifyAndAccumulate(acc, data);
 
@@ -254,6 +261,21 @@ export async function handleMissedData(
   clientId: string,
   payload: SolfacilMessage,
 ): Promise<void> {
+  // V2.4: total/index tracking for backfill progress
+  const total = typeof payload.data?.total === "number" ? payload.data.total : undefined;
+  const index = typeof payload.data?.index === "number" ? payload.data.index : undefined;
+
+  // Empty backfill response (total=0, index=0) -> early return
+  if (total === 0 && index === 0) {
+    console.log(`[MissedData] ${gatewayId}: empty backfill response (total=0, index=0)`);
+    return;
+  }
+
+  // Progress logging
+  if (total !== undefined && index !== undefined) {
+    console.log(`[MissedData] ${gatewayId}: processing ${index}/${total}`);
+  }
+
   const assembler = getBackfillAssembler(pool);
   assembler.receive(clientId, gatewayId, payload);
 }

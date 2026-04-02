@@ -51,8 +51,8 @@ describe("HeartbeatHandler", () => {
     const q = pool.queries[0];
     expect(q.sql).toContain("WITH prev AS");
     expect(q.sql).toContain("UPDATE gateways");
-    expect(q.sql).toContain("to_timestamp");
-    expect(q.params[0]).toBe(1747534429979); // device timestamp, NOT server time
+    expect(q.sql).toContain("$1::timestamptz");
+    expect(q.params[0]).toBe(new Date(1747534429979).toISOString()); // device timestamp, NOT server time
     expect(q.params[1]).toBe("gw-001"); // v5.22: gateway_id, not client_id
   });
 
@@ -136,10 +136,10 @@ describe("HeartbeatHandler", () => {
     );
 
     const q = pool.queries[0];
-    // The SQL should use to_timestamp($1), not NOW()
-    expect(q.sql).toContain("to_timestamp($1");
+    // The SQL should use payload-derived timestamptz, not NOW()
+    expect(q.sql).toContain("last_seen_at = $1::timestamptz");
     expect(q.sql).not.toMatch(/last_seen_at\s*=\s*NOW\(\)/);
-    expect(q.params[0]).toBe(1609459200000);
+    expect(q.params[0]).toBe(new Date(1609459200000).toISOString());
   });
 
   // ─── v6.1: Outage close on reconnect ─────────────────────────────────────

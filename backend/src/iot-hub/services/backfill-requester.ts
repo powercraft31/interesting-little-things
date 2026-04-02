@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import { GatewayConnectionManager } from "./gateway-connection-manager";
+import { formatProtocolTimestamp, epochMsToProtocolTimestamp } from "../../shared/protocol-time";
 
 const POLL_INTERVAL_MS = 10_000; // 10 seconds
 const DELAY_AFTER_RECONNECT_MS = 30_000; // 30 seconds
@@ -197,10 +198,10 @@ export class BackfillRequester {
 
     await client.query(
       `UPDATE backfill_requests
-       SET current_chunk_start = to_timestamp($1 / 1000.0),
+       SET current_chunk_start = $1::timestamptz,
            last_chunk_sent_at = NOW()
        WHERE id = $2`,
-      [nextChunkStart, req.id],
+      [new Date(nextChunkStart).toISOString(), req.id],
     );
     console.log(
       `[BackfillRequester] Request ${req.id}: next chunk sent (${new Date(nextChunkStart).toISOString()})`,
@@ -220,10 +221,10 @@ export class BackfillRequester {
       deviceName: "EMS_N2",
       productKey: "ems",
       messageId: String(Date.now()),
-      timeStamp: String(Date.now()),
+      timeStamp: formatProtocolTimestamp(),
       data: {
-        start: String(startMs),
-        end: String(endMs),
+        start: epochMsToProtocolTimestamp(startMs),
+        end: epochMsToProtocolTimestamp(endMs),
       },
     };
     return this.connectionManager.publishToGateway(

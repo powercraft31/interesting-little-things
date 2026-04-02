@@ -13,7 +13,8 @@ export interface XuhengRawMessage {
         readonly total_bat_dailyDischargedEnergy: string;
         // v5.14 NEW — 9 additional fields
         readonly total_bat_soh?: string;
-        readonly total_bat_vlotage?: string; // note: source typo "vlotage"
+        readonly total_bat_voltage?: string;  // V2.4: corrected spelling
+        readonly total_bat_vlotage?: string; // legacy typo — kept for backwards compat
         readonly total_bat_current?: string;
         readonly total_bat_temperature?: string;
         readonly total_bat_maxChargeVoltage?: string;

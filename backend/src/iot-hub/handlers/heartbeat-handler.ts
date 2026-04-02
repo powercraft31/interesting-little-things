@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import type { SolfacilMessage } from "../../shared/types/solfacil-protocol";
+import { parseProtocolTimestamp } from "../../shared/protocol-time";
 
 /**
  * PR5 / v6.1: HeartbeatHandler
@@ -16,9 +17,10 @@ export async function handleHeartbeat(
   _clientId: string,
   payload: SolfacilMessage,
 ): Promise<void> {
-  const deviceTimestamp = parseInt(payload.timeStamp, 10);
-
-  if (!Number.isFinite(deviceTimestamp) || deviceTimestamp <= 0) {
+  let deviceTime: Date;
+  try {
+    deviceTime = parseProtocolTimestamp(payload.timeStamp);
+  } catch {
     console.warn(
       `[HeartbeatHandler] Invalid timeStamp from ${gatewayId}: ${payload.timeStamp}`,
     );
@@ -31,14 +33,14 @@ export async function handleHeartbeat(
        SELECT last_seen_at, status FROM gateways WHERE gateway_id = $2
      )
      UPDATE gateways
-     SET last_seen_at = to_timestamp($1::bigint / 1000.0),
+     SET last_seen_at = $1::timestamptz,
          status = 'online',
          updated_at = NOW()
      WHERE gateway_id = $2
      RETURNING
        (SELECT last_seen_at FROM prev) AS prev_last_seen,
        (SELECT status FROM prev) AS prev_status`,
-    [deviceTimestamp, gatewayId],
+    [deviceTime.toISOString(), gatewayId],
   );
 
   // v6.1: Close open outage event on reconnect (connectivity recovery)

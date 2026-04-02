@@ -136,7 +136,7 @@ export async function handler(
         socMaxLimit: domain.socMaxLimit,
         maxChargeCurrent: domain.maxChargeCurrent,
         maxDischargeCurrent: domain.maxDischargeCurrent,
-        gridImportLimitKw: domain.gridImportLimitKw,
+        gridImportLimitKw: domain.gridImportLimitKw ?? null,
         slots: domain.slots.map(domainSlotToResponse),
       };
     }

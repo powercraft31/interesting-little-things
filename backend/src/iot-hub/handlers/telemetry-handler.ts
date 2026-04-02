@@ -1,6 +1,7 @@
 import { Pool } from "pg";
 import type { SolfacilMessage } from "../../shared/types/solfacil-protocol";
 import { FragmentAssembler } from "../services/fragment-assembler";
+import { parseProtocolTimestamp } from "../../shared/protocol-time";
 
 /**
  * PR3 / v6.1: TelemetryHandler
@@ -23,7 +24,7 @@ const BACKFILL_GAP_THRESHOLD_MS = 300_000; // 5 minutes
 const assemblerMap = new WeakMap<Pool, FragmentAssembler>();
 
 /** Per-pool last-telemetry-timestamp cache per gateway. */
-const lastTelemetryMap = new WeakMap<Pool, Map<string, number>>();
+const lastTelemetryMap = new WeakMap<Pool, Map<string, Date>>();
 
 function getAssembler(pool: Pool): FragmentAssembler {
   let assembler = assemblerMap.get(pool);
@@ -34,7 +35,7 @@ function getAssembler(pool: Pool): FragmentAssembler {
   return assembler;
 }
 
-function getLastTelemetryCache(pool: Pool): Map<string, number> {
+function getLastTelemetryCache(pool: Pool): Map<string, Date> {
   let cache = lastTelemetryMap.get(pool);
   if (!cache) {
     cache = new Map();
@@ -55,9 +56,12 @@ export async function handleTelemetry(
   payload: SolfacilMessage,
 ): Promise<void> {
   // v6.1: Gateway-level telemetry gap detection for backfill trigger
-  const currentTs = parseInt(payload.timeStamp, 10);
-  if (Number.isFinite(currentTs) && currentTs > 0) {
-    await checkTelemetryGap(pool, gatewayId, currentTs);
+  let currentDate: Date;
+  try {
+    currentDate = parseProtocolTimestamp(payload.timeStamp);
+    await checkTelemetryGap(pool, gatewayId, currentDate);
+  } catch {
+    // Invalid timestamp - skip gap check, still pass to assembler
   }
 
   const assembler = getAssembler(pool);
@@ -71,24 +75,27 @@ export async function handleTelemetry(
 async function checkTelemetryGap(
   pool: Pool,
   gatewayId: string,
-  currentTs: number,
+  currentDate: Date,
 ): Promise<void> {
   const cache = getLastTelemetryCache(pool);
-  const previousTs = cache.get(gatewayId);
+  const previousDate = cache.get(gatewayId);
 
-  // Update cache with current timestamp
-  cache.set(gatewayId, currentTs);
+  cache.set(gatewayId, currentDate);
 
-  // No previous timestamp — first message for this gateway since startup
-  if (previousTs === undefined) return;
+  if (previousDate === undefined) return;
 
-  const gapMs = currentTs - previousTs;
+  const gapMs = currentDate.getTime() - previousDate.getTime();
+
+  if (gapMs < 0) {
+    console.warn(`[TelemetryHandler] Clock rollback detected for ${gatewayId}: ${gapMs}ms, skipping gap check`);
+    return;
+  }
 
   if (gapMs > BACKFILL_GAP_THRESHOLD_MS) {
     await pool.query(
       `INSERT INTO backfill_requests (gateway_id, gap_start, gap_end, status)
-       VALUES ($1, to_timestamp($2::bigint / 1000.0), to_timestamp($3::bigint / 1000.0), 'pending')`,
-      [gatewayId, previousTs, currentTs],
+       VALUES ($1, $2::timestamptz, $3::timestamptz, 'pending')`,
+      [gatewayId, previousDate.toISOString(), currentDate.toISOString()],
     );
     console.log(
       `[TelemetryHandler] Backfill trigger: ${gatewayId}, gap=${Math.round(gapMs / 60000)}min`,

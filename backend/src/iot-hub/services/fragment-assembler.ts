@@ -6,6 +6,7 @@ import type {
 import type { ParsedTelemetry } from "../../shared/types/telemetry";
 import { DeviceAssetCache } from "./device-asset-cache";
 import { MessageBuffer } from "./message-buffer";
+import { parseProtocolTimestamp } from "../../shared/protocol-time";
 
 /**
  * FragmentAssembler — Per-gateway fragment accumulator for Solfacil Protocol v1.2.
@@ -80,7 +81,13 @@ export class FragmentAssembler {
    */
   receive(clientId: string, payload: SolfacilMessage): void {
     const data = payload.data;
-    const recordedAt = new Date(parseInt(payload.timeStamp, 10));
+    let recordedAt: Date;
+    try {
+      recordedAt = parseProtocolTimestamp(payload.timeStamp);
+    } catch {
+      console.warn(`[FragmentAssembler] Invalid timeStamp "${payload.timeStamp}" for ${clientId}, skipping`);
+      return;
+    }
     const acc = this.getOrCreateAccumulator(clientId, recordedAt);
 
     const isCoreMessage = this.classifyAndAccumulate(acc, data);
@@ -346,7 +353,7 @@ export function parseTelemetryPayload(
     dailyDischargeKwh: scaleEnergyKwh(bp.total_bat_dailyDischargedEnergy), // ×0.1 → kWh
 
     batterySoh: safeFloat(bp.total_bat_soh),                               // ×1
-    batteryVoltage: scaleVoltage(bp.total_bat_vlotage),                    // ×0.1 → V
+    batteryVoltage: scaleVoltage(bp.total_bat_voltage ?? bp.total_bat_vlotage),                    // ×0.1 → V
     batteryCurrent: scaleCurrent(bp.total_bat_current),                    // ×0.1 → A
     batteryTemperature: scaleTemp(bp.total_bat_temperature),               // ×0.1 → ℃
     maxChargeVoltage: scaleVoltage(bp.total_bat_maxChargeVoltage),         // ×0.1 → V
@@ -429,9 +436,9 @@ function buildTelemetryExtra(
       apparent_power_b: scalePowerW(g.grid_apparentPowerB),
       apparent_power_c: scalePowerW(g.grid_apparentPowerC),
       total_apparent_power: scalePowerW(g.grid_totalApparentPower),
-      factor_a: safeFloat(g.grid_factorA),
-      factor_b: safeFloat(g.grid_factorB),
-      factor_c: safeFloat(g.grid_factorC),
+      factor_a: scalePowerFactor(g.grid_factorA),
+      factor_b: scalePowerFactor(g.grid_factorB),
+      factor_c: scalePowerFactor(g.grid_factorC),
       frequency: scaleFrequency(g.grid_frequency),
       total_buy_kwh: scaleEnergyKwh(g.grid_totalBuyEnergy),
       total_sell_kwh: scaleEnergyKwh(g.grid_totalSellEnergy),
@@ -509,10 +516,10 @@ function buildTelemetryExtra(
         reactive_power_b: scalePowerW(m.grid_reactivePowerB),
         reactive_power_c: scalePowerW(m.grid_reactivePowerC),
         total_reactive_power: scalePowerW(m.grid_totalReactivePower),
-        factor: safeFloat(m.grid_factor),
-        factor_a: safeFloat(m.grid_factorA),
-        factor_b: safeFloat(m.grid_factorB),
-        factor_c: safeFloat(m.grid_factorC),
+        factor: scalePowerFactor(m.grid_factor),
+        factor_a: scalePowerFactor(m.grid_factorA),
+        factor_b: scalePowerFactor(m.grid_factorB),
+        factor_c: scalePowerFactor(m.grid_factorC),
         frequency: scaleFrequency(m.grid_frequency),
         positive_energy: scaleEnergyKwh(m.grid_positiveEnergy),
         positive_energy_a: scaleEnergyKwh(m.grid_positiveEnergyA),
@@ -604,4 +611,8 @@ function scaleEnergyKwh(val: string | undefined): number {
 /** Frequency (Hz): raw × 0.01 */
 function scaleFrequency(val: string | undefined): number {
   return safeFloat(val) * 0.01;
+}
+/** V2.4: Power factor x0.001 (e.g. "995" -> 0.995) */
+function scalePowerFactor(val: string | undefined): number {
+  return safeFloat(val) * 0.001;
 }

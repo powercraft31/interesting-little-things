@@ -1,5 +1,6 @@
 import { Pool } from "pg";
 import type { SolfacilMessage } from "../../shared/types/solfacil-protocol";
+import { parseProtocolTimestamp } from "../../shared/protocol-time";
 
 /**
  * PR5: CommandTracker
@@ -163,9 +164,18 @@ export async function handleSetReply(
   }
 }
 
-/** Parse device timestamp from epoch ms string. Returns null if invalid. */
+/**
+ * Parse device timestamp. Delegates to shared parseProtocolTimestamp.
+ * Returns null on invalid input (preserving existing caller expectations).
+ *
+ * V2.4: set_reply.messageId is an independent message identifier and does NOT
+ * echo the original config/set request's messageId. Current command-tracker
+ * matches on (gateway_id, config_name, command_type, result), not messageId.
+ */
 function parseDeviceTimestamp(timeStampStr: string): Date | null {
-  const ms = parseInt(timeStampStr, 10);
-  if (!Number.isFinite(ms) || ms <= 0) return null;
-  return new Date(ms);
+  try {
+    return parseProtocolTimestamp(timeStampStr);
+  } catch {
+    return null;
+  }
 }

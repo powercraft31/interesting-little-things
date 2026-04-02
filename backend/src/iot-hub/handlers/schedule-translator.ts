@@ -7,6 +7,8 @@
  * ABSOLUTELY NO silent degradation. Dirty data MUST NOT reach hardware.
  */
 
+import { formatProtocolTimestamp } from "../../shared/protocol-time";
+
 // ─── Domain Model Types ─────────────────────────────────────────────────────
 
 export interface DomainSchedule {
@@ -14,7 +16,10 @@ export interface DomainSchedule {
   readonly socMaxLimit: number;
   readonly maxChargeCurrent: number;
   readonly maxDischargeCurrent: number;
-  readonly gridImportLimitKw: number;
+  /** V2.4-preferred field name. Value is actually watts, not kW. */
+  readonly gridImportLimitW?: number;
+  /** @deprecated Backward-compatible alias retained for BFF/tests. */
+  readonly gridImportLimitKw?: number;
   readonly slots: ReadonlyArray<DomainSlot>;
 }
 
@@ -69,10 +74,10 @@ export function parseGetReply(
   const socMaxLimit = parseInt(batterySchedule.soc_max_limit, 10);
   const maxChargeCurrent = parseInt(batterySchedule.max_charge_current, 10);
   const maxDischargeCurrent = parseInt(batterySchedule.max_discharge_current, 10);
-  const gridImportLimitKw = parseInt(batterySchedule.grid_import_limit, 10);
+  const gridImportLimitW = parseInt(batterySchedule.grid_import_limit, 10);
 
   if (
-    [socMinLimit, socMaxLimit, maxChargeCurrent, maxDischargeCurrent, gridImportLimitKw]
+    [socMinLimit, socMaxLimit, maxChargeCurrent, maxDischargeCurrent, gridImportLimitW]
       .some((v) => !Number.isFinite(v))
   ) {
     return null;
@@ -87,7 +92,8 @@ export function parseGetReply(
     socMaxLimit,
     maxChargeCurrent,
     maxDischargeCurrent,
-    gridImportLimitKw,
+    gridImportLimitW,
+    gridImportLimitKw: gridImportLimitW,
     slots,
   };
 }
@@ -137,7 +143,7 @@ export function buildConfigSetPayload(
 ): Record<string, unknown> {
   const protocolSchedule = domainToProtocol(schedule);
   const mid = messageId ?? String(Date.now());
-  const now = String(Date.now());
+  const now = formatProtocolTimestamp();
 
   return {
     DS: 0,
@@ -164,7 +170,7 @@ export function domainToProtocol(schedule: DomainSchedule): ProtocolSchedule {
     soc_max_limit: String(schedule.socMaxLimit),
     max_charge_current: String(schedule.maxChargeCurrent),
     max_discharge_current: String(schedule.maxDischargeCurrent),
-    grid_import_limit: String(schedule.gridImportLimitKw),
+    grid_import_limit: String(schedule.gridImportLimitW ?? schedule.gridImportLimitKw ?? 0),
     slots: schedule.slots.map((s) => translateSlotToProtocol(s)),
   };
 }
@@ -218,7 +224,10 @@ export function validateSchedule(schedule: DomainSchedule): void {
 
   assertNonNegativeInt("maxChargeCurrent", schedule.maxChargeCurrent);
   assertNonNegativeInt("maxDischargeCurrent", schedule.maxDischargeCurrent);
-  assertNonNegativeInt("gridImportLimitKw", schedule.gridImportLimitKw);
+  assertNonNegativeInt(
+    "gridImportLimitW",
+    schedule.gridImportLimitW ?? schedule.gridImportLimitKw ?? 0,
+  );
 
   // ── Slot validation ──
 
