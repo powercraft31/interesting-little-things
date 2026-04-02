@@ -154,7 +154,7 @@ app.use(
     origin: (origin, callback) => {
       if (
         !origin ||
-        /^https?:\/\/(localhost|152\.42\.235\.155|solfacil\.alwayscontrol\.net)(:\d+)?$/.test(
+        /^https?:\/\/(localhost|152\.42\.235\.155|188\.166\.184\.87|solfacil\.alwayscontrol\.net)(:\d+)?$/.test(
           origin,
         )
       ) {
