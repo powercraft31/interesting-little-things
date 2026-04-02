@@ -124,15 +124,15 @@ export async function handler(
     contractedDemandKw: safeFloat(firstRow.contracted_demand_kw),
     emsHealth: emsHealthRaw
       ? {
-          cpuTemp: (emsHealthRaw.CPU_temp as string) ?? null,
-          cpuUsage: (emsHealthRaw.CPU_usage as string) ?? null,
+          cpuTemp:   ((emsHealthRaw.cpu_temp   ?? emsHealthRaw.CPU_temp)   as string) ?? null,
+          cpuUsage:  ((emsHealthRaw.cpu_usage  ?? emsHealthRaw.CPU_usage)  as string) ?? null,
           memoryUsage: (emsHealthRaw.memory_usage as string) ?? null,
-          diskUsage: (emsHealthRaw.disk_usage as string) ?? null,
+          diskUsage:   (emsHealthRaw.disk_usage   as string) ?? null,
           wifiSignalStrength:
             (emsHealthRaw.wifi_signal_strength as string) ?? null,
           systemRuntime: (emsHealthRaw.system_runtime as string) ?? null,
-          simStatus: (emsHealthRaw.SIM_status as string) ?? null,
-          emsTemp: (emsHealthRaw.ems_temp as string) ?? null,
+          simStatus: ((emsHealthRaw.sim_status ?? emsHealthRaw.SIM_status) as string) ?? null,
+          emsTemp:   (emsHealthRaw.ems_temp   as string) ?? null,
         }
       : null,
   };
@@ -153,6 +153,7 @@ export async function handler(
   // ── Telemetry extras from Q2 ──
   const th = (q2Result.rows[0] ?? {}) as Record<string, unknown>;
   const extra = (th.telemetry_extra ?? {}) as Record<string, unknown>;
+  const gridExtra = (extra.grid ?? {}) as Record<string, unknown>;
 
   // ── Build aggregated state from primary inverter ──
   const state = primary
@@ -205,11 +206,11 @@ export async function handler(
 
   // ── Telemetry extra grid fields (same inverter > meter fallback via Q2 ORDER BY) ──
   const telemetryExtra = {
-    gridVoltageR: safeFloat(extra.gridVoltageR ?? extra.grid_voltage_r),
-    gridCurrentR: safeFloat(extra.gridCurrentR ?? extra.grid_current_r),
-    gridPf: safeFloat(extra.gridPf ?? extra.grid_pf),
-    totalBuyKwh: safeFloat(extra.totalBuyKwh ?? extra.total_buy_kwh),
-    totalSellKwh: safeFloat(extra.totalSellKwh ?? extra.total_sell_kwh),
+    gridVoltageR: safeFloat(gridExtra.volt_a),
+    gridCurrentR: safeFloat(gridExtra.current_a),
+    gridPf:       safeFloat(gridExtra.factor_a),
+    totalBuyKwh:  safeFloat(gridExtra.total_buy_kwh),
+    totalSellKwh: safeFloat(gridExtra.total_sell_kwh),
   };
 
   // ── Config defaults (Q3 skipped — vpp_strategies table doesn't exist) ──

@@ -96,6 +96,7 @@ export async function handler(
   const th = (historyResult.rows[0] ?? {}) as Record<string, unknown>;
   const vs = (strategyResult.rows[0] ?? {}) as Record<string, unknown>;
   const extra = (th.telemetry_extra ?? {}) as Record<string, unknown>;
+  const gridExtra = (extra.grid ?? {}) as Record<string, unknown>;
 
   const safeFloat = (val: unknown): number | null =>
     val != null ? parseFloat(String(val)) : null;
@@ -136,11 +137,11 @@ export async function handler(
       updatedAt: ds.updated_at ? new Date(ds.updated_at as string).toISOString() : null,
     },
     telemetryExtra: {
-      gridVoltageR: safeFloat(extra.gridVoltageR ?? extra.grid_voltage_r),
-      gridCurrentR: safeFloat(extra.gridCurrentR ?? extra.grid_current_r),
-      gridPf: safeFloat(extra.gridPf ?? extra.grid_pf),
-      totalBuyKwh: safeFloat(extra.totalBuyKwh ?? extra.total_buy_kwh),
-      totalSellKwh: safeFloat(extra.totalSellKwh ?? extra.total_sell_kwh),
+      gridVoltageR: safeFloat(gridExtra.volt_a),
+      gridCurrentR: safeFloat(gridExtra.current_a),
+      gridPf:       safeFloat(gridExtra.factor_a),
+      totalBuyKwh:  safeFloat(gridExtra.total_buy_kwh),
+      totalSellKwh: safeFloat(gridExtra.total_sell_kwh),
     },
     config: {
       socMin: safeFloat(ds.soc_min) ?? safeFloat(vs.min_soc) ?? 20,
