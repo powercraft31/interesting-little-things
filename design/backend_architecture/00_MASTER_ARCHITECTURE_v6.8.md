@@ -4,7 +4,7 @@
 > **Git HEAD**: `b94adf3`
 > **Last Updated**: 2026-04-02
 > **Description**: System master blueprint — v6.8 P6 Alarm Center + V2.4 Health/DIDO enrichment
-> **Core Theme**: v6.8 P6 Alarm Center BFF endpoints, SSE alarm_event channel, V2.4 Health/DIDO BFF enrichment
+> **Core Theme**: v6.8 P6 Alarm Center BFF endpoints, SSE alarm_event channel, V2.4 Health/DIDO BFF enrichment, BRT timezone alignment (backend + frontend)
 
 ---
 

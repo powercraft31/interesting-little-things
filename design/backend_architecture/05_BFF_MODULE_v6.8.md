@@ -19,7 +19,7 @@
 | v6.4 | 2026-03-25 | HEMS targeting: `get-hems-targeting.ts` for fleet eligibility workbench |
 | v6.5 | 2026-03-28 | P5 Strategy Triggers: 4 new endpoints — overview, intent detail, intent action, posture override |
 | v6.6 | 2026-03-31 | P1/P2 Visual Unification (frontend-only, no BFF handler changes); this document: full inventory audit at 47 route endpoints (45 unique handler files) |
-| **v6.8** | **2026-04-03** | **P6 Alarm Center: +2 handlers (`get-alerts.ts`, `get-alerts-summary.ts`); SSE `alarm_event` channel; V2.4 Health/DIDO enrichment in `get-gateway-detail.ts` and `get-device-detail.ts`; cookie-backed SSE auth via HttpOnly `solfacil_jwt` + `POST /api/auth/logout`. 47→50 routes / 45→47 handler files** |
+| **v6.8** | **2026-04-03** | **P6 Alarm Center: +2 handlers (`get-alerts.ts`, `get-alerts-summary.ts`); SSE `alarm_event` channel; V2.4 Health/DIDO enrichment; cookie-backed SSE auth via HttpOnly `solfacil_jwt` + `POST /api/auth/logout`; BRT timezone alignment for all energy queries (`AT TIME ZONE 'America/Sao_Paulo'`); frontend forced BRT display via `toBRT()`. 47→50 routes / 45→47 handler files** |
 
 ---
 
@@ -132,9 +132,9 @@ The `_tenant` field is included in development mode for debugging RLS scope visi
 | 12 | GET | `/api/gateways/summary` | `get-gateways-summary.ts` | JWT | Summary aggregation (revenue, SOC, online count) |
 | 13 | GET | `/api/gateways/:gatewayId/detail` | `get-gateway-detail.ts` | JWT | Full gateway detail — 3 parallel queries. V2.4: 5 new EMS health keys (phoneStatus, phoneSignalStrength, humidity, systemTime, hardwareTime) with dual-key fallback |
 | 14 | GET | `/api/gateways/:gatewayId/devices` | `get-gateway-devices.ts` | JWT | Devices under a gateway |
-| 15 | GET | `/api/gateways/:gatewayId/energy` | `get-gateway-energy.ts` | JWT | 288 × 5-min points (24h高精度能量时序). Also serves `/energy-24h` |
+| 15 | GET | `/api/gateways/:gatewayId/energy` | `get-gateway-energy.ts` | JWT | 288 × 5-min points (24h高精度能量时序). BRT day boundary (`AT TIME ZONE 'America/Sao_Paulo'`). Timestamps returned with `-03:00` suffix. Default date = today in BRT. Also serves `/energy-24h` |
 | 16 | GET | `/api/gateways/:gatewayId/energy-24h` | `get-gateway-energy.ts` | JWT | Alias for `/energy` (shared handler file) |
-| 17 | GET | `/api/gateways/:gatewayId/energy-stats` | `get-gateway-energy-stats.ts` | JWT | Aggregated stats — window: `7d`\|`30d`\|`12m`. Dual-source: `asset_5min_metrics` primary, `telemetry_history` fallback |
+| 17 | GET | `/api/gateways/:gatewayId/energy-stats` | `get-gateway-energy-stats.ts` | JWT | Aggregated stats — window: `7d`\|`30d`\|`12m`. BRT day boundaries for all WHERE clauses. Dual-source: `asset_5min_metrics` primary, `telemetry_history` fallback |
 | 18 | GET | `/api/gateways/:gatewayId/schedule` | `get-gateway-schedule.ts` | JWT | Current active schedule |
 | 19 | PUT | `/api/gateways/:gatewayId/schedule` | `put-gateway-schedule.ts` | JWT | Schedule submission — `DomainSchedule` format. 409 Conflict guard (Dispatch Guard). Returns **202 Accepted** |
 | 20 | PATCH | `/api/gateways/:gatewayId/home-alias` | `patch-gateway-home-alias.ts` | JWT | Set human-readable home alias (更新家庭别名). **Note:** This route is registered in CDK (bff-stack) but NOT in local-server.ts. Local development does not expose this endpoint. |
@@ -446,4 +446,4 @@ Started from `backend/scripts/local-server.ts` alongside the Express server:
 | v6.5 | 2026-03-28 | P5 Strategy Triggers: 4 handlers, 5 routes |
 | **v6.6** | **2026-03-31** | Full BFF inventory audit — 47 route endpoints (45 unique handler files) + SSE + middleware (Git HEAD `4ec191a`) |
 | v6.7 | 2026-04-02 | V2.4 protocol alignment: `get-ems-health.ts` dual-key fallback (V2.4 lowercase + V1.x uppercase), `get-telemetry-extra.ts` nested JSONB navigation fix. No route count change (47/45). Git HEAD `b94adf3`. |
-| **v6.8** | **2026-04-03** | **P6 Alarm Center: +2 handlers (`get-alerts.ts`, `get-alerts-summary.ts`), SSE `alarm_event` channel, V2.4 Health/DIDO enrichment in `get-gateway-detail.ts` and `get-device-detail.ts`, cookie-backed SSE auth via HttpOnly `solfacil_jwt`, and `POST /api/auth/logout`. 47→50 routes / 45→47 handler files. Git HEAD `d76ce24`.** |
+| **v6.8** | **2026-04-03** | **P6 Alarm Center: +2 handlers (`get-alerts.ts`, `get-alerts-summary.ts`), SSE `alarm_event` channel, V2.4 Health/DIDO enrichment, cookie-backed SSE auth via HttpOnly `solfacil_jwt` + `POST /api/auth/logout`, BRT timezone alignment for energy queries (`get-gateway-energy.ts`, `get-gateway-energy-stats.ts` use `AT TIME ZONE 'America/Sao_Paulo'` for day boundaries + bucket grouping; timestamps returned with `-03:00`), frontend `toBRT()` for all display. 47→50 routes / 45→47 handler files. Git HEAD `7b72ac2`.** |

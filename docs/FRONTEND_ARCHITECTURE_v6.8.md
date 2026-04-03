@@ -313,7 +313,15 @@ dict[currentLang][key] → translations["en"][key] → key (raw)
 
 ### Number/Date Format Rule (数字/日期格式规则)
 
-**CRITICAL:** Numbers, dates, and currency always use Brazilian format (`DD/MM/YYYY`, comma decimal separator) regardless of language. Utility functions `formatISODate()`, `formatISODateTime()`, `formatShortDate()` in `app.js` enforce this.
+**CRITICAL:** Numbers, dates, and currency always use Brazilian format (`DD/MM/YYYY`, comma decimal separator) regardless of language. All times are displayed in **BRT (America/Sao_Paulo, UTC-3)** regardless of the browser's local timezone. Global utility functions in `app.js`:
+
+- `toBRT(date)` — converts any `Date` to BRT components `{year, month, day, hour, minute, second}` via `Intl.DateTimeFormat`
+- `toBRTDate(date)` — converts to a `Date` object representing BRT calendar values
+- `formatISODate(iso)` — `DD/MM/YYYY` in BRT
+- `formatISODateTime(iso)` — `DD/MM/YYYY HH:mm` in BRT
+- `formatShortDate(iso)` — `DD/MM` in BRT
+
+All page-level time formatters (`p3-energy.js`, `p5-strategy.js`, `p6-alerts.js`) use `toBRT()` instead of native `Date.getHours()`/`getMinutes()`. The P3 Energy chart X-axis and day boundaries are aligned to BRT midnight (`T03:00:00Z`).
 
 ---
 
