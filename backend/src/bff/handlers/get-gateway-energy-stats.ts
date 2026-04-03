@@ -119,8 +119,8 @@ export async function handler(
      JOIN assets a ON a.asset_id = m.asset_id
      WHERE a.gateway_id = $1
        AND a.is_active = true
-       AND m.window_start >= $2::DATE
-       AND m.window_start < $3::DATE
+       AND m.window_start >= ($2::TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+       AND m.window_start < ($3::TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
      GROUP BY bucket_label
      ORDER BY bucket_label`,
     [gatewayId, startDate, endDateExclusive],
@@ -166,8 +166,8 @@ export async function handler(
        JOIN assets a ON a.asset_id = th.asset_id
        WHERE a.gateway_id = $1
          AND a.is_active = true
-         AND th.recorded_at >= $2::DATE
-         AND th.recorded_at < $3::DATE
+         AND th.recorded_at >= ($2::TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+         AND th.recorded_at < ($3::TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
        GROUP BY bucket_label
        ORDER BY bucket_label`,
       [gatewayId, startDate, endDateExclusive],
@@ -233,8 +233,8 @@ export async function handler(
      JOIN assets a ON a.asset_id = th.asset_id
      WHERE a.gateway_id = $1
        AND a.is_active = true
-       AND th.recorded_at >= $2::DATE
-       AND th.recorded_at < $3::DATE`,
+       AND th.recorded_at >= ($2::TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')
+       AND th.recorded_at < ($3::TIMESTAMP AT TIME ZONE 'America/Sao_Paulo')`,
     [gatewayId, startDate, endDateExclusive],
     rlsOrgId,
   );
