@@ -443,8 +443,9 @@ var EnergyPage = {
     self._state.gatewayId = gwId;
     self._state.gatewayName = gwName;
     self._state.timeWindow = "24h";
-    self._state.dateAnchor = new Date();
-    self._state.dateAnchor.setHours(0, 0, 0, 0);
+    // BRT midnight today: use toBRTDate to get BRT-aware midnight
+    var _brtNow = toBRT(new Date());
+    self._state.dateAnchor = new Date(Date.UTC(_brtNow.year, _brtNow.month - 1, _brtNow.day, 3, 0, 0));
 
     // Build two-panel layout: locator (left) + workbench (right)
     container.innerHTML =
@@ -703,23 +704,25 @@ var EnergyPage = {
   },
 
   _todayStr: function () {
-    var d = new Date();
+    var b = toBRT(new Date());
     return (
-      d.getFullYear() +
+      b.year +
       "-" +
-      String(d.getMonth() + 1).padStart(2, "0") +
+      String(b.month).padStart(2, "0") +
       "-" +
-      String(d.getDate()).padStart(2, "0")
+      String(b.day).padStart(2, "0")
     );
   },
 
   _dateToStr: function (d) {
+    // dateAnchor is stored as BRT midnight in UTC (T03:00:00Z)
+    // so getUTCDate/Month/FullYear returns the BRT calendar date
     return (
-      d.getFullYear() +
+      d.getUTCFullYear() +
       "-" +
-      String(d.getMonth() + 1).padStart(2, "0") +
+      String(d.getUTCMonth() + 1).padStart(2, "0") +
       "-" +
-      String(d.getDate()).padStart(2, "0")
+      String(d.getUTCDate()).padStart(2, "0")
     );
   },
 
@@ -936,8 +939,12 @@ var EnergyPage = {
     // Day boundaries for x-axis
     var dateStr =
       (data && data.date) || self._dateToStr(self._state.dateAnchor);
-    var dayStart = dateStr + "T00:00:00";
-    var dayEnd = dateStr + "T23:59:59";
+    var dayStart = dateStr + "T03:00:00Z";
+    var dayEnd = dateStr + "T03:00:00Z";
+    // Shift dayEnd to next day BRT midnight (add 24h - 1s)
+    var _de = new Date(dayEnd);
+    _de.setUTCSeconds(_de.getUTCSeconds() + 86400 - 1);
+    dayEnd = _de.toISOString();
 
     var grids = hasSoc
       ? [
@@ -1658,8 +1665,8 @@ var EnergyPage = {
 
   _onNextClick: function () {
     var self = this;
-    var today = new Date();
-    today.setHours(0, 0, 0, 0);
+    var _b = toBRT(new Date());
+    var today = new Date(Date.UTC(_b.year, _b.month - 1, _b.day, 3, 0, 0));
     if (self._state.timeWindow === "12m") {
       var anchor = self._state.dateAnchor;
       var m = anchor.month + 1;
@@ -1684,14 +1691,14 @@ var EnergyPage = {
   _onTodayClick: function () {
     var self = this;
     if (self._state.timeWindow === "12m") {
-      var now = new Date();
+      var _bn = toBRT(new Date());
       self._state.dateAnchor = {
-        year: now.getFullYear(),
-        month: now.getMonth() + 1,
+        year: _bn.year,
+        month: _bn.month,
       };
     } else {
-      var today = new Date();
-      today.setHours(0, 0, 0, 0);
+      var _bt = toBRT(new Date());
+      var today = new Date(Date.UTC(_bt.year, _bt.month - 1, _bt.day, 3, 0, 0));
       self._state.dateAnchor = today;
     }
     self._rerenderWorkbench();
@@ -1704,8 +1711,8 @@ var EnergyPage = {
 
     // Convert date anchor per DESIGN ss8.1 rules
     var newAnchor;
-    var today = new Date();
-    today.setHours(0, 0, 0, 0);
+    var _bw = toBRT(new Date());
+    var today = new Date(Date.UTC(_bw.year, _bw.month - 1, _bw.day, 3, 0, 0));
 
     if (newWindow === "12m") {
       // Any -> 12m: use anchor's month
