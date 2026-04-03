@@ -1,7 +1,7 @@
 # Database Schema — Solfacil VPP Platform 完整資料庫結構
 
-> **Version**: v6.7
-> **Parent**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **Version**: v6.8
+> **Parent**: [00_MASTER_ARCHITECTURE_v6.8.md](./00_MASTER_ARCHITECTURE_v6.8.md)
 > **Last Updated**: 2026-04-02
 > **Git HEAD**: `b94adf3`
 > **PostgreSQL**: 16.13
@@ -20,7 +20,8 @@
 | v6.2 | 2026-03-22 | gateways.home_alias column (VARCHAR(100), nullable) |
 | v6.5 | 2026-03-28 | P5 Strategy Triggers: strategy_intents, posture_overrides (migration 001) |
 | **v6.6** | **2026-03-31** | **Full schema document rewrite from DDL source of truth. 29 tables catalogued.** |
-| **v6.7** | **2026-04-02** | **V2.4 protocol upgrade: +1 table `gateway_alarm_events` (migration_v7.0.sql); `assets.asset_type` CHECK expanded for ESS subtypes; column comments updated for V2.4 scaling semantics. 29→30 tables.** |
+| v6.7 | 2026-04-02 | V2.4 protocol upgrade: +1 table `gateway_alarm_events` (migration_v7.0.sql); `assets.asset_type` CHECK expanded for ESS subtypes; column comments updated for V2.4 scaling semantics. 29→30 tables. |
+| **v6.8** | **2026-04-03** | **No schema changes. P6 Alarm Center reads existing `gateway_alarm_events` table; no DDL additions.** |
 
 ---
 

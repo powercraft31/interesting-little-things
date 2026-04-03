@@ -356,10 +356,12 @@ var StrategyPage = {
 
   _formatReturnTime: function (deferUntil) {
     var d = new Date(deferUntil);
+    var b = toBRT(d);
+    if (!b) return "--:--";
     return (
-      d.getHours().toString().padStart(2, "0") +
+      String(b.hour).padStart(2, "0") +
       ":" +
-      d.getMinutes().toString().padStart(2, "0")
+      String(b.minute).padStart(2, "0")
     );
   },
 
@@ -712,10 +714,10 @@ var StrategyPage = {
     var deferUntil = new Date(Date.now() + minutes * 60000);
     var durationLabels = { 30: "30 min", 60: "1 h", 120: "2 h", 240: "4 h" };
     var durLabel = durationLabels[minutes] || minutes + " min";
-    var returnTime =
-      String(deferUntil.getHours()).padStart(2, "0") +
-      ":" +
-      String(deferUntil.getMinutes()).padStart(2, "0");
+    var brt = toBRT(deferUntil);
+    var returnTime = brt
+      ? String(brt.hour).padStart(2, "0") + ":" + String(brt.minute).padStart(2, "0")
+      : "--:--";
 
     try {
       await DataSource.p5.intentAction(intentId, "defer", {

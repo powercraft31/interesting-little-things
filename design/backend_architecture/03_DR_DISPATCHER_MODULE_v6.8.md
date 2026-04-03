@@ -1,8 +1,8 @@
 # Module 3: DR Dispatcher (M3)
 
-> **Module Version**: v6.7
+> **Module Version**: v6.8
 > **Git HEAD**: `b94adf3`
-> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.8.md](./00_MASTER_ARCHITECTURE_v6.8.md)
 > **Last Updated**: 2026-04-02
 > **Description**: Demand response dispatch execution pipeline -- converts trade schedules into device commands, tracks execution lifecycle, and handles timeouts
 > (**说明**: 需量响应调度执行管线 -- 将交易排程转化为设备指令、追踪执行生命周期、处理超时)
@@ -334,4 +334,4 @@ This ensures the device knows the maximum apparent power (kVA) it should maintai
 | v5.9 | 2026-03-02 | Added PostgreSQL-based dispatch path: command-dispatcher.ts, collect-response.ts, timeout-checker.ts |
 | v5.16 | 2026-03-07 | Peak shaving dispatch: compute peak_limit_kva from contracted_demand_kw / billing_power_factor; write dispatch_records |
 | v6.6 | 2026-03-31 | Code-aligned rewrite: document all 4 source files, state machines, timeout tiers (90s/20s for device_command_logs), peak shaving kVA computation, DB table schemas |
-| **v6.7** | **2026-04-02** | **Version bump for V2.4 protocol upgrade. No M3 code changes — upstream timestamp handling and value scaling are transparent to dispatch logic.** |
+| **v6.8** | **2026-04-02** | **Version bump for V2.4 protocol upgrade. No M3 code changes — upstream timestamp handling and value scaling are transparent to dispatch logic.** |

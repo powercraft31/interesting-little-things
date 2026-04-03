@@ -142,6 +142,7 @@ export async function handler(
       gridPf:       safeFloat(gridExtra.factor_a),
       totalBuyKwh:  safeFloat(gridExtra.total_buy_kwh),
       totalSellKwh: safeFloat(gridExtra.total_sell_kwh),
+      dido: (extra.dido as Record<string, unknown>) ?? null,
     },
     config: {
       socMin: safeFloat(ds.soc_min) ?? safeFloat(vs.min_soc) ?? 20,

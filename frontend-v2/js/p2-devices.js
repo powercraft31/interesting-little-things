@@ -351,6 +351,11 @@ var DevicesPage = {
         parseChineseRuntime(h.system_runtime || h.systemRuntime || ""),
       );
       setText("hv-emsTemp", h.emsTemp || h.ems_temp || "--");
+      setText("hv-phoneStatus", h.phoneStatus || h.phone_status || "--");
+      setText("hv-phoneSignalStrength", parseSignalStrength(h.phoneSignalStrength || h.phone_signal_strength || ""));
+      setText("hv-humidity", h.humidity || "--");
+      setText("hv-systemTime", h.systemTime || h.system_time || "--");
+      setText("hv-hardwareTime", h.hardwareTime || h.hardware_time || "--");
       setText(
         "hv-simStatus",
         parseFirmwareStatus(h.SIM_status || h.simStatus || ""),
@@ -1871,6 +1876,36 @@ var DevicesPage = {
         value: h.emsTemp || h.ems_temp || "--",
       },
       {
+        id: "hv-phoneStatus",
+        icon: "\ud83d\udcf1",
+        label: t("devices.health.phoneStatus"),
+        value: h.phoneStatus || h.phone_status || "--",
+      },
+      {
+        id: "hv-phoneSignalStrength",
+        icon: "\ud83d\udcf6",
+        label: t("devices.health.phoneSignal"),
+        value: parseSignalStrength(h.phoneSignalStrength || h.phone_signal_strength || ""),
+      },
+      {
+        id: "hv-humidity",
+        icon: "\ud83d\udca7",
+        label: t("devices.health.humidity"),
+        value: h.humidity || "--",
+      },
+      {
+        id: "hv-systemTime",
+        icon: "\ud83d\udd52",
+        label: t("devices.health.systemTime"),
+        value: h.systemTime || h.system_time || "--",
+      },
+      {
+        id: "hv-hardwareTime",
+        icon: "\u23f0",
+        label: t("devices.health.hardwareTime"),
+        value: h.hardwareTime || h.hardware_time || "--",
+      },
+      {
         id: "hv-simStatus",
         icon: "\ud83d\udcf6",
         label: t("devices.health.sim"),
@@ -2331,9 +2366,35 @@ var DevicesPage = {
       { label: t("devices.health.disk"), value: h.diskUsage || h.disk_usage || '--', id: 'hv-diskUsage' },
       { label: t("devices.health.uptime"), value: parseChineseRuntime(h.system_runtime || h.systemRuntime || ''), id: 'hv-systemRuntime' },
       { label: t("devices.health.emsTemp"), value: h.emsTemp || h.ems_temp || '--', id: 'hv-emsTemp' },
+      { label: t("devices.health.phoneStatus"), value: h.phoneStatus || h.phone_status || '--', id: 'hv-phoneStatus' },
+      { label: t("devices.health.phoneSignal"), value: parseSignalStrength(h.phoneSignalStrength || h.phone_signal_strength || ''), id: 'hv-phoneSignalStrength' },
+      { label: t("devices.health.humidity"), value: h.humidity || '--', id: 'hv-humidity' },
+      { label: t("devices.health.systemTime"), value: h.systemTime || h.system_time || '--', id: 'hv-systemTime' },
+      { label: t("devices.health.hardwareTime"), value: h.hardwareTime || h.hardware_time || '--', id: 'hv-hardwareTime' },
       { label: t("devices.health.sim"), value: parseFirmwareStatus(h.SIM_status || h.simStatus || ''), id: 'hv-simStatus' },
     ];
     panels.push({ icon: '\ud83d\udcf6', title: t("devices.diagHealth"), tags: healthTags, items: healthItems });
+
+    // 3b. Digital I/O (DIDO)
+    var dido = extra.dido || null;
+    var didoTags = [];
+    var didoItems = [];
+    if (dido && typeof dido === 'object') {
+      var didoKeys = Object.keys(dido);
+      var doCount = didoKeys.filter(function (k) { return k.indexOf('DO') === 0; }).length;
+      var diCount = didoKeys.filter(function (k) { return k.indexOf('DI') === 0; }).length;
+      if (doCount > 0) didoTags.push(doCount + ' DO');
+      if (diCount > 0) didoTags.push(diCount + ' DI');
+      didoItems = didoKeys.map(function (key) {
+        var val = dido[key];
+        var displayVal = (val === 1 || val === '1' || val === true) ? 'ON' : 'OFF';
+        return { label: key, value: displayVal, id: 'dido-' + key };
+      });
+    }
+    if (didoItems.length === 0) {
+      didoItems = [{ label: t("devices.diag.dido.noData"), value: '', id: 'dido-empty' }];
+    }
+    panels.push({ icon: '\ud83d\udd00', title: t("devices.diag.dido"), tags: didoTags, items: didoItems });
 
     // 4. Device Composition
     var devTags = [];

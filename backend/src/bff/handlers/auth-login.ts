@@ -9,6 +9,9 @@ import bcrypt from "bcryptjs";
 import jwt from "jsonwebtoken";
 import { ok, fail } from "../../shared/types/api";
 
+const AUTH_COOKIE_NAME = "solfacil_jwt";
+const AUTH_COOKIE_MAX_AGE_MS = 24 * 60 * 60 * 1000;
+
 interface LoginRequest {
   readonly email: string;
   readonly password: string;
@@ -80,10 +83,27 @@ export function createLoginHandler(servicePool: Pool) {
           role: user.role,
         },
       };
+      res.cookie(AUTH_COOKIE_NAME, token, {
+        httpOnly: true,
+        sameSite: "lax",
+        path: "/",
+        maxAge: AUTH_COOKIE_MAX_AGE_MS,
+      });
       res.status(200).json(ok(response));
     } catch (err) {
       console.error("[auth-login] Error:", err);
       res.status(500).json(fail("Internal server error"));
     }
+  };
+}
+
+export function createLogoutHandler() {
+  return async (_req: Request, res: Response): Promise<void> => {
+    res.clearCookie(AUTH_COOKIE_NAME, {
+      httpOnly: true,
+      sameSite: "lax",
+      path: "/",
+    });
+    res.status(200).json(ok({ success: true }));
   };
 }

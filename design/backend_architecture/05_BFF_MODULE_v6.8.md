@@ -1,10 +1,10 @@
 # M5: BFF Module — Backend for Frontend (BFF 后端网关层)
 
-> **Module Version**: v6.7
+> **Module Version**: v6.8
 > **Git HEAD**: `b94adf3`
-> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.8.md](./00_MASTER_ARCHITECTURE_v6.8.md)
 > **Last Updated**: 2026-04-02
-> **Description**: 47 route endpoints (45 unique handler files) + SSE + middleware — complete Express API surface for the Solfacil VPP platform
+> **Description**: 50 route endpoints (47 unique handler files) + SSE + middleware — complete Express API surface for the Solfacil VPP platform
 
 ---
 
@@ -18,7 +18,8 @@
 | v6.2 | 2026-03-20 | Home-first P2: gateway detail + energy + schedule + alias (home-centric UX) |
 | v6.4 | 2026-03-25 | HEMS targeting: `get-hems-targeting.ts` for fleet eligibility workbench |
 | v6.5 | 2026-03-28 | P5 Strategy Triggers: 4 new endpoints — overview, intent detail, intent action, posture override |
-| **v6.6** | **2026-03-31** | P1/P2 Visual Unification (frontend-only, no BFF handler changes); this document: full inventory audit at 47 route endpoints (45 unique handler files) |
+| v6.6 | 2026-03-31 | P1/P2 Visual Unification (frontend-only, no BFF handler changes); this document: full inventory audit at 47 route endpoints (45 unique handler files) |
+| **v6.8** | **2026-04-03** | **P6 Alarm Center: +2 handlers (`get-alerts.ts`, `get-alerts-summary.ts`); SSE `alarm_event` channel; V2.4 Health/DIDO enrichment in `get-gateway-detail.ts` and `get-device-detail.ts`; cookie-backed SSE auth via HttpOnly `solfacil_jwt` + `POST /api/auth/logout`. 47→50 routes / 45→47 handler files** |
 
 ---
 
@@ -41,12 +42,12 @@ Browser ──► Express Server (port 3000)
 
 ### 1.2 Auth Middleware — `bff/middleware/auth.ts`
 
-**JWT validation on `/api/*`** (except `/api/auth/login`):
+**JWT validation on `/api/*`** (except `/api/auth/login`, `/api/auth/logout`):
 
 | Behavior | Detail |
 |----------|--------|
 | **Skip** | Non-API routes (non `/api/*` paths — static files, frontend HTML) |
-| **Skip** | Public routes: `["/api/auth/login"]` |
+| **Skip** | Public routes: `["/api/auth/login", "/api/auth/logout"]` |
 | **Validate** | All other `/api/*` routes — extracts `Bearer <token>` from `Authorization` header |
 | **Context injection** | On success: calls `verifyTenantToken(token)` → overwrites `req.headers.authorization` with raw JSON `{ userId, orgId, role }` for downstream handler compatibility |
 | **Failure** | Returns `401` with `fail()` envelope |
@@ -74,13 +75,14 @@ The `_tenant` field is included in development mode for debugging RLS scope visi
 
 ---
 
-## 2. Complete Handler Inventory — 47 Route Endpoints / 45 Unique Handler Files (完整端点清单)
+## 2. Complete Handler Inventory — 50 Route Endpoints / 47 Unique Handler Files (完整端点清单)
 
-### 2.1 Auth & Admin (认证与管理) — 2 handlers
+### 2.1 Auth & Admin (认证与管理) — 2 handler files / 3 routes
 
 | # | Method | Route | Handler File | Auth | Description |
 |---|--------|-------|-------------|------|-------------|
-| 1 | POST | `/api/auth/login` | `auth-login.ts` | **Public** | JWT login — `bcrypt.compare()` + JWT signed with `JWT_SECRET`, 24h expiry. Uses Service Pool (BYPASSRLS, orgId unknown at login). Returns `{ token, user }` |
+| 1 | POST | `/api/auth/login` | `auth-login.ts` | **Public** | JWT login — `bcrypt.compare()` + JWT signed with `JWT_SECRET`, 24h expiry. Also sets HttpOnly `solfacil_jwt` cookie (`SameSite=Lax`, `Path=/`, `Max-Age=86400`) for browser-native SSE auth. Uses Service Pool (BYPASSRLS, orgId unknown at login). Returns `{ token, user }` |
+| 1b | POST | `/api/auth/logout` | `auth-login.ts` | **Public** | Clears HttpOnly `solfacil_jwt` cookie via `res.clearCookie(...)`. Frontend logout calls this endpoint before redirecting to `login.html` |
 | 2 | POST | `/api/users` | `admin-users.ts` | **SOLFACIL_ADMIN** | Create user + assign role. Transaction: `BEGIN → INSERT users → INSERT user_org_roles → COMMIT`. Password: bcrypt 12 rounds |
 
 ---
@@ -90,7 +92,7 @@ The `_tenant` field is included in development mode for debugging RLS scope visi
 | # | Method | Route | Handler File | Auth | Description |
 |---|--------|-------|-------------|------|-------------|
 | 3 | GET | `/dashboard` | `get-dashboard.ts` | JWT | 10 parallel queries via `Promise.all` (aggregated KPIs — see detail below) |
-| 4 | GET | `/api/events` | `sse-events.ts` | JWT | SSE push via `pg_notify` — channels: `telemetry_update`, `gateway_health` |
+| 4 | GET | `/api/events` | `sse-events.ts` | JWT / auth cookie | SSE push via `pg_notify` — channels: `telemetry_update`, `gateway_health`, `alarm_event`. Browser `EventSource` authenticates via HttpOnly `solfacil_jwt` cookie because custom `Authorization` headers are not supported |
 
 **`get-dashboard.ts` — 10 parallel queries (仪表板10路并行查询)**:
 
@@ -114,7 +116,7 @@ The `_tenant` field is included in development mode for debugging RLS scope visi
 | # | Method | Route | Handler File | Auth | Description |
 |---|--------|-------|-------------|------|-------------|
 | 5 | GET | `/api/devices` | `get-devices.ts` | JWT | Device list with filters (type, status, search keyword) |
-| 6 | GET | `/api/devices/:assetId` | `get-device-detail.ts` | JWT | Single device detail — `assets JOIN gateways JOIN device_state JOIN telemetry_history JOIN vpp_strategies` |
+| 6 | GET | `/api/devices/:assetId` | `get-device-detail.ts` | JWT | Single device detail — `assets JOIN gateways JOIN device_state JOIN telemetry_history JOIN vpp_strategies`. V2.4: `telemetryExtra` includes `dido` field passthrough (raw JSONB) |
 | 7 | GET | `/api/devices/:assetId/schedule` | `get-device-schedule.ts` | JWT | Current schedule from `device_command_logs` |
 | 8 | PUT | `/api/devices/:assetId/schedule` | `put-device-schedule.ts` | JWT | **Deprecated** (gateway-level schedule preferred). Slots: contiguous 0-24h. Returns 202 Accepted |
 | 9 | PUT | `/api/devices/:assetId` | `put-device.ts` | JWT | Update `operationMode`, `allowExport`, `capacidadeKw`, `capacityKwh`, `socMin`, `socMax` |
@@ -128,7 +130,7 @@ The `_tenant` field is included in development mode for debugging RLS scope visi
 |---|--------|-------|-------------|------|-------------|
 | 11 | GET | `/api/gateways` | `get-gateways.ts` | JWT | Gateway list with org/device state |
 | 12 | GET | `/api/gateways/summary` | `get-gateways-summary.ts` | JWT | Summary aggregation (revenue, SOC, online count) |
-| 13 | GET | `/api/gateways/:gatewayId/detail` | `get-gateway-detail.ts` | JWT | Full gateway detail — 3 parallel queries |
+| 13 | GET | `/api/gateways/:gatewayId/detail` | `get-gateway-detail.ts` | JWT | Full gateway detail — 3 parallel queries. V2.4: 5 new EMS health keys (phoneStatus, phoneSignalStrength, humidity, systemTime, hardwareTime) with dual-key fallback |
 | 14 | GET | `/api/gateways/:gatewayId/devices` | `get-gateway-devices.ts` | JWT | Devices under a gateway |
 | 15 | GET | `/api/gateways/:gatewayId/energy` | `get-gateway-energy.ts` | JWT | 288 × 5-min points (24h高精度能量时序). Also serves `/energy-24h` |
 | 16 | GET | `/api/gateways/:gatewayId/energy-24h` | `get-gateway-energy.ts` | JWT | Alias for `/energy` (shared handler file) |
@@ -260,13 +262,22 @@ Calm explanation reasons: `no_conditions_detected` | `override_suppressing` | `a
 
 ---
 
-### 2.11 Legacy (旧版端点) — 3 handlers
+### 2.11 Alerts (告警) — 2 handlers [v6.8 NEW]
+
+| # | Method | Route | Handler File | Auth | Description |
+|---|--------|-------|-------------|------|-------------|
+| 45 | GET | `/api/alerts/summary` | `get-alerts-summary.ts` | JWT (all 4 roles) | 3-CTE aggregation (alarm_stats, gw_total, severe_detail) on `gateway_alarm_events JOIN gateways`. Returns: activeCount, severeCount, recoveredTodayCount, affectedGateways, totalGateways, severeDetails |
+| 46 | GET | `/api/alerts` | `get-alerts.ts` | JWT (all 4 roles) | Dynamic parameterized WHERE on `gateway_alarm_events JOIN gateways`. Query params: `status`, `level` (comma-sep), `gatewayId`, `period` (24h/7d/30d), `limit` (default 500, max 1000), `offset`. RLS via `queryWithOrg` |
+
+---
+
+### 2.12 Legacy (旧版端点) — 3 handlers
 
 | # | Method | Route | Handler File | Auth | Status |
 |---|--------|-------|-------------|------|--------|
-| 45 | GET | `/api/homes` | `get-homes.ts` | JWT | **Deprecated** — replaced by `get-gateways.ts` (v5.19) |
-| 46 | GET | `/api/homes/summary` | `get-homes-summary.ts` | JWT | **Deprecated** — replaced by `get-gateways-summary.ts` (v5.19) |
-| 47 | GET | `/api/homes/:homeId/energy` | `get-home-energy.ts` | JWT | **Deprecated** — replaced by `get-gateway-energy.ts` (v5.19) |
+| 47 | GET | `/api/homes` | `get-homes.ts` | JWT | **Deprecated** — replaced by `get-gateways.ts` (v5.19) |
+| 48 | GET | `/api/homes/summary` | `get-homes-summary.ts` | JWT | **Deprecated** — replaced by `get-gateways-summary.ts` (v5.19) |
+| 49 | GET | `/api/homes/:homeId/energy` | `get-home-energy.ts` | JWT | **Deprecated** — replaced by `get-gateway-energy.ts` (v5.19) |
 
 > **Note:** These handlers exist as files but are NOT registered in local-server.ts. They are legacy code retained for potential CDK compatibility only.
 
@@ -283,6 +294,7 @@ Client (EventSource) ──► Express ──► Dedicated pg.Client (NOT from p
                                           │
                                    LISTEN telemetry_update
                                    LISTEN gateway_health
+                                   LISTEN alarm_event
                                           │
                                    pg_notify channel ◄── IoT Hub / Telemetry writers
 ```
@@ -293,8 +305,9 @@ Client (EventSource) ──► Express ──► Dedicated pg.Client (NOT from p
 |---------|---------------|---------|-----------------|
 | `telemetry_update` | M1 IoT Hub telemetry ingest | `{ gatewayId }` | Frontend refreshes device state / energy charts |
 | `gateway_health` | M1 watchdog / heartbeat handler | `{ gatewayId }` | Frontend updates online/offline indicator |
+| `alarm_event` | M1 alarm handler / gateway_alarm_events INSERT | `{ gatewayId }` | Frontend refreshes P6 Alarm Center (v6.8) |
 
-> **Note:** M3 fires `pg_notify('command_status', ...)` but `sse-events.ts` does NOT subscribe to this channel. Only `telemetry_update` and `gateway_health` are active SSE channels.
+> **Note:** M3 fires `pg_notify('command_status', ...)` but `sse-events.ts` does NOT subscribe to this channel. `telemetry_update`, `gateway_health`, and `alarm_event` are the active SSE channels.
 
 ### 3.3 Connection Management (连接管理)
 
@@ -398,8 +411,10 @@ Started from `backend/scripts/local-server.ts` alongside the Express server:
 | GET /api/hems/targeting | Y | Y | Y | -- |
 | P5 overview + intent detail (GET) | Y | Y | Y | -- |
 | P5 intent action + posture override (POST) | Y | Y | Y | -- |
+| GET /api/alerts, GET /api/alerts/summary | Y | Y | Y | Y |
 | POST /api/users | Y | -- | -- | -- |
 | POST /api/auth/login | PUBLIC | PUBLIC | PUBLIC | PUBLIC |
+| POST /api/auth/logout | PUBLIC | PUBLIC | PUBLIC | PUBLIC |
 | GET /api/events (SSE) | Y | Y | Y | Y |
 | Webhooks | NO AUTH | NO AUTH | NO AUTH | NO AUTH |
 
@@ -413,7 +428,7 @@ Started from `backend/scripts/local-server.ts` alongside the Express server:
 
 2. **`get-telemetry-extra.ts`** — Fixed nested JSONB navigation for `telemetry_extra` payload. V2.4 restructured the telemetry extension fields into a nested object; the handler now navigates the correct path for both flat (V1.x) and nested (V2.4) layouts.
 
-**No route additions or removals.** The 47 route / 45 handler count is unchanged. All other handlers read from PostgreSQL columns whose names and semantics are unaffected by V2.4.
+**No route additions or removals from V2.4 itself.** V2.4 protocol changes required only handler-internal adjustments. The route count increase (47→50 / 45→47 handler files) in v6.8 comes from the P6 Alarm Center endpoints (+2 routes / +2 handler files) and cookie-backed auth logout (+1 route / +0 handler files), not V2.4.
 
 ---
 
@@ -430,4 +445,5 @@ Started from `backend/scripts/local-server.ts` alongside the Express server:
 | v6.4 | 2026-03-25 | HEMS targeting workbench |
 | v6.5 | 2026-03-28 | P5 Strategy Triggers: 4 handlers, 5 routes |
 | **v6.6** | **2026-03-31** | Full BFF inventory audit — 47 route endpoints (45 unique handler files) + SSE + middleware (Git HEAD `4ec191a`) |
-| **v6.7** | **2026-04-02** | **V2.4 protocol alignment: `get-ems-health.ts` dual-key fallback (V2.4 lowercase + V1.x uppercase), `get-telemetry-extra.ts` nested JSONB navigation fix. No route count change (47/45). Git HEAD `b94adf3`.** |
+| v6.7 | 2026-04-02 | V2.4 protocol alignment: `get-ems-health.ts` dual-key fallback (V2.4 lowercase + V1.x uppercase), `get-telemetry-extra.ts` nested JSONB navigation fix. No route count change (47/45). Git HEAD `b94adf3`. |
+| **v6.8** | **2026-04-03** | **P6 Alarm Center: +2 handlers (`get-alerts.ts`, `get-alerts-summary.ts`), SSE `alarm_event` channel, V2.4 Health/DIDO enrichment in `get-gateway-detail.ts` and `get-device-detail.ts`, cookie-backed SSE auth via HttpOnly `solfacil_jwt`, and `POST /api/auth/logout`. 47→50 routes / 45→47 handler files. Git HEAD `d76ce24`.** |

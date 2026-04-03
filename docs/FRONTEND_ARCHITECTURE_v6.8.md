@@ -1,6 +1,6 @@
 # Frontend Architecture — SOLFACIL VPP Admin Portal
 
-**Version:** v6.7
+**Version:** v6.8
 **Git HEAD:** `b94adf3`
 **Date:** 2026-04-02
 
@@ -15,9 +15,9 @@
 | Fonts | Inter (UI) + JetBrains Mono (data) | Google Fonts, preconnected |
 | Icons | Unicode emoji glyphs | Inline in HTML (no icon library) |
 | CSS | Custom Properties (CSS Variables) | 5-file modular architecture |
-| Auth | JWT (localStorage) | Bearer token via `Authorization` header |
+| Auth | JWT (localStorage) + HttpOnly cookie | Bearer token via `Authorization` header for fetch/XHR; HttpOnly `solfacil_jwt` cookie for browser-native SSE |
 | State | sessionStorage (`DemoStore`) | Cross-page ephemeral state |
-| Real-time | Server-Sent Events (SSE) | `EventSource` on `/api/events` |
+| Real-time | Server-Sent Events (SSE) | `EventSource` on `/api/events`, authenticated via same-origin auth cookie |
 | i18n | Custom I18n module | 3 languages: pt-BR, en, zh-CN |
 
 **Key design choice (关键设计决策):** Zero build tooling. All JS files are loaded via `<script>` tags in dependency order. Cache-busting via `?v=` query parameter on every asset.
@@ -51,7 +51,8 @@ frontend-v2/
 │   ├── p4-hems.js          # P4: HEMS Control (HEMSPage)
 │   ├── p5-strategy.js      # P5: Strategy Triggers (StrategyPage)
 │   ├── p5-vpp.js           # P5 legacy: VPP capacity/latency/DR (not loaded in index.html, superseded by p5-strategy.js)
-│   ├── p6-performance.js   # P6: Performance (PerformancePage)
+│   ├── p6-alerts.js        # P6: Alerts / Alarm Center (AlertsPage) [v6.8, replaces p6-performance.js]
+│   ├── p6-performance.js   # P6: Performance (PerformancePage) [still in repo, NOT loaded in index.html — superseded by p6-alerts.js]
 │   └── app.js              # Router, DemoStore, role switching, lifecycle
 ```
 
@@ -61,7 +62,7 @@ Order matters — each file depends on globals exported by predecessors:
 
 ```
 mock-data.js → config.js → data-source.js → i18n.js → components.js → charts.js
-→ p1-fleet.js → p2-devices.js → p3-*.js → p4-hems.js → p5-strategy.js → p6-performance.js
+→ p1-fleet.js → p2-devices.js → p3-*.js → p4-hems.js → p5-strategy.js → p6-alerts.js
 → app.js
 ```
 
@@ -78,7 +79,9 @@ mock-data.js → config.js → data-source.js → i18n.js → components.js → 
 | **P3 Energy** | `#energy` | `EnergyPage` | 24h energy behavior curves, 7d/30d/12m statistics, B/A compare (能源行为) |
 | **P4 HEMS** | `#hems` | `HEMSPage` | Home Energy Management — mode distribution, tariff rates, batch dispatch (家庭能源管理) |
 | **P5 Strategy** | `#vpp` | `StrategyPage` | Posture-aware triage cockpit — intent cards, override management, alert control (策略触发) |
-| **P6 Performance** | `#performance` | `PerformancePage` | Scorecard + per-home savings analysis (绩效分析). **Note:** Intentionally omitted from `PAGES` array — `#performance` hash falls back to `#fleet` via router. Page init code and HTML section exist but are unreachable through standard navigation (infrastructure reserved for future activation) |
+| **P6 Alerts** | `#alerts` | `AlertsPage` | Alarm Center — KPI cards (active/severe/recovered/affected gateways), filter bar (status, level, gateway, period), severity badges, alert table (告警中心). Replaces P6 Performance Scorecard in PAGES array and index.html |
+
+> **Note:** `p6-performance.js` (PerformancePage) still exists in the repo but is NOT loaded in `index.html` — its `<script>` tag was replaced by `p6-alerts.js`. The `#performance` hash is no longer in the PAGES array. Performance BFF endpoints (`/api/performance/scorecard`, `/api/performance/savings`) remain functional but are unused by the current frontend.
 
 ### Role Visibility (角色可见性)
 
@@ -200,7 +203,8 @@ IIFE singleton exposing domain-grouped methods:
 | `DataSource.tariffs` | `get()` | P4 |
 | `DataSource.vpp` | `capacity()`, `latency()`, `drEvents()` | P5 |
 | `DataSource.p5` | `overview()`, `intentDetail(id)`, `intentAction(id, action, body)`, `createOverride(body)`, `cancelOverride(id, body)` | P5 |
-| `DataSource.performance` | `scorecard()`, `savings(period)` | P6 |
+| `DataSource.alerts` | `summary()`, `list(filters)` | P6 |
+| `DataSource.performance` | `scorecard()`, `savings(period)` | P6 (legacy, unused by current frontend) |
 | `DataSource.asset` | `telemetry(assetId, from, to, resolution)`, `health(assetId, from, to)` | P3 sub |
 
 ### Dual-Mode Pattern (双模式模式)
@@ -274,7 +278,7 @@ After every chart init/update, `Charts._getThemeOverrides()` applies theme-appro
 
 ### Architecture
 
-`I18n` is an IIFE singleton (`i18n.js`, 3,227 lines) exposing:
+`I18n` is an IIFE singleton (`i18n.js`) exposing:
 
 - `I18n.t(key)` — lookup translation for current language
 - `I18n.setLang(lang)` — persist to `localStorage`, dispatch `langchange` event
@@ -419,11 +423,18 @@ Note: Breakpoints are used as literal values in `@media` queries (CSS variables 
 
 2. Form submit → POST /api/auth/login { email, password }
    ├── Success → { success: true, data: { token: "..." } }
-   │   └── Store JWT in localStorage("solfacil_jwt") → redirect to index.html
+   │   ├── Store JWT in localStorage("solfacil_jwt") for fetch/XHR Authorization header
+   │   ├── Browser receives HttpOnly `solfacil_jwt` cookie for EventSource/SSE auth
+   │   └── Redirect to index.html
    └── Failure → show translated error message
 
 3. index.html (app.js) → check localStorage("solfacil_jwt")
    └── No token → redirect to login.html
+
+4. Logout button → POST /api/auth/logout
+   ├── BFF clears HttpOnly `solfacil_jwt` cookie
+   ├── Frontend clears localStorage("solfacil_jwt")
+   └── Redirect to login.html
 ```
 
 ### Auth Guard (认证守卫)
@@ -548,7 +559,8 @@ P1 Fleet adopted VU with:
 
 | Method | Endpoint | Page | Description |
 |--------|----------|------|-------------|
-| POST | `/api/auth/login` | Login | Authenticate, receive JWT |
+| POST | `/api/auth/login` | Login | Authenticate, receive JWT + set HttpOnly `solfacil_jwt` cookie for SSE |
+| POST | `/api/auth/logout` | Global | Clear HttpOnly auth cookie and terminate browser SSE auth |
 | GET | `/api/fleet/overview` | P1 | Fleet-level KPIs |
 | GET | `/api/fleet/charts` | P1 | Gateway status + inverter brand distribution |
 | GET | `/api/fleet/integradores` | P1 | Organization list |
@@ -562,7 +574,7 @@ P1 Fleet adopted VU with:
 | PUT | `/api/devices/:id` | P2 | Update device config |
 | GET | `/api/gateways/:id/schedule` | P2 | Gateway schedule |
 | PUT | `/api/gateways/:id/schedule` | P2 | Update schedule |
-| SSE | `/api/events` | P2 | Real-time telemetry + command status |
+| SSE | `/api/events` | P2 | Real-time telemetry + command status, authenticated via same-origin HttpOnly auth cookie |
 | GET | `/api/gateways/:id/energy-24h` | P3 | 288-point 5-min energy curve |
 | GET | `/api/gateways/:id/energy-stats` | P3 | 7d/30d/12m energy statistics |
 | GET | `/api/gateways/:id/energy` | P3 | Legacy gateway energy |
@@ -584,8 +596,10 @@ P1 Fleet adopted VU with:
 | POST | `/api/p5/intents/:id/:action` | P5 | Intent action (approve/defer/etc.) |
 | POST | `/api/p5/posture-override` | P5 | Create posture override |
 | POST | `/api/p5/posture-override/:id/cancel` | P5 | Cancel override |
-| GET | `/api/performance/scorecard` | P6 | Performance scorecard |
-| GET | `/api/performance/savings` | P6 | Per-home savings |
+| GET | `/api/alerts/summary` | P6 | Alarm center KPI summary (active, severe, recovered, affected gateways) |
+| GET | `/api/alerts` | P6 | Filtered alert list (status, level, gateway, period) |
+| GET | `/api/performance/scorecard` | P6 (legacy) | Performance scorecard (unused by current frontend) |
+| GET | `/api/performance/savings` | P6 (legacy) | Per-home savings (unused by current frontend) |
 
 ---
 
@@ -691,4 +705,13 @@ P1 Fleet adopted VU with:
 
 ## V2.4 Protocol Impact
 
-**No frontend code changes required.** The frontend consumes BFF REST API responses and SSE events — it never directly parses MQTT payloads, protocol timestamps, or raw telemetry values. All V2.4 adaptations (timestamp format auto-detection, value scaling corrections, dual-key field fallback, alarm event ingestion) are handled entirely in the backend layers (M1, M5, M9). The BFF API contract — endpoint paths, response shapes, field names — is unchanged.
+**v6.8 frontend changes for V2.4 Health/DIDO display:**
+
+- **P2 Devices (`p2-devices.js`)**: Gateway Health panel expanded with 5 new fields: Status 4G (`phoneStatus`), Sinal 4G (`phoneSignalStrength`), Umidade (`humidity`), Hora do Sistema (`systemTime`), Hora do Hardware (`hardwareTime`). New 6th diagnostic panel "I/O Digital" (DIDO) showing DO/DI state from `telemetryExtra.dido`.
+- **i18n.js**: 7 new keys × 3 languages for health/DIDO fields.
+
+> **Note (v6.7):** The v6.7 statement that "no frontend code changes required" was correct at that version. v6.8 added frontend UI to display the V2.4 Health and DIDO data that the BFF already exposed in v6.7.
+
+### v6.8 CSS Changes
+
+- **pages.css**: Added P6 alert styles — `.alert-banner`, `.alert-filter-bar`, `.alert-badge-*` (severity badges), `.alert-table` classes for the Alarm Center page.

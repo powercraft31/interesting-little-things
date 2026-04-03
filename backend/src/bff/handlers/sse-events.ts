@@ -45,7 +45,8 @@ export function createSseHandler(_pool: Pool) {
 
     await listenClient.query("LISTEN telemetry_update");
     await listenClient.query("LISTEN gateway_health");
-    console.log("[SSE] Client connected, LISTEN active");
+    await listenClient.query("LISTEN alarm_event");
+    console.log("[SSE] Client connected, LISTEN active (telemetry, health, alarm)");
 
     // Forward pg notifications as SSE events
     listenClient.on("notification", (msg) => {

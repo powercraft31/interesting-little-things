@@ -1,7 +1,7 @@
 # 09 Shared Layer Architecture
 
-> **Version**: v6.7
-> **Parent**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **Version**: v6.8
+> **Parent**: [00_MASTER_ARCHITECTURE_v6.8.md](./00_MASTER_ARCHITECTURE_v6.8.md)
 > **Date**: 2026-04-02
 > **Git HEAD**: `b94adf3`
 > **Scope**: Cross-cutting utilities, connection management, type definitions, middleware, and migrations shared by all backend modules (M1-M8).
@@ -23,7 +23,7 @@
 | v5.22 | 2026-03-13 | solfacil-protocol.ts, ParsedTelemetry 34 fields, tenant-context.ts JWT support |
 | v5.24 | 2026-03-13 | Tariff helper evaluation: decision to keep tariff SQL inline |
 | **v6.6** | **2026-03-31** | **p5-db.ts NEW; types/p5.ts NEW; migrations/001_p5_strategy_triggers.sql NEW (P5 Strategy Triggers full-stack persistence)** |
-| **v6.7** | **2026-04-02** | **V2.4 protocol upgrade: NEW `protocol-time.ts` (parseProtocolTimestamp dual-format auto-detect); updated `solfacil-protocol.ts` types for V2.4 alarm/scaling fields. File count 9→10.** |
+| **v6.8** | **2026-04-02** | **V2.4 protocol upgrade: NEW `protocol-time.ts` (parseProtocolTimestamp dual-format auto-detect); updated `solfacil-protocol.ts` types for V2.4 alarm/scaling fields. File count 9→10.** |
 
 ---
 
@@ -460,9 +460,9 @@ Key design constraint: `middleware/tenant-context.ts` has zero HTTP/cloud framew
 | `middleware/tenant-context.ts` | unchanged | v5.23 | --- |
 | `types/auth.ts` | unchanged | v5.2 | --- |
 | `types/api.ts` | unchanged | v5.5 | --- |
-| `types/solfacil-protocol.ts` | **UPDATED** | v6.7 | V2.4 type additions: alarm event types, scaling factor constants, lowercase key aliases |
+| `types/solfacil-protocol.ts` | **UPDATED** | v6.8 | V2.4 type additions: alarm event types, scaling factor constants, lowercase key aliases |
 | `types/telemetry.ts` | unchanged | v5.18 | --- |
-| `protocol-time.ts` | **NEW** | v6.7 | `parseProtocolTimestamp()`: auto-detects ISO 8601 (V2.4) vs legacy numeric epoch (V1.x), returns `Date`. Used by M1 heartbeat/telemetry/alarm handlers |
+| `protocol-time.ts` | **NEW** | v6.8 | `parseProtocolTimestamp()`: auto-detects ISO 8601 (V2.4) vs legacy numeric epoch (V1.x), returns `Date`. Used by M1 heartbeat/telemetry/alarm handlers |
 
 ---
 

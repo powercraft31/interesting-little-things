@@ -1,10 +1,10 @@
 # SOLFACIL VPP — Master Architecture Blueprint
 
-> **Version**: v6.7
+> **Version**: v6.8
 > **Git HEAD**: `b94adf3`
 > **Last Updated**: 2026-04-02
-> **Description**: System master blueprint — v6.7 Protocol V2.4 upgrade
-> **Core Theme**: v6.7 Protocol V2.4 Upgrade (Xuheng EMS protocol alignment, timestamp/scaling/alarm)
+> **Description**: System master blueprint — v6.8 P6 Alarm Center + V2.4 Health/DIDO enrichment
+> **Core Theme**: v6.8 P6 Alarm Center BFF endpoints, SSE alarm_event channel, V2.4 Health/DIDO BFF enrichment
 
 ---
 
@@ -12,19 +12,19 @@
 
 | # | Document | Path | Description |
 |---|----------|------|-------------|
-| 00 | **MASTER_ARCHITECTURE** | `00_MASTER_ARCHITECTURE_v6.7.md` | System master blueprint (this document) |
-| M1 | **IOT_HUB_MODULE** | [01_IOT_HUB_MODULE_v6.7.md](./01_IOT_HUB_MODULE_v6.7.md) | MQTT ingestion: 27 files, 6 topics/gateway, fragment assembly, backfill, alarm processing |
-| M2 | **OPTIMIZATION_ENGINE_MODULE** | [02_OPTIMIZATION_ENGINE_MODULE_v6.7.md](./02_OPTIMIZATION_ENGINE_MODULE_v6.7.md) | Strategy evaluation pipeline + schedule generation + real-time optimization |
-| M3 | **DR_DISPATCHER_MODULE** | [03_DR_DISPATCHER_MODULE_v6.7.md](./03_DR_DISPATCHER_MODULE_v6.7.md) | Demand response dispatch: state machine + timeout + peak shaving |
-| M4 | **MARKET_BILLING_MODULE** | [04_MARKET_BILLING_MODULE_v6.7.md](./04_MARKET_BILLING_MODULE_v6.7.md) | Tariff management + daily billing pipeline + PS savings + monthly true-up |
-| M5 | **BFF_MODULE** | [05_BFF_MODULE_v6.7.md](./05_BFF_MODULE_v6.7.md) | 47 route endpoints (45 handler files) + SSE + middleware + background service orchestration |
-| M6 | **IDENTITY_MODULE** | [06_IDENTITY_MODULE_v6.7.md](./06_IDENTITY_MODULE_v6.7.md) | JWT auth, RBAC, user management |
-| M7 | **OPEN_API_MODULE** | [07_OPEN_API_MODULE_v6.7.md](./07_OPEN_API_MODULE_v6.7.md) | Webhook delivery + weather/CCEE inbound endpoints |
-| M8 | **ADMIN_CONTROL_MODULE** | [08_ADMIN_CONTROL_MODULE_v6.7.md](./08_ADMIN_CONTROL_MODULE_v6.7.md) | Parser rules, VPP strategies, data dictionary CRUD |
-| 09 | **SHARED_LAYER** | [09_SHARED_LAYER_v6.7.md](./09_SHARED_LAYER_v6.7.md) | Dual-pool DB, P5 persistence, tarifa, types, middleware, protocol timestamp utilities |
-| 10 | **DATABASE_SCHEMA** | [10_DATABASE_SCHEMA_v6.7.md](./10_DATABASE_SCHEMA_v6.7.md) | 30 tables, RLS, partitioning, indexes |
+| 00 | **MASTER_ARCHITECTURE** | `00_MASTER_ARCHITECTURE_v6.8.md` | System master blueprint (this document) |
+| M1 | **IOT_HUB_MODULE** | [01_IOT_HUB_MODULE_v6.8.md](./01_IOT_HUB_MODULE_v6.8.md) | MQTT ingestion: 27 files, 6 topics/gateway, fragment assembly, backfill, alarm processing |
+| M2 | **OPTIMIZATION_ENGINE_MODULE** | [02_OPTIMIZATION_ENGINE_MODULE_v6.8.md](./02_OPTIMIZATION_ENGINE_MODULE_v6.8.md) | Strategy evaluation pipeline + schedule generation + real-time optimization |
+| M3 | **DR_DISPATCHER_MODULE** | [03_DR_DISPATCHER_MODULE_v6.8.md](./03_DR_DISPATCHER_MODULE_v6.8.md) | Demand response dispatch: state machine + timeout + peak shaving |
+| M4 | **MARKET_BILLING_MODULE** | [04_MARKET_BILLING_MODULE_v6.8.md](./04_MARKET_BILLING_MODULE_v6.8.md) | Tariff management + daily billing pipeline + PS savings + monthly true-up |
+| M5 | **BFF_MODULE** | [05_BFF_MODULE_v6.8.md](./05_BFF_MODULE_v6.8.md) | 50 route endpoints (47 handler files) + SSE + middleware + background service orchestration |
+| M6 | **IDENTITY_MODULE** | [06_IDENTITY_MODULE_v6.8.md](./06_IDENTITY_MODULE_v6.8.md) | JWT auth, RBAC, user management |
+| M7 | **OPEN_API_MODULE** | [07_OPEN_API_MODULE_v6.8.md](./07_OPEN_API_MODULE_v6.8.md) | Webhook delivery + weather/CCEE inbound endpoints |
+| M8 | **ADMIN_CONTROL_MODULE** | [08_ADMIN_CONTROL_MODULE_v6.8.md](./08_ADMIN_CONTROL_MODULE_v6.8.md) | Parser rules, VPP strategies, data dictionary CRUD |
+| 09 | **SHARED_LAYER** | [09_SHARED_LAYER_v6.8.md](./09_SHARED_LAYER_v6.8.md) | Dual-pool DB, P5 persistence, tarifa, types, middleware, protocol timestamp utilities |
+| 10 | **DATABASE_SCHEMA** | [10_DATABASE_SCHEMA_v6.8.md](./10_DATABASE_SCHEMA_v6.8.md) | 30 tables, RLS, partitioning, indexes |
 
-**Frontend Architecture**: [`docs/FRONTEND_ARCHITECTURE_v6.7.md`](../../docs/FRONTEND_ARCHITECTURE_v6.7.md)
+**Frontend Architecture**: [`docs/FRONTEND_ARCHITECTURE_v6.8.md`](../../docs/FRONTEND_ARCHITECTURE_v6.8.md)
 
 ---
 
@@ -43,6 +43,7 @@ Solfacil is a multi-tenant **Virtual Power Plant (VPP)** / **Energy Management S
 | Strategy Triggers | Posture-aware triage, intent governance, operator escalation flows |
 | Market Billing | Daily revenue calculation, TOU arbitrage, peak shaving savings |
 | Performance | Pilot acceptance scorecard, savings analysis |
+| Alarm Center | Real-time alarm monitoring, severity filtering, gateway-level alert tracking |
 
 ---
 
@@ -75,7 +76,7 @@ P1 Fleet Overview          ─── Gateway-first fleet dashboard (v6.1)
 P4 HEMS Control             ─── 4-step batch dispatch workbench (v6.4)
 P5 Strategy Triggers        ─── Posture-aware triage cockpit (v6.5)
   └── P5 VPP (legacy)       ─── VPP capacity/latency/DR events
-P6 Performance              ─── Pilot acceptance scorecard (v5.14)
+P6 Alerts                   ─── Alarm Center (v6.8, replaces Performance Scorecard)
 ```
 
 ### Route Table
@@ -90,7 +91,7 @@ P6 Performance              ─── Pilot acceptance scorecard (v5.14)
 | P4 HEMS | `#hems` | `p4-hems.js` | v6.4 | Strategy→Impact→Targeting→Review |
 | P5 Strategy | `#vpp` | `p5-strategy.js` | v6.5 | Hero posture, intent cards, overrides |
 | P5 VPP | (sub-view) | `p5-vpp.js` | v5.12 | Legacy: capacity/latency/DR (file exists but not loaded in index.html — superseded by p5-strategy.js) |
-| P6 Performance | `#performance` | `p6-performance.js` | v5.14 | 14 metrics, 3 categories. **Note:** Not in PAGES array — `#performance` falls back to `#fleet` via router. Init code exists but page is unreachable through standard navigation (reserved for future activation) |
+| P6 Alerts | `#alerts` | `p6-alerts.js` | v6.8 | Alarm Center — KPI cards, filter bar, severity badges, alert table. Replaces P6 Performance Scorecard |
 
 ---
 
@@ -104,7 +105,7 @@ P6 Performance              ─── Pilot acceptance scorecard (v5.14)
 | M2 | Optimization Engine | 4 .ts | Strategy evaluation, schedule generation, real-time SOC optimization |
 | M3 | DR Dispatcher | 4 .ts | Trade→dispatch state machine, hardware ACK, timeout detection |
 | M4 | Market Billing | 3 .ts | Daily billing pipeline, revenue calculation, PS savings, monthly true-up |
-| M5 | BFF | 46 .ts | 47 route endpoints (45 handler files + 1 auth middleware) + SSE, background service orchestration |
+| M5 | BFF | 48 .ts | 50 route endpoints (47 handler files + 1 auth middleware) + SSE, background service orchestration |
 | M6 | Identity | — | JWT auth via BFF + shared middleware (no standalone module) |
 | M7 | Open API | 3 .ts | Outbound webhook delivery, inbound weather/CCEE endpoints |
 | M8 | Admin Control | 8 .ts | Parser rules, VPP strategies, data dictionary CRUD |
@@ -122,9 +123,9 @@ P6 Performance              ─── Pilot acceptance scorecard (v5.14)
                          │ HTTP / SSE
                          ▼
 ┌─────────────────────────────────────────────────────────────────┐
-│                   M5 BFF (47 routes / 45 handlers)              │
+│                   M5 BFF (50 routes / 47 handlers)              │
 │  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌──────┐  ┌────────┐│
-│  │ Auth │  │Fleet │  │Device│  │ HEMS │  │  P5  │  │Perf/Rev││
+│  │ Auth │  │Fleet │  │Device│  │ HEMS │  │  P5  │  │Alerts  ││
 │  └──┬───┘  └──┬───┘  └──┬───┘  └──┬───┘  └──┬───┘  └───┬────┘│
 └─────┼─────────┼─────────┼─────────┼─────────┼──────────┼──────┘
       │         │         │         │         │          │
@@ -162,7 +163,7 @@ External:
 | Source | Target | Mechanism | Purpose |
 |--------|--------|-----------|---------|
 | M1 IoT Hub | PostgreSQL | Direct SQL | Telemetry writes (telemetry_history, device_state, asset_5min_metrics, gateway_alarm_events) |
-| M1 IoT Hub | BFF (SSE) | pg_notify | Real-time telemetry_update, gateway_health, command_status |
+| M1 IoT Hub | BFF (SSE) | pg_notify | Real-time telemetry_update, gateway_health, alarm_event, command_status |
 | M2 Optimization | PostgreSQL | Direct SQL | Strategy intents, trade schedules |
 | M2 Optimization | EventBridge | AWS event | DRCommandIssued → M3 |
 | M3 Dispatcher | PostgreSQL | Direct SQL | Dispatch commands, device command logs |
@@ -171,7 +172,7 @@ External:
 | M5 BFF | PostgreSQL | queryWithOrg (RLS) | All read/write via RLS-scoped queries |
 | M7 Open API | PostgreSQL | Direct SQL | Weather cache, PLD horario ingestion |
 | M7 Open API | External | HMAC-SHA256 HTTP | Outbound webhook delivery |
-| Frontend | M5 BFF | HTTP REST + SSE | 47 route endpoints (incl. webhooks, dispatch ACK) + 1 SSE stream |
+| Frontend | M5 BFF | HTTP REST + SSE | 50 route endpoints (incl. webhooks, dispatch ACK, auth logout) + 1 SSE stream |
 
 ### Background Service Schedule
 
@@ -193,7 +194,7 @@ External:
 - **Row-Level Security** on 15 tables using `app.current_org_id` session variable
 - **Partitioned tables**: telemetry_history (monthly RANGE), asset_5min_metrics (daily RANGE)
 - **Dual pool model**: `solfacil_app` (NOBYPASSRLS, max 20) + `solfacil_service` (BYPASSRLS, max 10)
-- See [10_DATABASE_SCHEMA_v6.7.md](./10_DATABASE_SCHEMA_v6.7.md) for complete DDL reference
+- See [10_DATABASE_SCHEMA_v6.8.md](./10_DATABASE_SCHEMA_v6.8.md) for complete DDL reference
 
 ---
 
@@ -224,23 +225,31 @@ External:
 | v6.5 | 2026-03-26 | `440a253` | P5 Strategy Triggers — full stack (evaluator, governance, intent UI) |
 | v6.5.1 | 2026-03-27 | `89c1f76` | P5 action model reframe (approve/defer/suppress/escalate) |
 | v6.6 | 2026-03-29 | `4ec191a` | P1/P2 Visual Unification + SSE DB connection fix |
-| **v6.7** | **2026-04-02** | **`b94adf3`** | **Protocol V2.4 Upgrade: ISO 8601 timestamps, correct scaling (×0.1/×0.001), alarm ingestion, BFF V2.4 alignment** |
+| v6.7 | 2026-04-02 | `b94adf3` | Protocol V2.4 Upgrade: ISO 8601 timestamps, correct scaling (×0.1/×0.001), alarm ingestion, BFF V2.4 alignment |
+| **v6.8** | **2026-04-03** | **`d76ce24`** | **P6 Alarm Center BFF endpoints (`get-alerts.ts`, `get-alerts-summary.ts`), SSE `alarm_event` channel, V2.4 Health/DIDO BFF enrichment** |
 
-### v6.7 Change Summary (Protocol V2.4 Upgrade)
+### v6.8 Change Summary (P6 Alarm Center + V2.4 Health/DIDO)
 
-**Protocol alignment:**
-- Xuheng EMS Protocol V2.4 (SolfacilProtocol v1.7): ISO 8601 timestamps, correct value scaling (voltage ×0.1, power factor ×0.001, energy ÷10 kWh), dual-format timestamp auto-detection for V1.x/V2.4 coexistence
-- M1 IoT Hub: heartbeat, telemetry, alarm handlers rewritten for V2.4; new `alarm-handler.ts` (+1 file, 26→27)
-- M9 Shared Layer: new `protocol-time.ts` with `parseProtocolTimestamp()` (+1 file, 9→10); updated `solfacil-protocol.ts` types
-- M5 BFF: `ems_health` dual-key fallback (V2.4 lowercase + V1.x uppercase); `telemetry_extra` nested JSONB navigation fix
-- DB Migration v7.0: `gateway_alarm_events` table (+1 table, 29→30); `assets.asset_type` CHECK expanded for ESS; column comments updated
+**P6 Alarm Center (Centro de Alertas):**
+- M5 BFF: 2 new endpoints — `GET /api/alerts` (dynamic filtered query on `gateway_alarm_events JOIN gateways`) and `GET /api/alerts/summary` (3-CTE aggregation: alarm_stats, gw_total, severe_detail)
+- SSE: `sse-events.ts` now LISTENs 3 channels: `telemetry_update`, `gateway_health`, `alarm_event`
+- Frontend: new `p6-alerts.js` (AlertsPage) with KPI cards, filter bar, severity badges, alert table; replaces P6 Performance Scorecard in PAGES array and index.html
+- Frontend: `data-source.js` new `alerts` namespace (`summary()`, `list()`) using `withFallback(apiGet, mock)`
+- Frontend: `mock-data.js` added `MOCK_ALERTS_SUMMARY` and `MOCK_ALERTS` (9 mock records)
+- Frontend: `i18n.js` added ~40 alert keys × 3 languages; `pages.css` added P6 alert styles
 
-**No changes required:** M2, M3, M4, M6, M7, M8 — all read from unchanged column names/semantics
-**Frontend:** zero changes — BFF adapts all V2.4 differences
+**V2.4 Health/DIDO enrichment:**
+- BFF `get-gateway-detail.ts`: 5 new EMS health keys (phoneStatus, phoneSignalStrength, humidity, systemTime, hardwareTime) with dual-key fallback
+- BFF `get-device-detail.ts`: `telemetryExtra` now includes `dido` field passthrough (raw JSONB)
+- Frontend `p2-devices.js`: Gateway Health panel expanded with 5 new fields; new 6th diagnostic panel "I/O Digital" (DIDO) showing DO/DI state
+- Frontend `i18n.js`: 7 new keys × 3 languages for health/DIDO
+
+**No changes required:** M1, M2, M3, M4, M6, M7, M8, M9 — no handler/schema changes
+**CORS:** `local-server.ts` added `127.0.0.1` to allowlist
 
 **Cumulative since v5.24:**
-- Handler count: 34 (v5.24) → 47 routes / 45 handlers (v6.7)
-- Table count: 27 (v5.24) → 30 (v6.7, +strategy_intents, +posture_overrides, +gateway_alarm_events)
+- Handler count: 34 (v5.24) → 50 routes / 47 handlers (v6.8)
+- Table count: 27 (v5.24) → 30 (v6.8, +strategy_intents, +posture_overrides, +gateway_alarm_events)
 
 ---
 

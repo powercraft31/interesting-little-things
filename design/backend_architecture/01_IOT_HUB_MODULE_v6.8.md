@@ -1,8 +1,8 @@
 # M1: IoT Hub Module — MQTT 協議接入層
 
-> **Module Version**: v6.7 (Protocol V2.4 alignment + alarm handler)
+> **Module Version**: v6.8 (Protocol V2.4 alignment + alarm handler)
 > **Git HEAD**: `b94adf3`
-> **Parent**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **Parent**: [00_MASTER_ARCHITECTURE_v6.8.md](./00_MASTER_ARCHITECTURE_v6.8.md)
 > **Last Updated**: 2026-04-02
 > **Description**: Full Solfacil Protocol V2.4 integration — 7 subscribe + 4 publish topics, anti-corruption layer, gateway registry, command pipeline, backfill infrastructure, gateway outage event tracking, telemetry-triggered gap detection, alarm event processing
 > **Core Theme**: Adapter-pattern telemetry normalization, fragment assembly pipeline, gateway outage lifecycle management, V2.4 protocol alignment
@@ -11,11 +11,11 @@
 
 ## Changes from v5.22
 
-| Component | Before (v5.22) | After (v6.7) |
+| Component | Before (v5.22) | After (v6.8) |
 |-----------|---------------|--------------|
 | Backfill trigger | HeartbeatHandler reconnect detection（CTE + gap > 2min → `backfill_requests`） | **TelemetryHandler** gap detection: telemetry stream gap > 5 min → `INSERT backfill_requests`（v6.1）；HeartbeatHandler 不再觸發 backfill |
 | HeartbeatHandler | Reconnect detection + backfill_requests INSERT | Connectivity recovery only: close open `gateway_outage_events` on reconnect; **no backfill** trigger（v6.1） |
-| Watchdog threshold | 10 min (`OFFLINE_THRESHOLD_MS = 600_000`) | **30 min** (`OFFLINE_THRESHOLD_MS = 1_800_000`)（v6.7, V2.4 heartbeat 300s × 6） |
+| Watchdog threshold | 10 min (`OFFLINE_THRESHOLD_MS = 600_000`) | **30 min** (`OFFLINE_THRESHOLD_MS = 1_800_000`)（v6.8, V2.4 heartbeat 300s × 6） |
 | Gateway outage events | 無 | `gateway_outage_events` 表 + watchdog writes outage on offline + HeartbeatHandler closes on reconnect + **5-min flap consolidation**（v6.1） |
 | Fragment scaling | `safeFloat()` 直接透傳原始值 | Protocol V2.4 scaling helpers: `scaleVoltage(×0.1)`, `scaleCurrent(×0.1)`, `scaleTemp(×0.1)`, `scalePowerKw(÷1000)`, `scaleEnergyKwh(×0.1)`, `scaleFrequency(×0.01)`, `scalePowerFactor(×0.001)` |
 | DynamicAdapter | Phase 6.4: direct mode only | Direct + **Iterator mode**: one payload → N envelopes（e.g. battery array via `rule.iterator` path）（v6.4） |
@@ -43,7 +43,7 @@
                      │S1    │S2    │S3    │S4    │S5    │S6    │S7
                      ▼      ▼      ▼      ▼      ▼      ▼      ▼
 ┌─────────────────────────────────────────────────────────────────────────────┐
-│                    M1 IoT Hub (v6.7)                                         │
+│                    M1 IoT Hub (v6.8)                                         │
 │                                                                              │
 │  ┌──────────────┐  ┌──────────────────────────────────────────────────────┐ │
 │  │ Gateway       │  │ Anti-Corruption Layer (ACL)                          │ │
@@ -1464,14 +1464,14 @@ interface SolfacilAlarmPayload {
 
 | File | Version | Description |
 |------|---------|-------------|
-| `telemetry-handler.ts` | **v6.7** | Fragment-aware telemetry handler + gap detection (>5min → backfill); V2.4 parseProtocolTimestamp |
-| `heartbeat-handler.ts` | **v6.7** | Connectivity recovery only: close outage events on reconnect; V2.4 parseProtocolTimestamp |
-| `command-tracker.ts` | **v6.7** | Two-phase set_reply: accepted→success/fail; pg_notify; V2.4 messageId independence note |
-| `missed-data-handler.ts` | **v6.7** | Backfill data path: data/missed → BackfillAssembler; V2.4 total/index progress tracking |
+| `telemetry-handler.ts` | **v6.8** | Fragment-aware telemetry handler + gap detection (>5min → backfill); V2.4 parseProtocolTimestamp |
+| `heartbeat-handler.ts` | **v6.8** | Connectivity recovery only: close outage events on reconnect; V2.4 parseProtocolTimestamp |
+| `command-tracker.ts` | **v6.8** | Two-phase set_reply: accepted→success/fail; pg_notify; V2.4 messageId independence note |
+| `missed-data-handler.ts` | **v6.8** | Backfill data path: data/missed → BackfillAssembler; V2.4 total/index progress tracking |
 | `device-list-handler.ts` | v5.18 | DeviceList → UPSERT assets + soft-delete reconciliation |
-| `schedule-translator.ts` | **v6.7** | Bidirectional protocol↔domain translation + validation; V2.4 gridImportLimitW preferred |
-| `publish-config.ts` | **v6.7** | publishConfigGet/Set/SubDevicesGet; V2.4 formatProtocolTimestamp |
-| `alarm-handler.ts` | **v6.7** | V2.4 alarm processing: alarm → gateway_alarm_events + pg_notify('alarm_event') |
+| `schedule-translator.ts` | **v6.8** | Bidirectional protocol↔domain translation + validation; V2.4 gridImportLimitW preferred |
+| `publish-config.ts` | **v6.8** | publishConfigGet/Set/SubDevicesGet; V2.4 formatProtocolTimestamp |
+| `alarm-handler.ts` | **v6.8** | V2.4 alarm processing: alarm → gateway_alarm_events + pg_notify('alarm_event') |
 | `ingest-telemetry.ts` | **v6.4** | Lambda: AppConfig DynamicAdapter → legacy mapping → ACL fallback |
 | `mqtt-subscriber.ts` | v5.16 | Legacy single-topic subscriber (XuhengAdapter path) |
 | `telemetry-webhook.ts` | v5.16 | POST /api/telemetry/mock (dev/test) |
@@ -1481,9 +1481,9 @@ interface SolfacilAlarmPayload {
 
 | File | Version | Description |
 |------|---------|-------------|
-| `gateway-connection-manager.ts` | **v6.7** | 7 topics/gw, 30min watchdog, outage event management with flap consolidation, alarm handler routing |
-| `fragment-assembler.ts` | **v6.7** | Per-gateway fragment accumulator + parseTelemetryPayload (shared) + Protocol V2.4 scaling + V2.4 scalePowerFactor(×0.001) + parseProtocolTimestamp |
-| `backfill-requester.ts` | **v6.7** | Poll backfill_requests → chunked get_missed MQTT publish; V2.4 epochMsToProtocolTimestamp |
+| `gateway-connection-manager.ts` | **v6.8** | 7 topics/gw, 30min watchdog, outage event management with flap consolidation, alarm handler routing |
+| `fragment-assembler.ts` | **v6.8** | Per-gateway fragment accumulator + parseTelemetryPayload (shared) + Protocol V2.4 scaling + V2.4 scalePowerFactor(×0.001) + parseProtocolTimestamp |
+| `backfill-requester.ts` | **v6.8** | Poll backfill_requests → chunked get_missed MQTT publish; V2.4 epochMsToProtocolTimestamp |
 | `command-publisher.ts` | v5.21 | Poll dispatched commands → MQTT config/set |
 | `device-asset-cache.ts` | v5.16 | serial_number → asset_id (5min refresh, XuHeng prefix handling) |
 | `message-buffer.ts` | v5.16 | Per-asset 2s debounce INSERT telemetry_history |
@@ -1506,7 +1506,7 @@ interface SolfacilAlarmPayload {
 
 | File | Version | Description |
 |------|---------|-------------|
-| `protocol-time.ts` | **v6.7** | `parseProtocolTimestamp()` (V2.4 UTC-3 + V1.x epoch ms backward compat), `epochMsToProtocolTimestamp()`, `formatProtocolTimestamp()` |
+| `protocol-time.ts` | **v6.8** | `parseProtocolTimestamp()` (V2.4 UTC-3 + V1.x epoch ms backward compat), `epochMsToProtocolTimestamp()`, `formatProtocolTimestamp()` |
 
 ---
 
@@ -1599,4 +1599,4 @@ interface SolfacilAlarmPayload {
 | v5.21 | 2026-03-11 | SSE + Command Pipeline: CommandPublisher (pending→dispatched), pg_notify |
 | v5.22 | 2026-03-13 | Two-phase set_reply, backfill infrastructure, parseTelemetryPayload shared, +1 subscribe/publish topic (data/missed), UNIQUE INDEX on telemetry_history |
 | **v6.6** | **2026-03-31** | **Gateway outage event management (writeOutageEvent + 5-min flap consolidation + heartbeat close), backfill trigger moved from HeartbeatHandler to TelemetryHandler (gap > 5min), watchdog 10min→15min, Protocol v1.8 scaling helpers, DynamicAdapter iterator mode (Phase 6.4), PV summary/MPPT routing, telemetry_extra ems_health subsection, gateway_outage_events table with RLS** |
-| **v6.7** | **2026-04-02** | **Protocol V2.4 alignment: shared `parseProtocolTimestamp()`/`formatProtocolTimestamp()` (UTC-3 + V1.x backward compat), alarm-handler.ts (S7 `device/ems/{cid}/alarm` → `gateway_alarm_events` + pg_notify), `scalePowerFactor(×0.001)`, 7 subscribe topics, 30min watchdog threshold, V2.4 `gridImportLimitW` preferred field, backfill epochMsToProtocolTimestamp, MissedData total/index progress, CommandTracker V2.4 messageId independence, `SolfacilAlarmPayload` type** |
+| **v6.8** | **2026-04-02** | **Protocol V2.4 alignment: shared `parseProtocolTimestamp()`/`formatProtocolTimestamp()` (UTC-3 + V1.x backward compat), alarm-handler.ts (S7 `device/ems/{cid}/alarm` → `gateway_alarm_events` + pg_notify), `scalePowerFactor(×0.001)`, 7 subscribe topics, 30min watchdog threshold, V2.4 `gridImportLimitW` preferred field, backfill epochMsToProtocolTimestamp, MissedData total/index progress, CommandTracker V2.4 messageId independence, `SolfacilAlarmPayload` type** |

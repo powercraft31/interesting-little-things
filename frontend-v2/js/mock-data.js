@@ -1311,6 +1311,96 @@ function formatBRL(value) {
   return sign + "R$ " + intPart + "," + parts[1];
 }
 
+// =========================================================
+// P6: Alerts Mock Data
+// =========================================================
+
+// eslint-disable-next-line no-unused-vars
+var MOCK_ALERTS_SUMMARY = {
+  activeCount: 7,
+  severeCount: 2,
+  recoveredTodayCount: 4,
+  affectedGateways: 2,
+  totalGateways: 4,
+  severeDetails: "cpu_usage em Test Gateway, disk_usage em Casa Silva"
+};
+
+// eslint-disable-next-line no-unused-vars
+var MOCK_ALERTS = [
+  {
+    id: 1, gatewayId: "WKRD24070202100141I", gatewayName: "Test Gateway",
+    deviceSn: "EMS", subDevName: "", productType: "ems",
+    eventId: "EVT001", eventName: "cpu_usage", eventType: "Alarm",
+    level: "2", status: "0", propName: "cpu_usage", propValue: "58.67%",
+    description: "CPU utilization exceeded threshold",
+    eventCreateTime: "2026-04-03T03:42:00Z", eventUpdateTime: null
+  },
+  {
+    id: 2, gatewayId: "WKRD24070202100144F", gatewayName: "Casa Silva",
+    deviceSn: "EMS", subDevName: "", productType: "ems",
+    eventId: "EVT002", eventName: "disk_usage", eventType: "Alarm",
+    level: "2", status: "0", propName: "disk_usage", propValue: "92.1%",
+    description: "Disk space critically low",
+    eventCreateTime: "2026-04-03T03:38:00Z", eventUpdateTime: null
+  },
+  {
+    id: 3, gatewayId: "WKRD24070202100141I", gatewayName: "Test Gateway",
+    deviceSn: "EMS", subDevName: "", productType: "ems",
+    eventId: "EVT003", eventName: "ems_temp", eventType: "Alarm",
+    level: "1", status: "0", propName: "ems_temp", propValue: "44.35\u00b0C",
+    description: "EMS temperature warning",
+    eventCreateTime: "2026-04-03T03:15:00Z", eventUpdateTime: null
+  },
+  {
+    id: 4, gatewayId: "WKRD24070202100141I", gatewayName: "Test Gateway",
+    deviceSn: "GoodWe-1", subDevName: "GoodWe-1", productType: "inverter",
+    eventId: "EVT004", eventName: "inverter_comm_loss", eventType: "Fault",
+    level: "1", status: "0", propName: "comm_status", propValue: "",
+    description: "Communication timeout with inverter",
+    eventCreateTime: "2026-04-03T02:50:00Z", eventUpdateTime: null
+  },
+  {
+    id: 5, gatewayId: "WKRD24070202100141I", gatewayName: "Test Gateway",
+    deviceSn: "EMS", subDevName: "", productType: "ems",
+    eventId: "EVT005", eventName: "memory_usage", eventType: "Alarm",
+    level: "1", status: "0", propName: "memory_usage", propValue: "23.33%",
+    description: "Memory pressure detected",
+    eventCreateTime: "2026-04-03T02:30:00Z", eventUpdateTime: null
+  },
+  {
+    id: 6, gatewayId: "WKRD24070202100141I", gatewayName: "Test Gateway",
+    deviceSn: "EMS", subDevName: "", productType: "ems",
+    eventId: "EVT006", eventName: "cpu_usage", eventType: "Alarm",
+    level: "1", status: "1", propName: "cpu_usage", propValue: "42.1%",
+    description: "CPU utilization normalized",
+    eventCreateTime: "2026-04-03T01:45:00Z", eventUpdateTime: "2026-04-03T01:45:00Z"
+  },
+  {
+    id: 7, gatewayId: "WKRD24070202100228G", gatewayName: "Casa Santos",
+    deviceSn: "ONE-1", subDevName: "ONE-1", productType: "meter",
+    eventId: "EVT007", eventName: "meter_offline", eventType: "Fault",
+    level: "1", status: "1", propName: "comm_status", propValue: "",
+    description: "Smart meter communication restored",
+    eventCreateTime: "2026-04-03T01:20:00Z", eventUpdateTime: "2026-04-03T01:20:00Z"
+  },
+  {
+    id: 8, gatewayId: "WKRD24070202100141I", gatewayName: "Test Gateway",
+    deviceSn: "EMS", subDevName: "", productType: "ems",
+    eventId: "EVT008", eventName: "system_update", eventType: "Notify",
+    level: "0", status: "1", propName: "firmware", propValue: "v2.4.1",
+    description: "Firmware update available",
+    eventCreateTime: "2026-04-03T00:55:00Z", eventUpdateTime: "2026-04-03T00:55:00Z"
+  },
+  {
+    id: 9, gatewayId: "WKRD24070202100144F", gatewayName: "Casa Silva",
+    deviceSn: "SAN-1", subDevName: "SAN-1", productType: "meter",
+    eventId: "EVT009", eventName: "meter_phase_loss", eventType: "Fault",
+    level: "2", status: "1", propName: "voltage_c", propValue: "0 V \u2192 220 V",
+    description: "Phase C voltage restored",
+    eventCreateTime: "2026-04-02T23:30:00Z", eventUpdateTime: "2026-04-02T23:30:00Z"
+  }
+];
+
 function formatPercent(value) {
   if (value == null || (typeof value === "number" && isNaN(value))) return "—";
   return value.toFixed(1).replace(".", ",") + "%";

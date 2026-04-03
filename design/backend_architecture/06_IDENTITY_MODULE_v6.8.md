@@ -1,8 +1,8 @@
 # Module 6: Identity Module (M6)
 
-> **Module Version**: v6.7
+> **Module Version**: v6.8
 > **Git HEAD**: `b94adf3`
-> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.8.md](./00_MASTER_ARCHITECTURE_v6.8.md)
 > **Last Updated**: 2026-04-02
 > **Description**: JWT-based authentication shell -- no standalone identity service; auth is handled by BFF middleware + shared layer
 > (**说明**: 基于JWT的认证壳 -- 无独立身份服务；认证由BFF中间件+共享层处理)
@@ -13,11 +13,11 @@
 
 M6 is a lightweight authentication shell rather than a standalone identity service. It provides:
 
-1. **Login endpoint** (`POST /api/auth/login`) -- bcrypt password verification, JWT signing, token return
-   (登录端点：bcrypt密码验证、JWT签发、返回token)
+1. **Login/logout endpoints** (`POST /api/auth/login`, `POST /api/auth/logout`) -- bcrypt password verification, JWT signing, token return, and HttpOnly auth cookie lifecycle for browser-native SSE
+   (登录/登出端点：bcrypt密码验证、JWT签发、返回token，并管理浏览器原生SSE所需的HttpOnly认证cookie)
 
-2. **Auth middleware** (`authMiddleware`) -- JWT validation on all `/api/*` routes, transparent header rewriting for backward compatibility with 45 existing BFF handlers
-   (认证中间件：对所有/api/*路由进行JWT验证，透明重写header以兼容现有45个BFF handler)
+2. **Auth middleware** (`authMiddleware`) -- JWT validation on all `/api/*` routes, transparent header rewriting for backward compatibility with existing BFF handlers, and cookie fallback for `EventSource`
+   (认证中间件：对所有/api/*路由进行JWT验证，透明重写header以兼容现有BFF handler，并为 `EventSource` 提供cookie回退认证)
 
 3. **User management** (`POST /api/users`) -- SOLFACIL_ADMIN-only user creation
    (用户管理：仅SOLFACIL_ADMIN可创建用户)
@@ -32,7 +32,7 @@ There is no Cognito, no SSO, no MFA -- this is Phase 1 minimal viable auth.
 
 ```
 src/bff/handlers/
-├── auth-login.ts               # POST /api/auth/login — JWT login handler
+├── auth-login.ts               # POST /api/auth/login + POST /api/auth/logout — JWT login/logout handlers
 └── admin-users.ts              # POST /api/users — admin user creation
 
 src/bff/middleware/
@@ -216,7 +216,7 @@ Browser Request
   45 existing BFF handlers — unchanged (零改动)
 ```
 
-**Public routes** (skip JWT): `["/api/auth/login"]`
+**Public routes** (skip JWT): `["/api/auth/login", "/api/auth/logout"]`
 
 **Key design**: After JWT verification, the middleware overwrites `req.headers.authorization` with raw JSON `{ userId, orgId, role }`. All 45 existing BFF handlers call `extractTenantContext(event)` -> `verifyTenantToken(rawJSON)` -> Path 1. This eliminates the need to modify any handler.
 (关键设计：JWT验证后，中间件将authorization header重写为raw JSON。所有45个现有handler无需修改)
@@ -359,7 +359,7 @@ export async function queryWithOrg<T>(sql, params, orgId) {
 | v5.2 | 2026-02-27 | Initial: Enterprise auth design (Cognito + SSO + MFA + SAML) -- not implemented |
 | v5.23 | 2026-03-13 | Phase 1 JWT Auth Shell: login endpoint, admin-users endpoint, auth middleware with JWT signature verification, login.html, frontend 401 intercept, logout button |
 | **v6.6** | **2026-03-31** | **Code-aligned rewrite from source: document actual verifyTenantToken() dual-path logic, tenant scope enforcement in admin-users, pool assignment rationale, RLS integration via queryWithOrg()** |
-| **v6.7** | **2026-04-02** | **Version bump for V2.4 protocol upgrade. No M6 code changes — auth/RBAC layer is protocol-agnostic.** |
+| **v6.8** | **2026-04-02** | **Version bump for V2.4 protocol upgrade. No M6 code changes — auth/RBAC layer is protocol-agnostic.** |
 
 ---
 

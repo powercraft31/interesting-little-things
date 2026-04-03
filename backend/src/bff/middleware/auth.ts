@@ -16,7 +16,19 @@ export { requireRole };
 // ── v5.23: Express JWT Auth Middleware ────────────────────────────────────
 
 /** Public routes that skip JWT verification */
-const PUBLIC_ROUTES = ["/api/auth/login"];
+const PUBLIC_ROUTES = ["/api/auth/login", "/api/auth/logout"];
+
+function getCookieValue(cookieHeader: string | undefined, name: string): string | null {
+  if (!cookieHeader) return null;
+  const parts = cookieHeader.split(";");
+  for (const part of parts) {
+    const [rawKey, ...rest] = part.trim().split("=");
+    if (rawKey === name) {
+      return decodeURIComponent(rest.join("="));
+    }
+  }
+  return null;
+}
 
 /**
  * Express middleware: validates JWT on /api/* routes (except public ones).
@@ -37,15 +49,17 @@ export function authMiddleware(req: Request, res: Response, next: NextFunction):
   }
 
   const authHeader = req.headers.authorization;
-  if (!authHeader) {
-    res.status(401).json(fail("Authorization header required"));
+  const cookieToken = getCookieValue(req.headers.cookie, "solfacil_jwt");
+  const tokenSource = authHeader ?? cookieToken;
+  if (!tokenSource) {
+    res.status(401).json(fail("Authorization header or auth cookie required"));
     return;
   }
 
   // Strip "Bearer " prefix if present
-  const token = authHeader.startsWith("Bearer ")
-    ? authHeader.slice(7)
-    : authHeader;
+  const token = tokenSource.startsWith("Bearer ")
+    ? tokenSource.slice(7)
+    : tokenSource;
 
   try {
     const ctx = verifyTenantToken(token);

@@ -79,6 +79,14 @@ var PAGES = [
     navKey: "nav.vpp",
     roles: ["admin"],
   },
+  {
+    id: "alerts",
+    hash: "#alerts",
+    labelKey: "page.alerts",
+    icon: "\u{1F514}",
+    navKey: "nav.alerts",
+    roles: ["admin", "integrador"],
+  },
 ];
 
 // =========================================================
@@ -167,6 +175,9 @@ function initPage(pageId) {
     case "vpp":
       if (typeof StrategyPage !== "undefined") promise = StrategyPage.init();
       break;
+    case "alerts":
+      if (typeof AlertsPage !== "undefined") promise = AlertsPage.init();
+      break;
     case "performance":
       if (typeof PerformancePage !== "undefined")
         promise = PerformancePage.init();
@@ -191,37 +202,72 @@ function showErrorBoundary(containerId, err) {
 }
 
 // =========================================================
+// BRT (UTC-3) TIMEZONE UTILITIES — All display times must be BRT
+// Solfacil is a Brazilian energy platform; user-facing times are always BRT.
+// =========================================================
+var BRT_TZ = "America/Sao_Paulo";
+
+function toBRT(date) {
+  if (!(date instanceof Date) || isNaN(date.getTime())) return null;
+  var fmt = new Intl.DateTimeFormat("en-US", {
+    timeZone: BRT_TZ,
+    year: "numeric", month: "2-digit", day: "2-digit",
+    hour: "2-digit", minute: "2-digit", second: "2-digit",
+    hour12: false
+  });
+  var parts = {};
+  fmt.formatToParts(date).forEach(function(p) { parts[p.type] = p.value; });
+  return {
+    year: parseInt(parts.year),
+    month: parseInt(parts.month),
+    day: parseInt(parts.day),
+    hour: parseInt(parts.hour === "24" ? "0" : parts.hour),
+    minute: parseInt(parts.minute),
+    second: parseInt(parts.second)
+  };
+}
+
+function toBRTDate(date) {
+  var b = toBRT(date);
+  if (!b) return null;
+  return new Date(b.year, b.month - 1, b.day, b.hour, b.minute, b.second);
+}
+
+// =========================================================
 // DATE FORMAT UTILITIES (ISO → Brazilian DD/MM format)
 // =========================================================
 function formatISODate(iso) {
   if (iso == null || iso === "") return "—";
   var d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  var dd = String(d.getDate()).padStart(2, "0");
-  var mm = String(d.getMonth() + 1).padStart(2, "0");
-  var yyyy = d.getFullYear();
+  var b = toBRT(d);
+  if (!b) return "—";
+  var dd = String(b.day).padStart(2, "0");
+  var mm = String(b.month).padStart(2, "0");
+  var yyyy = b.year;
   return dd + "/" + mm + "/" + yyyy;
 }
 
 function formatISODateTime(iso) {
   if (iso == null || iso === "") return "—";
   var d = new Date(iso);
-  if (isNaN(d.getTime())) return "—";
-  var dd = String(d.getDate()).padStart(2, "0");
-  var mm = String(d.getMonth() + 1).padStart(2, "0");
-  var yyyy = d.getFullYear();
-  var hh = String(d.getHours()).padStart(2, "0");
-  var min = String(d.getMinutes()).padStart(2, "0");
+  var b = toBRT(d);
+  if (!b) return "—";
+  var dd = String(b.day).padStart(2, "0");
+  var mm = String(b.month).padStart(2, "0");
+  var yyyy = b.year;
+  var hh = String(b.hour).padStart(2, "0");
+  var min = String(b.minute).padStart(2, "0");
   return dd + "/" + mm + "/" + yyyy + " " + hh + ":" + min;
 }
 
 function formatShortDate(iso) {
   var d = new Date(iso);
-  if (isNaN(d.getTime())) return iso;
+  var b = toBRT(d);
+  if (!b) return iso;
   return (
-    String(d.getDate()).padStart(2, "0") +
+    String(b.day).padStart(2, "0") +
     "/" +
-    String(d.getMonth() + 1).padStart(2, "0")
+    String(b.month).padStart(2, "0")
   );
 }
 
@@ -305,6 +351,7 @@ function switchRole(role) {
     energy: typeof EnergyPage !== "undefined" ? EnergyPage : null,
     hems: typeof HEMSPage !== "undefined" ? HEMSPage : null,
     vpp: typeof StrategyPage !== "undefined" ? StrategyPage : null,
+    alerts: typeof AlertsPage !== "undefined" ? AlertsPage : null,
     performance:
       typeof PerformancePage !== "undefined" ? PerformancePage : null,
   };
@@ -387,12 +434,19 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
-  // v5.23: Logout button handler
+  // v5.23/v6.8: Logout button handler (clear localStorage + auth cookie)
   var logoutBtn = document.getElementById("btn-logout");
   if (logoutBtn) {
     logoutBtn.addEventListener("click", function () {
-      localStorage.removeItem("solfacil_jwt");
-      window.location.href = "login.html";
+      fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "same-origin",
+      }).catch(function () {
+        // Ignore logout transport errors — local state still cleared below.
+      }).finally(function () {
+        localStorage.removeItem("solfacil_jwt");
+        window.location.href = "login.html";
+      });
     });
   }
 

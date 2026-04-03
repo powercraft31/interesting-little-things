@@ -105,11 +105,11 @@ var EnergyPage = {
   },
 
   _currentTimeStr: function () {
-    var now = new Date();
+    var b = toBRT(new Date());
     return (
-      String(now.getHours()).padStart(2, "0") +
+      String(b.hour).padStart(2, "0") +
       ":" +
-      String(now.getMinutes()).padStart(2, "0")
+      String(b.minute).padStart(2, "0")
     );
   },
 
@@ -961,8 +961,8 @@ var EnergyPage = {
         axisLabel: {
           color: axisColors.axisLabel,
           formatter: function (val) {
-            var d = new Date(val);
-            return String(d.getHours()).padStart(2, "0") + ":00";
+            var b = toBRT(new Date(val));
+            return b ? String(b.hour).padStart(2, "0") + ":00" : "";
           },
         },
         axisLine: { lineStyle: { color: axisColors.axisLine } },
@@ -1100,10 +1100,10 @@ var EnergyPage = {
         formatter: function (params) {
           if (!params || !params.length) return "";
           var ts = new Date(params[0].value[0]);
-          var timeStr =
-            String(ts.getHours()).padStart(2, "0") +
-            ":" +
-            String(ts.getMinutes()).padStart(2, "0");
+          var brt = toBRT(ts);
+          var timeStr = brt
+            ? String(brt.hour).padStart(2, "0") + ":" + String(brt.minute).padStart(2, "0")
+            : "--:--";
           var lines = ["<b>" + timeStr + "</b>"];
           for (var j = 0; j < params.length; j++) {
             var s = params[j];
@@ -1755,7 +1755,7 @@ var EnergyPage = {
         month: parseInt(parts[1], 10),
       };
     } else {
-      self._state.dateAnchor = new Date(value + "T00:00:00");
+      self._state.dateAnchor = new Date(value + "T03:00:00Z");
     }
 
     self._fetchData();

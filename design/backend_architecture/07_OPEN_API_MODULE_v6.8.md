@@ -1,8 +1,8 @@
 # Module 7: Open API & Integration (M7)
 
-> **Module Version**: v6.7
+> **Module Version**: v6.8
 > **Git HEAD**: `b94adf3`
-> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **Parent Document**: [00_MASTER_ARCHITECTURE_v6.8.md](./00_MASTER_ARCHITECTURE_v6.8.md)
 > **Last Updated**: 2026-04-02
 > **Description**: External-facing webhook delivery and inbound data endpoints -- HMAC-SHA256 signed outbound webhooks, CCEE wholesale price receiver, weather data receiver
 > (**说明**: 对外webhook推送与入站数据端点 -- HMAC-SHA256签名出站webhook、CCEE批发电价接收器、天气数据接收器)
@@ -343,7 +343,7 @@ app.post("/webhooks/weather", handleWeatherWebhook);
 | v5.2 | 2026-02-27 | Initial: M2M Gateway, Webhook, WAF, Rate Limiting design |
 | v5.7 | 2026-02-28 | Inbound Webhook Receivers: POST /webhooks/ccee-pld, POST /webhooks/weather, Mock Publisher design |
 | **v6.6** | **2026-03-31** | **Code-aligned rewrite: document actual 3 handler implementations; webhook-delivery with HMAC-SHA256 + AppConfig timeouts; unified WEBHOOK_SECRET; updated signing headers (x-vpp-*); UPSERT patterns; DB table schemas; security model** |
-| **v6.7** | **2026-04-02** | **Version bump for V2.4 protocol upgrade. No M7 code changes — webhook delivery and inbound receivers (weather/CCEE) are unaffected by MQTT protocol changes.** |
+| **v6.8** | **2026-04-02** | **Version bump for V2.4 protocol upgrade. No M7 code changes — webhook delivery and inbound receivers (weather/CCEE) are unaffected by MQTT protocol changes.** |
 
 ---
 

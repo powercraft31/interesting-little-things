@@ -50,7 +50,7 @@ import { createTelemetryWebhookHandler } from "../src/iot-hub/handlers/telemetry
 
 import { getServicePool, closeAllPools } from "../src/shared/db";
 import { authMiddleware } from "../src/bff/middleware/auth";
-import { createLoginHandler } from "../src/bff/handlers/auth-login";
+import { createLoginHandler, createLogoutHandler } from "../src/bff/handlers/auth-login";
 import { createAdminUsersHandler } from "../src/bff/handlers/admin-users";
 import { startScheduleGenerator } from "../src/optimization-engine/services/schedule-generator";
 import { startCommandDispatcher } from "../src/dr-dispatcher/services/command-dispatcher";
@@ -65,6 +65,9 @@ import { handler as p5OverviewHandler } from "../src/bff/handlers/get-p5-overvie
 import { handler as p5IntentDetailHandler } from "../src/bff/handlers/get-p5-intent-detail";
 import { handler as p5IntentActionHandler } from "../src/bff/handlers/post-p5-intent-action";
 import { handler as p5PostureOverrideHandler } from "../src/bff/handlers/post-p5-posture-override";
+// v7.0: P6 Alerts
+import { handler as alertsHandler } from "../src/bff/handlers/get-alerts";
+import { handler as alertsSummaryHandler } from "../src/bff/handlers/get-alerts-summary";
 
 type LambdaHandler = (
   event: APIGatewayProxyEventV2,
@@ -154,7 +157,7 @@ app.use(
     origin: (origin, callback) => {
       if (
         !origin ||
-        /^https?:\/\/(localhost|152\.42\.235\.155|188\.166\.184\.87|solfacil\.alwayscontrol\.net)(:\d+)?$/.test(
+        /^https?:\/\/(localhost|127\.0\.0\.1|152\.42\.235\.155|188\.166\.184\.87|solfacil\.alwayscontrol\.net)(:\d+)?$/.test(
           origin,
         )
       ) {
@@ -336,6 +339,7 @@ const servicePool = getServicePool();
 
 // ── v5.23 Auth Routes ────────────────────────────────────────────────────
 app.post("/api/auth/login", createLoginHandler(servicePool));
+app.post("/api/auth/logout", createLogoutHandler());
 app.post("/api/users", createAdminUsersHandler(servicePool));
 // ────────────────────────────────────────────────────────────────────────
 
@@ -379,6 +383,17 @@ app.post(
     "POST",
     "/api/p5/posture-override/:overrideId/cancel",
   ),
+);
+// ────────────────────────────────────────────────────────────────────────
+
+// ── P6 Alerts (v7.0) ────────────────────────────────────────────────────
+app.get(
+  "/api/alerts/summary",
+  wrapHandler(alertsSummaryHandler, "GET", "/api/alerts/summary"),
+);
+app.get(
+  "/api/alerts",
+  wrapHandler(alertsHandler, "GET", "/api/alerts"),
 );
 // ────────────────────────────────────────────────────────────────────────
 
@@ -466,14 +481,17 @@ app.listen(PORT, () => {
   console.log("  GET  /api/events (SSE)              (v5.21)");
   console.log("  POST /api/dispatch/ack");
   console.log("  POST /api/auth/login             (v5.23)");
+  console.log("  POST /api/auth/logout            (v6.8)");
   console.log("  POST /api/users                  (v5.23)");
   console.log("  GET  /api/p5/overview               (v6.5)");
   console.log("  GET  /api/p5/intents/:id             (v6.5)");
   console.log("  POST /api/p5/intents/:id/:action     (v6.5)");
   console.log("  POST /api/p5/posture-override        (v6.5)");
   console.log("  POST /api/p5/posture-override/:id/cancel (v6.5)");
+  console.log("  GET  /api/alerts                    (v7.0)");
+  console.log("  GET  /api/alerts/summary             (v7.0)");
   console.log("");
-  console.log("Auth: JWT required for /api/* routes (except /api/auth/login)");
+  console.log("Auth: JWT required for /api/* routes (except /api/auth/login, /api/auth/logout)");
   console.log(`  curl -X POST http://127.0.0.1:${PORT}/api/auth/login \\`);
   console.log('    -H "Content-Type: application/json" \\');
   console.log(

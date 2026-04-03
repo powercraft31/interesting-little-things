@@ -1,18 +1,18 @@
-# M4: 市場與計費模組 — v6.7 完整技術參考
+# M4: 市場與計費模組 — v6.8 完整技術參考
 
-> **模組版本**: v6.7
+> **模組版本**: v6.8
 > **Git HEAD**: `b94adf3`
-> **上層文件**: [00_MASTER_ARCHITECTURE_v6.7.md](./00_MASTER_ARCHITECTURE_v6.7.md)
+> **上層文件**: [00_MASTER_ARCHITECTURE_v6.8.md](./00_MASTER_ARCHITECTURE_v6.8.md)
 > **前版**: [04_MARKET_BILLING_MODULE_v5.24.md](./_archive/04_MARKET_BILLING_MODULE_v5.24.md)
 > **最後更新**: 2026-04-02
-> **說明**: v6.7 完整模組參考文件 — 整合電價查詢、利潤計算、每日計費批次、收入模型、自消費/自給率、P3 節省公式
+> **說明**: v6.8 完整模組參考文件 — 整合電價查詢、利潤計算、每日計費批次、收入模型、自消費/自給率、P3 節省公式
 > **核心主題**: Market Billing 模組全景：Tariff Schedule Handler + Profit Calculation + Daily Billing Job + Revenue Model
 
 ---
 
 ## 與 v5.24 的差異
 
-**v5.24 → v6.7：`runDailyPsSavings` SQL 別名修正 + 文件升級為完整技術參考。**
+**v5.24 → v6.8：`runDailyPsSavings` SQL 別名修正 + 文件升級為完整技術參考。**
 
 | 面向 | v5.24 | v6.6 |
 |------|-------|------|
@@ -591,4 +591,4 @@ CREATE TABLE public.revenue_daily (
 | v5.22 | 2026-03-13 | Schema 依賴備註（homes→gateways）；已知 SQL 別名問題 |
 | v5.24 | 2026-03-13 | P3 Savings 即時計算公式對齊；即時 vs 預聚合邊界定義 |
 | **v6.6** | **2026-03-31** | **完整模組參考文件（Git HEAD: 4ec191a）。修正 runDailyPsSavings SQL 別名（h.→g.contracted_demand_kw）。首次完整記錄：get-tariff-schedule handler（RLS 事務模式）、calculate-profit handler（AppConfig 動態規則 + 三段費率加權）、shared/tarifa.ts 全部純函式（classifyHour / getRateForHour / calculateBaselineCost / calculateActualCost / calculateBestTouCost / calculateSelfConsumption / calculateSelfSufficiency）、revenue_daily 完整 schema（22 欄位）、收入模型三層歸因（SC + TOU + PS）。納入 v5.24 P3 即時 savings 公式。** |
-| **v6.7** | **2026-04-02** | **版本升級配合 V2.4 協議對齊。M4 無程式碼變更 — 上游時間戳處理與數值縮放對計費邏輯透明。** |
+| **v6.8** | **2026-04-02** | **版本升級配合 V2.4 協議對齊。M4 無程式碼變更 — 上游時間戳處理與數值縮放對計費邏輯透明。** |

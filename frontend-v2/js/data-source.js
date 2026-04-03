@@ -562,6 +562,26 @@ var DataSource = (function () {
     },
   };
 
+  // ── Alerts (P6) ───────────────────────────────────────────
+  var alerts = {
+    summary: function () {
+      return withFallback(
+        function () {
+          return apiGet("/api/alerts/summary");
+        },
+        typeof MOCK_ALERTS_SUMMARY !== "undefined" ? MOCK_ALERTS_SUMMARY : {},
+      );
+    },
+    list: function () {
+      return withFallback(
+        function () {
+          return apiGet("/api/alerts");
+        },
+        typeof MOCK_ALERTS !== "undefined" ? MOCK_ALERTS : [],
+      );
+    },
+  };
+
   // ── Performance (P6) ──────────────────────────────────────
   var performance = {
     scorecard: function () {
@@ -628,6 +648,7 @@ var DataSource = (function () {
     tariffs: tariffs,
     vpp: vpp,
     p5: p5,
+    alerts: alerts,
     performance: performance,
     asset: asset,
   };

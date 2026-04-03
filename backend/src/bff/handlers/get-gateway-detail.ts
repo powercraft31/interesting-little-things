@@ -133,6 +133,11 @@ export async function handler(
           systemRuntime: (emsHealthRaw.system_runtime as string) ?? null,
           simStatus: ((emsHealthRaw.sim_status ?? emsHealthRaw.SIM_status) as string) ?? null,
           emsTemp:   (emsHealthRaw.ems_temp   as string) ?? null,
+          phoneStatus: (emsHealthRaw.phone_status as string) ?? null,
+          phoneSignalStrength: (emsHealthRaw.phone_signal_strength as string) ?? null,
+          humidity: (emsHealthRaw.humidity as string) ?? null,
+          systemTime: (emsHealthRaw.system_time as string) ?? null,
+          hardwareTime: (emsHealthRaw.hardware_time as string) ?? null,
         }
       : null,
   };
