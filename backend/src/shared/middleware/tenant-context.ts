@@ -43,8 +43,11 @@ export function verifyTenantToken(token: string): TenantContext {
     return { userId, orgId, role: role as Role };
   }
 
-  // Path 2: JWT with signature verification (v5.23)
-  const jwtSecret = process.env.JWT_SECRET || "solfacil-dev-secret";
+  // Path 2: JWT with signature verification (v5.23, v6.9 B2: no hardcoded fallback)
+  const jwtSecret = process.env.JWT_SECRET;
+  if (!jwtSecret) {
+    throw { statusCode: 401, message: 'Server misconfiguration: JWT_SECRET not set' };
+  }
   const rawToken = token.replace(/^Bearer\s+/i, '');
   try {
     const decoded = jwt.verify(rawToken, jwtSecret) as {

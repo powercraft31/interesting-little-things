@@ -3,10 +3,10 @@
    Hash router + Role switching + DemoStore + Page init + i18n
    ============================================ */
 
-// v5.23: Auth guard — redirect to login if no JWT token
-if (!localStorage.getItem("solfacil_jwt")) {
-  window.location.href = "login.html";
-}
+// v6.9 F4: Auth guard — cookie-based session check.
+// User state stored in JS memory only (window.currentUser).
+// Populated by GET /api/auth/session before app bootstrap.
+window.currentUser = null;
 
 // =========================================================
 // DemoStore — sessionStorage-backed cross-page state
@@ -320,7 +320,7 @@ function switchRole(role) {
     } else if (requiredRole === "customer") {
       visible = true;
     }
-    el.style.display = visible ? "" : "none";
+    el.classList.toggle("hidden", !visible);
   });
 
   // Show/hide nav items based on role
@@ -330,7 +330,7 @@ function switchRole(role) {
       return p.id === pageId;
     });
     if (page) {
-      el.style.display = page.roles.includes(role) ? "" : "none";
+      el.classList.toggle("hidden", !page.roles.includes(role));
     }
   });
 
@@ -415,6 +415,33 @@ function updateSidebarLabels() {
 // INITIALIZATION
 // =========================================================
 document.addEventListener("DOMContentLoaded", function () {
+  // v6.9 F4.4/F4.5: Session gate — authenticate before bootstrapping app.
+  fetch("/api/auth/session", {
+    method: "GET",
+    credentials: "same-origin",
+  })
+    .then(function (res) {
+      if (!res.ok) {
+        window.location.href = "login.html";
+        return;
+      }
+      return res.json();
+    })
+    .then(function (json) {
+      if (!json) return; // redirect already triggered
+      if (!json.success || !json.data) {
+        window.location.href = "login.html";
+        return;
+      }
+      window.currentUser = json.data;
+      bootstrapApp();
+    })
+    .catch(function () {
+      window.location.href = "login.html";
+    });
+});
+
+function bootstrapApp() {
   // Initialize mock data (runs once, memoized)
   initMockData();
 
@@ -434,7 +461,24 @@ document.addEventListener("DOMContentLoaded", function () {
     });
   });
 
-  // v5.23/v6.8: Logout button handler (clear localStorage + auth cookie)
+  var sidebarToggleBtn = document.getElementById("btn-sidebar-toggle");
+  if (sidebarToggleBtn) {
+    sidebarToggleBtn.addEventListener("click", function () {
+      var sidebar = document.querySelector(".sidebar");
+      if (sidebar) sidebar.classList.toggle("sidebar-open");
+    });
+  }
+
+  document.addEventListener("click", function (event) {
+    var actionEl = event.target.closest("[data-action]");
+    if (!actionEl) return;
+
+    if (actionEl.dataset.action === "reload-page") {
+      window.location.reload();
+    }
+  });
+
+  // v6.9 F4.6: Logout — server clears cookie, redirect to login.
   var logoutBtn = document.getElementById("btn-logout");
   if (logoutBtn) {
     logoutBtn.addEventListener("click", function () {
@@ -442,9 +486,9 @@ document.addEventListener("DOMContentLoaded", function () {
         method: "POST",
         credentials: "same-origin",
       }).catch(function () {
-        // Ignore logout transport errors — local state still cleared below.
+        // Ignore logout transport errors — redirect below handles UX.
       }).finally(function () {
-        localStorage.removeItem("solfacil_jwt");
+        window.currentUser = null;
         window.location.href = "login.html";
       });
     });
@@ -504,4 +548,4 @@ document.addEventListener("DOMContentLoaded", function () {
     return p.hash === hash;
   });
   navigateTo(page ? page.id : "fleet");
-});
+}

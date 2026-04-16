@@ -164,7 +164,7 @@ const Components = {
       '<span class="error-banner-msg">' +
       message +
       "</span>" +
-      '<button class="error-banner-retry" onclick="location.reload()">' +
+      '<button class="error-banner-retry" type="button" data-action="reload-page">' +
       retryLabel +
       "</button>" +
       "</div>"

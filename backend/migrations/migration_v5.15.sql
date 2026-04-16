@@ -57,8 +57,16 @@ ALTER TABLE assets
   ADD COLUMN IF NOT EXISTS allow_export BOOLEAN DEFAULT false;
 
 -- 4. ALTER homes: add contracted_demand_kw (PS pre-work for v5.16)
-ALTER TABLE homes
-  ADD COLUMN IF NOT EXISTS contracted_demand_kw REAL;
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.tables
+    WHERE table_schema = 'public' AND table_name = 'homes'
+  ) THEN
+    ALTER TABLE homes
+      ADD COLUMN IF NOT EXISTS contracted_demand_kw REAL;
+  END IF;
+END $$;
 
 -- 5. ALTER revenue_daily: add SC/TOU columns
 ALTER TABLE revenue_daily

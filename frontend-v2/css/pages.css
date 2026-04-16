@@ -3110,6 +3110,30 @@
 .schedule-segment[data-mode="peak_valley_arbitrage"] { background: #3b82f6; }
 .schedule-segment[data-mode="peak_shaving"] { background: #a855f7; }
 .schedule-segment[data-mode="idle"] { background: #374151; color: var(--text-muted); }
+.schedule-segment[data-hours="1"]  { flex: 1 0 0; }
+.schedule-segment[data-hours="2"]  { flex: 2 0 0; }
+.schedule-segment[data-hours="3"]  { flex: 3 0 0; }
+.schedule-segment[data-hours="4"]  { flex: 4 0 0; }
+.schedule-segment[data-hours="5"]  { flex: 5 0 0; }
+.schedule-segment[data-hours="6"]  { flex: 6 0 0; }
+.schedule-segment[data-hours="7"]  { flex: 7 0 0; }
+.schedule-segment[data-hours="8"]  { flex: 8 0 0; }
+.schedule-segment[data-hours="9"]  { flex: 9 0 0; }
+.schedule-segment[data-hours="10"] { flex: 10 0 0; }
+.schedule-segment[data-hours="11"] { flex: 11 0 0; }
+.schedule-segment[data-hours="12"] { flex: 12 0 0; }
+.schedule-segment[data-hours="13"] { flex: 13 0 0; }
+.schedule-segment[data-hours="14"] { flex: 14 0 0; }
+.schedule-segment[data-hours="15"] { flex: 15 0 0; }
+.schedule-segment[data-hours="16"] { flex: 16 0 0; }
+.schedule-segment[data-hours="17"] { flex: 17 0 0; }
+.schedule-segment[data-hours="18"] { flex: 18 0 0; }
+.schedule-segment[data-hours="19"] { flex: 19 0 0; }
+.schedule-segment[data-hours="20"] { flex: 20 0 0; }
+.schedule-segment[data-hours="21"] { flex: 21 0 0; }
+.schedule-segment[data-hours="22"] { flex: 22 0 0; }
+.schedule-segment[data-hours="23"] { flex: 23 0 0; }
+.schedule-segment[data-hours="24"] { flex: 24 0 0; }
 
 .schedule-markers {
   display: flex;
@@ -3496,6 +3520,18 @@
   align-items: center;
   gap: var(--space-md);
   margin-bottom: var(--space-md);
+}
+
+.p3ae-skeleton-heading {
+  width: 300px;
+  height: 28px;
+  border-radius: 6px;
+}
+
+.p3ae-skeleton-controls {
+  width: 100%;
+  height: 48px;
+  border-radius: 6px;
 }
 
 .p3ae-back-btn {
@@ -4614,9 +4650,14 @@
 
 /* Chart containers */
 .energy-chart-container {
-  min-height: 360px;
+  height: 360px;
   width: 100%;
   margin-bottom: var(--space-md);
+}
+
+/* 680px tall when battery SOC series is present — replaces inline style="height:..." (CSP fix) */
+.energy-chart-container.has-soc {
+  height: 680px;
 }
 
 /* Loading area */
@@ -4765,6 +4806,11 @@
   letter-spacing: -0.02em;
 }
 
+/* Grade-based color — replaces inline style="color:..." (CSP fix) */
+.energy-verdict-value.good { color: #34d399; }
+.energy-verdict-value.fair { color: #f6c445; }
+.energy-verdict-value.poor { color: #f87171; }
+
 .energy-verdict-unit {
   font-size: 12px;
   font-weight: 500;
@@ -4885,6 +4931,12 @@
 .energy-sum-cell.load .energy-sum-value { color: #60a5fa; }
 .energy-sum-cell.grid-imp .energy-sum-value { color: #f87171; }
 .energy-sum-cell.grid-exp .energy-sum-value { color: #34d399; }
+
+/* Series dot colors — replaces inline style="background:..." (CSP fix) */
+.energy-sum-cell.pv .energy-sum-dot { background: #f6c445; }
+.energy-sum-cell.load .energy-sum-dot { background: #60a5fa; }
+.energy-sum-cell.grid-imp .energy-sum-dot { background: #f87171; }
+.energy-sum-cell.grid-exp .energy-sum-dot { background: #34d399; }
 
 /* ── Battery Context Bar (v6.3-R2) ── */
 .energy-battery-context {
@@ -7302,3 +7354,80 @@
 
 .alerts-table .data-table th.sortable { cursor: pointer; user-select: none; }
 .alerts-table .data-table th.sortable:hover { color: var(--text-primary); }
+
+/* ============================================================
+   v6.9 F3: CSP inline-style remediation helpers
+   All previously-inline styles moved to class/data-attribute
+   selectors so style-src 'self' is never violated.
+   ============================================================ */
+
+/* Skeleton size helpers — replaces style="height:Xpx;border-radius:Ypx;margin-bottom:Zpx" */
+.sk-40  { height: 40px;  border-radius: 6px; }
+.sk-48  { height: 48px;  border-radius: 8px; }
+.sk-60  { height: 60px;  border-radius: 8px; }
+.sk-120 { height: 120px; border-radius: 8px; }
+.sk-200 { height: 200px; border-radius: 10px; }
+.sk-300 { height: 300px; border-radius: 10px; }
+.sk-mb-8  { margin-bottom: 8px; }
+.sk-mb-12 { margin-bottom: 12px; }
+.sk-mb-16 { margin-bottom: 16px; }
+
+/* schedule-mode-badge: background by purpose (replaces inline style="background:...") */
+.schedule-mode-badge[data-purpose="self_consumption"]  { background: #22c55e; }
+.schedule-mode-badge[data-purpose="peak_shaving"]      { background: #a855f7; }
+.schedule-mode-badge[data-purpose="tariff_charge"]     { background: #3b82f6; }
+.schedule-mode-badge[data-purpose="tariff_discharge"]  { background: #f97316; }
+
+/* schedule-segment: tariff variants (supplement existing data-mode selectors) */
+.schedule-segment[data-mode="tariff_charge"]    { background: #3b82f6; }
+.schedule-segment[data-mode="tariff_discharge"] { background: #f97316; }
+
+/* schedule-inflight-info: hidden by default; JS adds .visible to show */
+.schedule-inflight-info { display: none; }
+.schedule-inflight-info.visible { display: block; }
+
+/* conflict-popover: hidden by default; JS toggles .open */
+.conflict-popover { display: none; }
+.conflict-popover.open { display: block; }
+
+/* HEMS mode chip: border-color by mode (replaces inline style="border-color:...") */
+.hems-mode-chip[data-mode="self_consumption"]      { border-color: var(--positive, #2bcc5a); }
+.hems-mode-chip[data-mode="peak_shaving"]          { border-color: var(--amber, #f0a820); }
+.hems-mode-chip[data-mode="peak_valley_arbitrage"] { border-color: var(--accent, #8b6cf5); }
+
+/* HEMS s-card: --mode-accent per mode (replaces inline style="--mode-accent:...") */
+.s-card[data-mode="self_consumption"]      { --mode-accent: var(--positive, #2bcc5a); }
+.s-card[data-mode="peak_shaving"]          { --mode-accent: var(--amber, #f0a820); }
+.s-card[data-mode="peak_valley_arbitrage"] { --mode-accent: var(--accent, #8b6cf5); }
+
+/* HEMS targeting table: column widths (replaces inline style on <th>) */
+.gw-table th.col-cb    { width: 30px; }
+.gw-table th.col-sched { min-width: 100px; }
+
+/* seg-empty: occupies full mini-bar width (replaces inline style="width:100%") */
+.seg-empty { width: 100%; }
+
+/* Mini-bar slot width buckets (1h–24h) — replaces dynamic style="width:X%" on .seg */
+.seg-w-1  { width: 4.17%;  } .seg-w-2  { width: 8.33%;  } .seg-w-3  { width: 12.5%;  }
+.seg-w-4  { width: 16.67%; } .seg-w-5  { width: 20.83%; } .seg-w-6  { width: 25%;    }
+.seg-w-7  { width: 29.17%; } .seg-w-8  { width: 33.33%; } .seg-w-9  { width: 37.5%;  }
+.seg-w-10 { width: 41.67%; } .seg-w-11 { width: 45.83%; } .seg-w-12 { width: 50%;    }
+.seg-w-13 { width: 54.17%; } .seg-w-14 { width: 58.33%; } .seg-w-15 { width: 62.5%;  }
+.seg-w-16 { width: 66.67%; } .seg-w-17 { width: 70.83%; } .seg-w-18 { width: 75%;    }
+.seg-w-19 { width: 79.17%; } .seg-w-20 { width: 83.33%; } .seg-w-21 { width: 87.5%;  }
+.seg-w-22 { width: 91.67%; } .seg-w-23 { width: 95.83%; } .seg-w-24 { width: 100%;   }
+
+/* ic-val online count color (replaces inline style="color:var(--positive,...)") */
+.ic-online .ic-val { color: var(--positive, #2bcc5a); }
+
+/* sync-ack layout (replaces inline style="margin-left:auto;font-size:0.78rem;color:var(--muted)") */
+.sync-ack { margin-left: auto; font-size: 0.78rem; color: var(--muted, var(--text-muted, #888)); }
+
+/* vu-diag table spacing (replaces inline style="margin-top:8px" on .data-table) */
+.vu-diag-detail-table { margin-top: 8px; }
+
+/* ef SVG lines: stop breathing animation after timeout (replaces inline style.animation/opacity) */
+.ef-lines-static { animation: none !important; opacity: 1 !important; }
+
+/* alerts result count (replaces inline style="font-size:12px;color:var(--text-muted)") */
+.alerts-result-count { font-size: 12px; color: var(--text-muted); }

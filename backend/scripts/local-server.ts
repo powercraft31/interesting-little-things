@@ -48,9 +48,13 @@ import { handleCceeWebhook } from "../src/open-api/handlers/ccee-webhook";
 import { handleWeatherWebhook } from "../src/open-api/handlers/weather-webhook";
 import { createTelemetryWebhookHandler } from "../src/iot-hub/handlers/telemetry-webhook";
 
-import { getServicePool, closeAllPools } from "../src/shared/db";
+import { validateJwtSecret } from "../src/shared/auth/validate-jwt-secret";
+import { securityHeaders } from "../src/bff/middleware/security-headers";
+import { selectRateLimitStore, createAbuseControlMiddleware } from "../src/bff/middleware/rate-limit";
+import { getServicePool, closeAllPools, queryWithOrg } from "../src/shared/db";
 import { authMiddleware } from "../src/bff/middleware/auth";
 import { createLoginHandler, createLogoutHandler } from "../src/bff/handlers/auth-login";
+import { createSessionHandler } from "../src/bff/handlers/auth-session";
 import { createAdminUsersHandler } from "../src/bff/handlers/admin-users";
 import { startScheduleGenerator } from "../src/optimization-engine/services/schedule-generator";
 import { startCommandDispatcher } from "../src/dr-dispatcher/services/command-dispatcher";
@@ -72,6 +76,13 @@ import { handler as alertsSummaryHandler } from "../src/bff/handlers/get-alerts-
 type LambdaHandler = (
   event: APIGatewayProxyEventV2,
 ) => Promise<APIGatewayProxyResultV2>;
+
+// v6.9 B2: fail fast if JWT_SECRET is missing or weak
+validateJwtSecret();
+
+// v6.9 B6: abuse-control store selection (fail-fast in non-dev without Redis)
+const rateLimitStore = selectRateLimitStore();
+const abuseControl = createAbuseControlMiddleware(rateLimitStore);
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -146,8 +157,12 @@ function wrapHandler(handler: LambdaHandler, method: string, path: string) {
 }
 
 const app = express();
+app.set("trust proxy", 1);
 
 app.use(express.json()); // Parse POST body (needed for webhooks)
+
+// v6.9 B1: security response headers (CSP, X-Frame-Options, nosniff, etc.)
+app.use(securityHeaders);
 
 // v5.23: JWT auth middleware (replaces demo auth injection)
 app.use(authMiddleware);
@@ -338,8 +353,15 @@ app.post("/webhooks/weather", handleWeatherWebhook);
 const servicePool = getServicePool();
 
 // ── v5.23 Auth Routes ────────────────────────────────────────────────────
-app.post("/api/auth/login", createLoginHandler(servicePool));
+// v6.9 B6: abuse-control middleware wraps login only (pre-check + post-hook)
+const loginHandler = createLoginHandler(servicePool);
+app.post("/api/auth/login", abuseControl.preHandler, async (req, res) => {
+  await loginHandler(req, res);
+  await abuseControl.postHandler(req, res);
+});
 app.post("/api/auth/logout", createLogoutHandler());
+// v6.9 B4: Browser session endpoint (cookie-only)
+app.get("/api/auth/session", createSessionHandler(queryWithOrg));
 app.post("/api/users", createAdminUsersHandler(servicePool));
 // ────────────────────────────────────────────────────────────────────────
 
@@ -482,6 +504,7 @@ app.listen(PORT, () => {
   console.log("  POST /api/dispatch/ack");
   console.log("  POST /api/auth/login             (v5.23)");
   console.log("  POST /api/auth/logout            (v6.8)");
+  console.log("  GET  /api/auth/session           (v6.9)");
   console.log("  POST /api/users                  (v5.23)");
   console.log("  GET  /api/p5/overview               (v6.5)");
   console.log("  GET  /api/p5/intents/:id             (v6.5)");

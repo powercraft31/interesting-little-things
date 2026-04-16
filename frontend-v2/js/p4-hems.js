@@ -76,9 +76,9 @@ var HEMSPage = {
   _buildSkeleton: function () {
     return [
       '<div class="hems-wb-skeleton">',
-      '<div class="skeleton" style="height:60px;border-radius:8px;margin-bottom:16px"></div>',
-      '<div class="skeleton" style="height:120px;border-radius:8px;margin-bottom:16px"></div>',
-      '<div class="skeleton" style="height:48px;border-radius:8px;margin-bottom:16px"></div>',
+      '<div class="skeleton sk-60 sk-mb-16"></div>',
+      '<div class="skeleton sk-120 sk-mb-16"></div>',
+      '<div class="skeleton sk-48 sk-mb-16"></div>',
       Components.skeletonTable(5),
       "</div>",
     ].join("");
@@ -129,8 +129,8 @@ var HEMSPage = {
     if (this._mode) {
       var m = this._modeKeys[this._mode];
       modeChip =
-        '<span class="hems-mode-chip" style="border-color:' +
-        m.color +
+        '<span class="hems-mode-chip" data-mode="' +
+        this._mode +
         '">' +
         m.icon +
         " " +
@@ -159,8 +159,6 @@ var HEMSPage = {
             active +
             '" data-mode="' +
             key +
-            '" style="--mode-accent:' +
-            m.color +
             '">',
           '<div class="s-card-icon">' + m.icon + "</div>",
           '<div class="s-card-label">' + t(m.i18nKey) + "</div>",
@@ -445,12 +443,12 @@ var HEMSPage = {
         '<div class="impact-cell"><div class="ic-val">' +
           (this._gateways || []).length +
           '</div><div class="ic-label">Total</div></div>',
-        '<div class="impact-cell"><div class="ic-val" style="color:var(--positive,#2bcc5a)">' +
+        '<div class="impact-cell ic-online"><div class="ic-val">' +
           onlineCount +
           '</div><div class="ic-label">' +
           t("p4.status.online") +
           "</div></div>",
-        '<div class="impact-cell"><div class="ic-val" style="color:var(--negative,#ef4444)">' +
+        '<div class="impact-cell ic-offline"><div class="ic-val">' +
           offlineCount +
           '</div><div class="ic-label">' +
           t("p4.status.offline") +
@@ -521,19 +519,19 @@ var HEMSPage = {
 
   _buildMiniBar: function (slots) {
     if (!slots || slots.length === 0) {
-      return '<div class="mini-bar"><span class="seg seg-empty" style="width:100%"></span></div>';
+      return '<div class="mini-bar"><span class="seg seg-empty"></span></div>';
     }
     var self = this;
     var totalMinutes = 1440;
     var segs = slots.map(function (s) {
-      var pct = ((s.endMinute - s.startMinute) / totalMinutes) * 100;
+      var hours = Math.max(1, Math.min(24, Math.round((s.endMinute - s.startMinute) / 60)));
       var cls = self._segmentClass(s);
       return (
         '<span class="seg ' +
         cls +
-        '" style="width:' +
-        pct +
-        '%" title="' +
+        ' seg-w-' +
+        hours +
+        '" title="' +
         self._segTitle(s) +
         '"></span>'
       );
@@ -764,7 +762,7 @@ var HEMSPage = {
               '">' +
               t("p4.conflict.details") +
               "</span>",
-            '<div class="conflict-popover" style="display:none">',
+            '<div class="conflict-popover">',
             "<div>" + t("p4.conflict.reason") + "</div>",
             "<div>" +
               t("p4.conflict.batch") +
@@ -818,15 +816,15 @@ var HEMSPage = {
       legend,
       '<div class="table-wrapper"><table class="gw-table">',
       "<thead><tr>",
-      '<th style="width:30px"></th>',
+      '<th class="col-cb"></th>',
       "<th>" + t("p4.table.gateway") + "</th>",
       "<th>" + t("p4.table.site") + "</th>",
       "<th>" + t("p4.table.status") + "</th>",
       "<th>" + t("p4.table.currentStrategy") + "</th>",
       "<th>" + t("p4.table.eligibility") + "</th>",
       "<th>" + t("p4.table.devices") + "</th>",
-      '<th style="min-width:100px">' + t("p4.table.currentSchedule") + "</th>",
-      '<th style="min-width:100px">' + t("p4.table.targetSchedule") + "</th>",
+      '<th class="col-sched">' + t("p4.table.currentSchedule") + "</th>",
+      '<th class="col-sched">' + t("p4.table.targetSchedule") + "</th>",
       "</tr></thead>",
       "<tbody>" + rows + emptyMsg + "</tbody>",
       "</table></div>",
@@ -1559,8 +1557,7 @@ var HEMSPage = {
         e.stopPropagation();
         var popover = toggle.parentElement.querySelector(".conflict-popover");
         if (popover) {
-          popover.style.display =
-            popover.style.display === "none" ? "block" : "none";
+          popover.classList.toggle("open");
         }
       });
     });

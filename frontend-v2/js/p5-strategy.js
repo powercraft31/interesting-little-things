@@ -59,7 +59,7 @@ var StrategyPage = {
   _buildSkeleton: function () {
     return [
       '<div class="p5-strategy-skeleton">',
-      '<div class="skeleton" style="height:120px;border-radius:10px;margin-bottom:16px"></div>',
+      '<div class="skeleton sk-120 sk-mb-16"></div>',
       Components.skeletonKPIs(3),
       Components.skeletonTable(4),
       "</div>",
@@ -942,7 +942,7 @@ var StrategyPage = {
 
     // Toggle collapse
     if (this._expandedIntent === intentId) {
-      detailEl.style.display = "none";
+      detailEl.classList.add("hidden");
       this._expandedIntent = null;
       return;
     }
@@ -950,11 +950,11 @@ var StrategyPage = {
     // Collapse previous
     if (this._expandedIntent) {
       var prev = document.getElementById("p5-detail-" + this._expandedIntent);
-      if (prev) prev.style.display = "none";
+      if (prev) prev.classList.add("hidden");
     }
 
     this._expandedIntent = intentId;
-    detailEl.style.display = "block";
+    detailEl.classList.remove("hidden");
     detailEl.innerHTML =
       '<div class="p5-strategy-detail-loading">' +
       t("shared.loading") +
@@ -1143,7 +1143,7 @@ var StrategyPage = {
       '<div class="p5-strategy-actions">',
       "<h4>" + t("p5.strategy.detail.actions") + "</h4>",
       '<div class="p5-strategy-action-row">' + buttons + "</div>",
-      '<div class="p5-strategy-reason-input" id="p5-reason-area" style="display:none">',
+      '<div class="p5-strategy-reason-input hidden" id="p5-reason-area">',
       '<textarea id="p5-reason-text" class="p5-strategy-textarea" placeholder="' +
         t("p5.strategy.reasonPlaceholder") +
         '" rows="2"></textarea>',
@@ -1815,7 +1815,7 @@ var StrategyPage = {
           var requireReason = btn.dataset.requireReason === "true";
           var reasonArea = detailEl.querySelector(".p5-strategy-reason-input");
           if (reasonArea) {
-            reasonArea.style.display = "block";
+            reasonArea.classList.remove("hidden");
             var textarea = reasonArea.querySelector("textarea");
             if (textarea && requireReason) {
               textarea.setAttribute("required", "required");

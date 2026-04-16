@@ -86,6 +86,7 @@ var DevicesPage = {
       "</div>";
 
     self._setupLocatorEvents();
+    self._setupDiagnosticsAccordionEvents();
 
     // Restore workbench if it was open before language switch
     if (self._currentGatewayId) {
@@ -151,7 +152,7 @@ var DevicesPage = {
           applyBtn.disabled = false;
         }
         var infoEl = document.getElementById("schedule-inflight-info");
-        if (infoEl) infoEl.style.display = "none";
+        if (infoEl) { infoEl.classList.remove("visible"); }
         // Refresh schedule card to show updated status
         self._refreshScheduleCard(data.gatewayId);
       }
@@ -396,13 +397,13 @@ var DevicesPage = {
     return (
       '<div class="devices-layout">' +
       '<div class="devices-locator">' +
-      '<div class="skeleton" style="height:40px;border-radius:6px;margin-bottom:12px"></div>' +
-      '<div class="skeleton" style="height:60px;border-radius:8px;margin-bottom:8px"></div>' +
-      '<div class="skeleton" style="height:60px;border-radius:8px;margin-bottom:8px"></div>' +
-      '<div class="skeleton" style="height:60px;border-radius:8px;margin-bottom:8px"></div>' +
+      '<div class="skeleton sk-40 sk-mb-12"></div>' +
+      '<div class="skeleton sk-60 sk-mb-8"></div>' +
+      '<div class="skeleton sk-60 sk-mb-8"></div>' +
+      '<div class="skeleton sk-60 sk-mb-8"></div>' +
       "</div>" +
       '<div class="devices-workbench">' +
-      '<div class="skeleton" style="height:200px;border-radius:10px"></div>' +
+      '<div class="skeleton sk-200"></div>' +
       "</div>" +
       "</div>"
     );
@@ -559,7 +560,7 @@ var DevicesPage = {
         gwName.indexOf(q) >= 0 ||
         gwId.indexOf(q) >= 0;
 
-      item.style.display = match ? "" : "none";
+      item.classList.toggle("hidden", !match);
       if (match) visibleCount++;
     });
 
@@ -622,7 +623,7 @@ var DevicesPage = {
 
     workbench.innerHTML =
       '<div class="detail-loading">' +
-      '<div class="skeleton" style="height:300px;border-radius:10px"></div>' +
+      '<div class="skeleton sk-300"></div>' +
       "</div>";
 
     var detail;
@@ -1240,7 +1241,7 @@ var DevicesPage = {
       '">' +
       '<span class="vu-sync-dot"></span> ' +
       syncLabel +
-      '<span class="sync-ack" style="margin-left:auto;font-size:0.78rem;color:var(--muted)">' +
+      '<span class="sync-ack">' +
       t("devices.syncedLastAck") +
       ": " +
       lastAck +
@@ -1252,9 +1253,7 @@ var DevicesPage = {
       ">" +
       applyLabel +
       "</button>" +
-      '<div class="schedule-inflight-info" id="schedule-inflight-info"' +
-      (schedule.syncStatus === "pending" ? "" : ' style="display:none"') +
-      ">" +
+      '<div class="schedule-inflight-info' + (schedule.syncStatus === "pending" ? " visible" : "") + '" id="schedule-inflight-info">' +
       t("devices.wb.inflightInfo") +
       "</div>" +
       "</div>";
@@ -1402,8 +1401,8 @@ var DevicesPage = {
       "<td>" +
       endHtml +
       "</td>" +
-      '<td><span class="schedule-mode-badge" style="background:' +
-      color +
+      '<td><span class="schedule-mode-badge" data-purpose="' +
+      colorKey +
       '">' +
       '<select class="slot-purpose config-input schedule-mode-select">' +
       purposeSelect +
@@ -1439,12 +1438,6 @@ var DevicesPage = {
   _renderTimelinePreview: function () {
     var bar = document.getElementById("schedule-bar-preview");
     if (!bar || !this._pendingConfig) return;
-    var purposeColors = {
-      self_consumption: "#22c55e",
-      peak_shaving: "#a855f7",
-      tariff_charge: "#3b82f6",
-      tariff_discharge: "#f97316",
-    };
     var purposeLabels = {
       self_consumption: t("devices.selfConsumption"),
       peak_shaving: t("devices.peakShaving"),
@@ -1452,25 +1445,24 @@ var DevicesPage = {
     };
     bar.innerHTML = this._pendingConfig.slots
       .map(function (slot) {
-        var widthPct = (
-          ((slot.endMinute - slot.startMinute) / 1440) *
-          100
-        ).toFixed(2);
-        var colorKey =
+        var durationHours = Math.max(
+          1,
+          Math.round((slot.endMinute - slot.startMinute) / 60),
+        );
+        var modeKey =
           slot.purpose === "tariff"
             ? slot.direction === "discharge"
               ? "tariff_discharge"
               : "tariff_charge"
             : slot.purpose;
-        var color = purposeColors[colorKey] || "#6b7280";
         var startH = String(Math.floor(slot.startMinute / 60)).padStart(2, "0");
         var endH = String(Math.floor(slot.endMinute / 60)).padStart(2, "0");
         var modeLabel = purposeLabels[slot.purpose] || slot.purpose;
         return (
-          '<div class="schedule-segment" style="width:' +
-          widthPct +
-          "%;background:" +
-          color +
+          '<div class="schedule-segment" data-mode="' +
+          modeKey +
+          '" data-hours="' +
+          durationHours +
           '" title="' +
           startH +
           ":00-" +
@@ -1807,7 +1799,7 @@ var DevicesPage = {
         applyBtn.disabled = true;
       }
       var infoEl = document.getElementById("schedule-inflight-info");
-      if (infoEl) infoEl.style.display = "block";
+      if (infoEl) { infoEl.classList.add("visible"); }
       self._showToast(t("devices.scheduleSubmitted"), "success");
     } catch (err) {
       console.error("[P2] putSchedule error:", err);
@@ -2101,8 +2093,7 @@ var DevicesPage = {
     setTimeout(function () {
       var lines = document.querySelectorAll('.ef-svg-overlay line');
       lines.forEach(function (l) {
-        l.style.animation = 'none';
-        l.style.opacity = '1';
+        l.classList.add('ef-lines-static');
       });
     }, 12000);
 
@@ -2481,7 +2472,7 @@ var DevicesPage = {
             peak_shaving: t("devices.peakShaving"),
             tariff: t("devices.schedule.tariff"),
           };
-          bodyHtml += '<table class="data-table" style="margin-top:8px"><thead><tr>' +
+          bodyHtml += '<table class="data-table vu-diag-detail-table"><thead><tr>' +
             '<th>' + t("devices.schedStart") + '</th><th>' + t("devices.schedEnd") + '</th><th>' + t("devices.schedMode") + '</th>' +
             '<th>' + t("devices.schedule.direction") + '</th><th>' + t("devices.schedule.exportPolicy") + '</th></tr></thead><tbody>' +
             sched.slots.map(function (slot) {
@@ -2497,12 +2488,12 @@ var DevicesPage = {
       }
 
       html += '<div class="vu-diag-panel" data-diag-index="' + idx + '">' +
-        '<div class="vu-diag-panel-header" onclick="DevicesPage._toggleDiagPanel(this)">' +
+        '<button class="vu-diag-panel-header" type="button" data-action="toggle-diag-panel">' +
           '<span class="vu-diag-chevron">\u25b6</span>' +
           '<span class="vu-diag-panel-icon">' + panel.icon + '</span>' +
           '<span class="vu-diag-panel-title">' + panel.title + '</span>' +
           '<div class="vu-diag-tags">' + tagsHtml + '</div>' +
-        '</div>' +
+        '</button>' +
         '<div class="vu-diag-panel-body">' + bodyHtml + '</div>' +
         '</div>';
     });
@@ -2512,10 +2503,25 @@ var DevicesPage = {
   },
 
   _toggleDiagPanel: function (headerEl) {
+    if (!headerEl) return;
     var panel = headerEl.closest('.vu-diag-panel');
     if (panel) {
       panel.classList.toggle('expanded');
     }
+  },
+
+  _setupDiagnosticsAccordionEvents: function () {
+    var self = this;
+    var workbench = document.getElementById("devices-workbench");
+    if (!workbench || workbench.dataset.diagHandlersBound === "1") return;
+
+    workbench.addEventListener("click", function (event) {
+      var headerEl = event.target.closest('[data-action="toggle-diag-panel"]');
+      if (!headerEl || !workbench.contains(headerEl)) return;
+      self._toggleDiagPanel(headerEl);
+    });
+
+    workbench.dataset.diagHandlersBound = "1";
   },
 
   _showToast: function (message, type) {

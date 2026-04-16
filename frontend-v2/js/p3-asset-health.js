@@ -177,8 +177,8 @@ var AssetHealthPage = (function () {
   function _buildSkeleton() {
     return (
       '<div class="p3ah-page">' +
-      '<div class="p3ae-header"><div class="skeleton" style="width:300px;height:28px;border-radius:6px"></div></div>' +
-      '<div class="p3ae-controls"><div class="skeleton" style="width:100%;height:48px;border-radius:6px"></div></div>' +
+      '<div class="p3ae-header"><div class="skeleton p3ae-skeleton-heading"></div></div>' +
+      '<div class="p3ae-controls"><div class="skeleton p3ae-skeleton-controls"></div></div>' +
       Components.skeletonKPIs(6) +
       Components.skeletonChart() +
       "</div>"

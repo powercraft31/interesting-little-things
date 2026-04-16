@@ -123,8 +123,8 @@ var EnergyPage = {
     return (
       '<div class="energy-verdict">' +
       '<div class="energy-verdict-metric">' +
-      '<span class="energy-verdict-value" style="color:' +
-      grade.color +
+      '<span class="energy-verdict-value ' +
+      grade.cls +
       '">' +
       pct +
       '<span class="energy-verdict-unit">%</span>' +
@@ -158,9 +158,7 @@ var EnergyPage = {
         cls +
         '">' +
         '<span class="energy-sum-label">' +
-        '<span class="energy-sum-dot" style="background:' +
-        dotColor +
-        '"></span>' +
+        '<span class="energy-sum-dot"></span>' +
         label +
         "</span>" +
         '<span class="energy-sum-value">' +
@@ -661,7 +659,7 @@ var EnergyPage = {
         gwName.indexOf(q) >= 0 ||
         gwId.indexOf(q) >= 0;
 
-      item.style.display = match ? "" : "none";
+      item.classList.toggle("hidden", !match);
       if (match) visibleCount++;
     });
 
@@ -740,8 +738,8 @@ var EnergyPage = {
   _buildSkeleton: function () {
     return [
       '<div class="energy-top-controls">',
-      '<div class="skeleton" style="width:200px;height:32px;border-radius:6px"></div>',
-      '<div class="skeleton" style="width:300px;height:36px;border-radius:6px"></div>',
+      '<div class="skeleton skeleton-ctrl-sm"></div>',
+      '<div class="skeleton skeleton-ctrl-md"></div>',
       "</div>",
       Components.skeletonChart(),
     ].join("");
@@ -902,8 +900,8 @@ var EnergyPage = {
       this._buildVerdict(summary),
       this._buildSummaryStrip(summary),
       this._buildBatteryContext(summary),
-      '<div id="energy-24h-chart" class="energy-chart-container" style="height:' +
-        (hasSoc ? "680px" : "360px") +
+      '<div id="energy-24h-chart" class="energy-chart-container' +
+        (hasSoc ? " has-soc" : "") +
         '"></div>',
       this._buildInterpretation(summary),
     ].join("");
@@ -1169,7 +1167,7 @@ var EnergyPage = {
       this._buildVerdict(summary),
       this._buildSummaryStrip(summary),
       this._buildBatteryContext(summary),
-      '<div id="energy-stats-chart" class="energy-chart-container" style="height:360px"></div>',
+      '<div id="energy-stats-chart" class="energy-chart-container"></div>',
       this._buildSocInfoBlock(),
       this._buildMetricsHierarchy(totals),
       this._buildInterpretation(summary),

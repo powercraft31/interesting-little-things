@@ -131,6 +131,17 @@ a:hover {
   width: 100%;
 }
 
+/* Control-row skeleton sizes — replaces inline style="width/height" (CSP fix) */
+.skeleton-ctrl-sm {
+  width: 200px;
+  height: 32px;
+}
+
+.skeleton-ctrl-md {
+  width: 300px;
+  height: 36px;
+}
+
 .skeleton-kpi {
   height: 100px;
   width: 100%;

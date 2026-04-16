@@ -32,8 +32,23 @@ ALTER TABLE device_command_logs
   ADD COLUMN IF NOT EXISTS acked_at TIMESTAMPTZ;
 
 -- Index for M3 polling query
-CREATE INDEX IF NOT EXISTS idx_dcl_pending_dispatch
-  ON device_command_logs (status, created_at)
-  WHERE status = 'pending_dispatch';
+DO $$
+BEGIN
+  IF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'device_command_logs' AND column_name = 'result'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_dcl_pending_dispatch
+      ON device_command_logs (result, created_at)
+      WHERE result = 'pending';
+  ELSIF EXISTS (
+    SELECT 1 FROM information_schema.columns
+    WHERE table_schema = 'public' AND table_name = 'device_command_logs' AND column_name = 'status'
+  ) THEN
+    CREATE INDEX IF NOT EXISTS idx_dcl_pending_dispatch
+      ON device_command_logs (status, created_at)
+      WHERE status = 'pending_dispatch';
+  END IF;
+END $$;
 
 COMMIT;

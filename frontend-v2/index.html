@@ -5,11 +5,6 @@
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>SOLFACIL VPP — Admin Portal</title>
 
-  <!-- Google Fonts: Inter + JetBrains Mono -->
-  <link rel="preconnect" href="https://fonts.googleapis.com">
-  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
-
   <!-- CSS -->
   <link rel="stylesheet" href="css/variables.css?v=1772944593">
   <link rel="stylesheet" href="css/base.css?v=1772944593">
@@ -73,7 +68,7 @@
     <main class="main-content">
       <!-- Top Bar -->
       <div class="top-bar">
-        <button class="hamburger-btn" onclick="document.querySelector('.sidebar').classList.toggle('sidebar-open')">&#x2630;</button>
+        <button class="hamburger-btn" id="btn-sidebar-toggle" type="button">&#x2630;</button>
         <h1 id="page-title" class="page-title">Fleet Overview</h1>
         <div class="top-bar-right">
           <select id="lang-switcher" class="lang-switcher">
@@ -126,8 +121,8 @@
   </div>
 
   <!-- ========== SCRIPTS ========== -->
-  <!-- ECharts 5.x CDN -->
-  <script src="https://cdn.jsdelivr.net/npm/echarts@5/dist/echarts.min.js"></script>
+  <!-- ECharts 5.x (self-hosted) -->
+  <script src="js/vendor/echarts.min.js"></script>
 
   <!-- App JS (order matters: config → mock-data → data-source → ...) -->
   <script src="js/mock-data.js?v=1772944593"></script>

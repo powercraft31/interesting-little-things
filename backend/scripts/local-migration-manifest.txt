@@ -1,0 +1,25 @@
+# Canonical local DB migration manifest
+# Order is explicit. Do not rely on filesystem ordering.
+# Format: <classification>|<relative-path>
+# classifications:
+#   schema        = additive/transformational schema migration
+#   compatibility = local compatibility fix required for current runtime contract
+#   no-op         = tracked for completeness; file currently has no schema effect
+#
+# IMPORTANT:
+# This manifest is for current `scripts/ddl_base.sql` as the base schema truth.
+# Historical gateway/home migrations already baked into ddl_base are intentionally excluded.
+
+schema|backend/migrations/migration_v5.13.sql
+schema|backend/migrations/migration_v5.14.sql
+schema|backend/migrations/migration_v5.15.sql
+schema|backend/migrations/migration_v5.16.sql
+schema|backend/migrations/migration_v5.20.sql
+schema|backend/migrations/migration_v5.21.sql
+schema|backend/migrations/migration_v5.22_phase1.sql
+schema|backend/migrations/migration_v5.22_phase2.sql
+schema|backend/migrations/migration_v5.22_phase3.sql
+no-op|backend/migrations/migration_v5.23.sql
+compatibility|backend/migrations/migration_v6.9_5min_partition_maintenance.sql
+compatibility|backend/migrations/migration_v6.9_hourly_metrics_schema_compat.sql
+schema|backend/migrations/migration_v7.0.sql

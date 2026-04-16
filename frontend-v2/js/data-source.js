@@ -22,22 +22,13 @@ var DataSource = (function () {
     typeof CONFIG !== "undefined" && CONFIG.USE_MOCK === true ? false : true;
 
   // ── Helpers ───────────────────────────────────────────────
-  function getAuthHeader() {
-    var token = localStorage.getItem("solfacil_jwt");
-    if (!token) {
-      window.location.href = "login.html";
-      return "";
-    }
-    return "Bearer " + token;
-  }
 
   function apiGet(path) {
     return fetch(API_BASE + path, {
-      headers: { Authorization: getAuthHeader() },
+      credentials: "include",
     })
       .then(function (res) {
         if (res.status === 401) {
-          localStorage.removeItem("solfacil_jwt");
           window.location.href = "login.html";
           return;
         }
@@ -54,15 +45,14 @@ var DataSource = (function () {
   function apiPost(path, body) {
     return fetch(API_BASE + path, {
       method: "POST",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        Authorization: getAuthHeader(),
       },
       body: JSON.stringify(body),
     })
       .then(function (res) {
         if (res.status === 401) {
-          localStorage.removeItem("solfacil_jwt");
           window.location.href = "login.html";
           return;
         }
@@ -79,15 +69,14 @@ var DataSource = (function () {
   function apiPut(path, body) {
     return fetch(API_BASE + path, {
       method: "PUT",
+      credentials: "include",
       headers: {
         "Content-Type": "application/json",
-        Authorization: getAuthHeader(),
       },
       body: JSON.stringify(body),
     })
       .then(function (res) {
         if (res.status === 401) {
-          localStorage.removeItem("solfacil_jwt");
           window.location.href = "login.html";
           return;
         }

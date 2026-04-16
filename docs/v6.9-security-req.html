@@ -1,0 +1,197 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solfacil v6.9 Security Correction Release — REQ Draft</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121a31;
+      --panel2: #17213d;
+      --text: #e8ecf8;
+      --muted: #9aa7c7;
+      --accent: #68d5ff;
+      --good: #39d98a;
+      --warn: #ffcc66;
+      --bad: #ff6b6b;
+      --line: #273252;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      font-family: Inter, ui-sans-serif, system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
+      background: linear-gradient(180deg, #09101d 0%, #0b1020 100%);
+      color: var(--text);
+      line-height: 1.55;
+    }
+    .wrap { max-width: 1120px; margin: 0 auto; padding: 32px 20px 80px; }
+    .hero, .card { background: rgba(18,26,49,.92); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .hero { padding: 28px; margin-bottom: 22px; }
+    .title { margin: 0 0 10px; font-size: 34px; line-height: 1.15; }
+    .subtitle { color: var(--muted); margin: 0 0 18px; max-width: 860px; }
+    .badges { display: flex; flex-wrap: wrap; gap: 10px; }
+    .badge { padding: 7px 12px; border-radius: 999px; font-size: 13px; border: 1px solid var(--line); background: var(--panel2); color: var(--text); }
+    .badge.good { color: var(--good); }
+    .badge.warn { color: var(--warn); }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 18px; }
+    .col-12 { grid-column: span 12; }
+    .col-8 { grid-column: span 8; }
+    .col-4 { grid-column: span 4; }
+    .card { padding: 22px; }
+    h2 { margin: 0 0 14px; font-size: 22px; }
+    h3 { margin: 18px 0 10px; font-size: 17px; }
+    p, li { color: var(--text); }
+    .muted { color: var(--muted); }
+    ul { margin: 10px 0 0 20px; padding: 0; }
+    li { margin: 7px 0; }
+    .summary { font-size: 18px; }
+    .kvs { display: grid; grid-template-columns: 180px 1fr; gap: 8px 14px; }
+    .kvs div:nth-child(odd) { color: var(--muted); }
+    .pill-list { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 10px; }
+    .pill { background: #132440; color: var(--accent); border: 1px solid #24476f; padding: 8px 11px; border-radius: 999px; font-size: 13px; }
+    .finding { border-left: 4px solid var(--bad); padding-left: 12px; margin: 14px 0; }
+    .section-note { margin-top: 10px; color: var(--muted); font-size: 14px; }
+    code { color: #9fe3ff; }
+    a { color: var(--accent); text-decoration: none; }
+    @media (max-width: 900px) {
+      .col-8, .col-4 { grid-column: span 12; }
+      .title { font-size: 28px; }
+      .kvs { grid-template-columns: 1fr; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1 class="title">Solfacil v6.9 Security Correction Release — REQ Draft</h1>
+      <p class="subtitle">這不是「補幾個洞」的版本，而是把已發現且可修復的安全問題，按正確工程方式正式收口的版本。核心原則已固定：修能修的、做正確的、不保留已知錯誤設計。</p>
+      <div class="badges">
+        <span class="badge good">Version Baseline: v6.8</span>
+        <span class="badge warn">Target Release: v6.9</span>
+        <span class="badge">Status: REQ draft / ready for DESIGN</span>
+        <span class="badge">Date: 2026-04-15 UTC</span>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="card col-8">
+        <h2>你先看這裡</h2>
+        <p class="summary">v6.9 的定位已經確定：修復所有已發現且可修復的代碼層安全問題，並把必要配置層一起收口；接受必要兼容性調整；不接受因為「現在能跑」而保留已知錯誤安全設計。</p>
+        <ul>
+          <li>主軸不是最低成本 patch，而是 security correction release。</li>
+          <li>REQ 已完成到足以進 DESIGN 的程度；下一步不應直接實作。</li>
+          <li>本輪設計必須回答 auth model、header 發布、login abuse protection、secret handling、migration、verification 六大問題。</li>
+        </ul>
+      </section>
+
+      <section class="card col-4">
+        <h2>固定決策</h2>
+        <div class="kvs">
+          <div>範圍</div><div>代碼層 + 必要配置層</div>
+          <div>兼容性</div><div>接受必要兼容性調整</div>
+          <div>方法論</div><div>選最正確方式，不選最省事方式</div>
+          <div>驗收口徑</div><div>已發現且可修復的問題全部收口；殘留風險必須顯式記錄</div>
+        </div>
+      </section>
+
+      <section class="card col-12">
+        <h2>現有架構上下文（REQ 必須承認的現實）</h2>
+        <p>這不是單純的 login 頁修補。Solfacil 現有設計是矩陣式架構，v6.9 的安全修復必須對齊既有架構文檔，而不是脫離模組邊界另起一套抽象說法。</p>
+        <ul>
+          <li>前端主文檔：<code>docs/FRONTEND_ARCHITECTURE_v6.8.md</code></li>
+          <li>後端主藍圖：<code>design/backend_architecture/00_MASTER_ARCHITECTURE_v6.8.md</code></li>
+          <li>矩陣模組：M1 IoT Hub、M2 Optimization、M3 DR Dispatcher、M4 Market Billing、M5 BFF、M6 Identity、M7 Open API、M8 Admin Control、09 Shared Layer、10 Database Schema</li>
+        </ul>
+        <p class="section-note">對 v6.9 直接相關的邊界至少包括：Browser Frontend、Nginx Public Boundary、M5 BFF、M6 Identity、Shared Layer token verification、以及 DB-backed user/org/role mapping。</p>
+      </section>
+
+      <section class="card col-12">
+        <h2>問題定義</h2>
+        <div class="finding">
+          <h3>1. 前端主認證模型仍依賴 localStorage JWT</h3>
+          <p>登入成功後 token 會進入 <code>localStorage</code>，後續 API 由前端 JavaScript 讀取並拼成 <code>Authorization: Bearer ...</code>。這代表任何成功執行的 XSS 都可能直接偷走主認證憑證。</p>
+        </div>
+        <div class="finding">
+          <h3>2. 後端已設 HttpOnly cookie，但系統仍停留在 split auth model</h3>
+          <p>後端已經有較安全的 cookie 路徑，但同時仍把 token 回傳給前端 JS 使用。這不是完成遷移，而是半遷移狀態。</p>
+        </div>
+        <div class="finding">
+          <h3>3. Login abuse protection 沒有形成明確應用層保護</h3>
+          <p>目前可見登入失敗行為沒有展示出足夠清晰的應用層節流/鎖定設計。即使基礎設施外層有保護，也不能替代應用層設計本身。</p>
+        </div>
+        <div class="finding">
+          <h3>4. Browser hardening headers 不完整</h3>
+          <p>production login 面未觀察到 CSP、anti-frame、nosniff、referrer-policy、permissions-policy 等完整基線。這屬於必要配置層 closure，不是可有可無的裝飾。</p>
+        </div>
+        <div class="finding">
+          <h3>5. JWT secret handling 存在危險 fallback</h3>
+          <p>當 <code>JWT_SECRET</code> 缺失時，程式仍允許退回預設開發 secret。這讓 production misconfiguration 有可能無聲降級成危險運行模式。</p>
+        </div>
+      </section>
+
+      <section class="card col-6">
+        <h2>REQ distilled</h2>
+        <ul>
+          <li>v6.9 必須收斂為單一、清楚、可推理的 production auth model。</li>
+          <li>主認證狀態不得再以 JS 可讀 bearer token 形式作為 production 主路徑。</li>
+          <li>對外 web surface 必須具備明確 browser security baseline。</li>
+          <li>登入面必須具備可驗證的 abuse mitigation。</li>
+          <li>auth secret handling 必須 fail-safe，不能默默 fallback。</li>
+          <li>修復必須由測試與部署驗證保護，避免回退。</li>
+        </ul>
+      </section>
+
+      <section class="card col-6">
+        <h2>Non-goals</h2>
+        <ul>
+          <li>與安全無直接關聯的大面積功能重構</li>
+          <li>只為了看起來安全而做的 scanner theater</li>
+          <li>不帶安全價值的 UI cosmetic refresh</li>
+          <li>用「兼容性」當理由保留已知錯誤安全設計</li>
+        </ul>
+      </section>
+
+      <section class="card col-12">
+        <h2>Design phase 必答題</h2>
+        <div class="pill-list">
+          <span class="pill">target auth/session architecture</span>
+          <span class="pill">frontend request model after migration</span>
+          <span class="pill">cookie semantics and CSRF stance</span>
+          <span class="pill">browser headers at app vs proxy layer</span>
+          <span class="pill">login rate-limit / lockout model</span>
+          <span class="pill">JWT secret validation and startup rules</span>
+          <span class="pill">test and deployment verification plan</span>
+          <span class="pill">rollback and residual risk treatment</span>
+        </div>
+      </section>
+
+      <section class="card col-12">
+        <h2>Design 文檔交付要求</h2>
+        <p>因為現有架構是矩陣式，所以 DESIGN 不能只交一份模糊總說明。它至少要明確說出哪些現有架構文檔會被 v6.9 更新。</p>
+        <ul>
+          <li>一份 v6.9 master security design：目標 auth/session、migration、verification、rollback</li>
+          <li>一份 frontend security design update：從 <code>FRONTEND_ARCHITECTURE_v6.8.md</code> 派生，覆蓋 login、authenticated request model、logout/session expiry、browser-side implications</li>
+          <li>一份 backend auth-boundary design update：覆蓋 M5 + M6 + Shared Layer 的 middleware、cookie semantics、token verification、SSE impact、secret fail-fast</li>
+          <li>一份 deployment/security-boundary design update：覆蓋 reverse proxy headers、runtime env/secret requirements、live-surface verification</li>
+        </ul>
+        <p class="section-note">允許做成一份 merged DESIGN + 清楚的矩陣映射，也允許 master + addenda；但不允許對文檔責任保持含糊。</p>
+      </section>
+
+      <section class="card col-12">
+        <h2>验收标准</h2>
+        <ul>
+          <li>已发現且可修復的代碼層安全問題全部收口。</li>
+          <li>必要配置層工作已落地，且不是只停留在 repo 理論上。</li>
+          <li>系統不再依賴 localStorage bearer JWT 作為 production 主認證模型。</li>
+          <li>live surface 上實際可驗證安全頭存在且符合設計。</li>
+          <li>login abuse mitigation 已實作且可測。</li>
+          <li>unsafe JWT secret fallback 已移除或在 production-capable path 上變得不可能。</li>
+          <li>任何殘留風險都已明確記錄，不再默許已知錯誤設計。</li>
+        </ul>
+        <p class="section-note">正式 Markdown 原稿：<code>/home/alan/src/solfacil/docs/v6.9-security-req.md</code></p>
+      </section>
+    </div>
+  </div>
+</body>
+</html>

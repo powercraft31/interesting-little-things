@@ -13,7 +13,7 @@ CREATE TABLE IF NOT EXISTS backfill_requests (
     CHECK (status IN ('pending', 'in_progress', 'completed', 'failed'))
 );
 
-CREATE INDEX idx_backfill_active
+CREATE INDEX IF NOT EXISTS idx_backfill_active
 ON backfill_requests (created_at ASC)
 WHERE status IN ('pending', 'in_progress');
 

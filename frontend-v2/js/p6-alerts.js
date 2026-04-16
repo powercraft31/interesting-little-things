@@ -152,7 +152,7 @@ var AlertsPage = {
     var self = this;
     var sortArrow = this._sortAsc ? ' \u25B2' : ' \u25BC';
 
-    var headerRight = '<span id="alerts-result-count" style="font-size:12px;color:var(--text-muted)">' +
+    var headerRight = '<span id="alerts-result-count" class="alerts-result-count">' +
       filtered.length + ' ' + t("alerts.results") + '</span>';
 
     var tableHtml = '<div class="alerts-table"><div class="data-table-wrapper"><table class="data-table">' +

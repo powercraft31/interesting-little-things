@@ -186,8 +186,8 @@ var AssetEnergyPage = (function () {
   function _buildSkeleton() {
     return (
       '<div class="p3ae-page">' +
-      '<div class="p3ae-header"><div class="skeleton" style="width:300px;height:28px;border-radius:6px"></div></div>' +
-      '<div class="p3ae-controls"><div class="skeleton" style="width:100%;height:48px;border-radius:6px"></div></div>' +
+      '<div class="p3ae-header"><div class="skeleton p3ae-skeleton-heading"></div></div>' +
+      '<div class="p3ae-controls"><div class="skeleton p3ae-skeleton-controls"></div></div>' +
       Components.skeletonKPIs(6) +
       Components.skeletonChart() +
       "</div>"
@@ -340,7 +340,7 @@ var AssetEnergyPage = (function () {
       '</svg></button>';
     return (
       '<div class="section-card">' +
-      '<div class="section-card-header" style="display:flex;align-items:center;justify-content:space-between">' +
+      '<div class="section-card-header">' +
       '<h3>' + title + '</h3>' +
       eyeBtn +
       '</div>' +
@@ -416,9 +416,7 @@ var AssetEnergyPage = (function () {
                   : " (" + t("p3ae.exporting") + ")";
             }
             html +=
-              '<span style="color:' +
-              p.color +
-              '">\u25CF</span> ' +
+              '\u25CF ' +
               p.seriesName +
               ": <strong>" +
               (typeof val === "number" ? val.toFixed(2) : val) +

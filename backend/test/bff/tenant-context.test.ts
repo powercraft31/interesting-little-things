@@ -6,7 +6,12 @@ import {
 } from "../../src/bff/middleware/auth";
 import { Role } from "../../src/shared/types/auth";
 
-const JWT_SECRET = process.env.JWT_SECRET || "solfacil-dev-secret";
+const TEST_JWT_SECRET = "test-jwt-secret-for-unit-tests";
+
+// Ensure JWT_SECRET is set for all tests in this file
+beforeAll(() => {
+  process.env.JWT_SECRET = TEST_JWT_SECRET;
+});
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -64,7 +69,7 @@ describe("extractTenantContext", () => {
   it("parses JWT-style token (signed with HS256)", () => {
     const token = jwt.sign(
       { userId: "u2", orgId: "ORG_SOLARBR_002", role: "ORG_OPERATOR" },
-      JWT_SECRET,
+      TEST_JWT_SECRET,
       { algorithm: "HS256" },
     );
 
@@ -80,7 +85,7 @@ describe("extractTenantContext", () => {
   it("parses JWT-style token with Bearer prefix", () => {
     const token = jwt.sign(
       { userId: "u3", orgId: "ORG_ENERGIA_001", role: "SOLFACIL_ADMIN" },
-      JWT_SECRET,
+      TEST_JWT_SECRET,
       { algorithm: "HS256" },
     );
 

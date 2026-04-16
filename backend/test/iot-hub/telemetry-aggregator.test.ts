@@ -1,5 +1,5 @@
 import { Pool } from "pg";
-import { runHourlyAggregation } from "../../src/iot-hub/services/telemetry-aggregator";
+import { runHourlyAggregation, runHourlyAggregationWindow } from "../../src/iot-hub/services/telemetry-aggregator";
 
 jest.mock("node-cron", () => ({
   schedule: jest.fn(),
@@ -113,5 +113,39 @@ describe("telemetry-aggregator (hourly rollup — v5.15 sourced from asset_5min_
       "[TelemetryAggregator] Error:",
       expect.any(Error),
     );
+  });
+
+  it("aggregates an explicitly requested hour window for backfill usage", async () => {
+    mockQuery.mockResolvedValueOnce({
+      rows: [
+        {
+          asset_id: "ASSET_SP_001",
+          charge: "5.5000",
+          discharge: "2.3000",
+          pv_generation: "3.2000",
+          grid_import: "1.5000",
+          grid_export: "0.8000",
+          load_consumption: "4.0000",
+          avg_soc: "72.5",
+          peak_bat_power: "5.5",
+          count: "12",
+        },
+      ],
+    });
+    mockQuery.mockResolvedValueOnce({ rows: [], rowCount: 1 });
+
+    await runHourlyAggregationWindow(
+      pool,
+      new Date("2026-04-15T13:00:00.000Z"),
+      new Date("2026-04-15T14:00:00.000Z"),
+    );
+
+    expect(mockQuery).toHaveBeenCalledTimes(2);
+    expect(mockQuery.mock.calls[0][1]).toEqual([
+      "2026-04-15T13:00:00.000Z",
+      "2026-04-15T14:00:00.000Z",
+    ]);
+    expect(mockQuery.mock.calls[1][1][0]).toBe("ASSET_SP_001");
+    expect(mockQuery.mock.calls[1][1][4]).toBeCloseTo(3.2);
   });
 });

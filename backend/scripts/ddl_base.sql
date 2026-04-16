@@ -219,11 +219,17 @@ CREATE TABLE IF NOT EXISTS asset_hourly_metrics (
   id              BIGSERIAL PRIMARY KEY,
   asset_id        VARCHAR(50) NOT NULL REFERENCES assets(asset_id),
   hour_timestamp  TIMESTAMPTZ NOT NULL,
-  total_charge_kwh    NUMERIC(10,4) NOT NULL DEFAULT 0,
-  total_discharge_kwh NUMERIC(10,4) NOT NULL DEFAULT 0,
-  data_points_count   INT NOT NULL DEFAULT 0,
-  created_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
-  updated_at      TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  total_charge_kwh      NUMERIC(10,4) NOT NULL DEFAULT 0,
+  total_discharge_kwh   NUMERIC(10,4) NOT NULL DEFAULT 0,
+  pv_generation_kwh     NUMERIC(10,4) NOT NULL DEFAULT 0,
+  grid_import_kwh       NUMERIC(10,4) NOT NULL DEFAULT 0,
+  grid_export_kwh       NUMERIC(10,4) NOT NULL DEFAULT 0,
+  load_consumption_kwh  NUMERIC(10,4) NOT NULL DEFAULT 0,
+  avg_battery_soc       NUMERIC(5,2),
+  peak_battery_power_kw NUMERIC(8,3),
+  data_points_count     INT NOT NULL DEFAULT 0,
+  created_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
+  updated_at            TIMESTAMPTZ NOT NULL DEFAULT NOW(),
   CONSTRAINT uq_asset_hourly UNIQUE (asset_id, hour_timestamp)
 );
 CREATE INDEX IF NOT EXISTS idx_asset_hourly_asset_hour ON asset_hourly_metrics (asset_id, hour_timestamp DESC);

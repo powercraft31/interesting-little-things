@@ -22,6 +22,15 @@ services:
     networks:
       - solfacil
 
+  solfacil-redis:
+    image: redis:7-alpine
+    container_name: solfacil-redis
+    restart: unless-stopped
+    ports:
+      - "127.0.0.1:6379:6379"
+    networks:
+      - solfacil
+
   solfacil-bff:
     image: node:20-alpine
     container_name: solfacil-bff
@@ -36,9 +45,14 @@ services:
       NODE_ENV: production
       APP_DATABASE_URL: postgresql://solfacil_app:solfacil_vpp_2026@solfacil-db:5432/solfacil_vpp
       SERVICE_DATABASE_URL: postgresql://solfacil_service:solfacil_service_2026@solfacil-db:5432/solfacil_vpp
+      JWT_SECRET: ${JWT_SECRET}
+      RATE_LIMIT_REDIS_URL: ${RATE_LIMIT_REDIS_URL:-redis://solfacil-redis:6379}
+      # LEGACY_BROWSER_BEARER: ${LEGACY_BROWSER_BEARER:-false}  # Emergency-only rollback toggle
     depends_on:
       solfacil-db:
         condition: service_healthy
+      solfacil-redis:
+        condition: service_started
     command: sh -c "npm install --include=dev && npx tsc -p tsconfig.build.json && node dist/scripts/local-server.js"
     networks:
       - solfacil

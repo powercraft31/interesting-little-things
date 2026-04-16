@@ -84,6 +84,7 @@ $$;
 
 GRANT CONNECT ON DATABASE solfacil_vpp TO solfacil_service;
 GRANT USAGE ON SCHEMA public TO solfacil_service;
+GRANT CREATE ON SCHEMA public TO solfacil_service;
 GRANT SELECT, INSERT, UPDATE, DELETE ON ALL TABLES IN SCHEMA public TO solfacil_service;
 GRANT USAGE, SELECT ON ALL SEQUENCES IN SCHEMA public TO solfacil_service;
 

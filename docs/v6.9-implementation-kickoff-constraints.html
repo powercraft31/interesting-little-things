@@ -1,0 +1,159 @@
+<!DOCTYPE html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solfacil v6.9 Implementation Kickoff Constraints</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121a31;
+      --panel2: #17213d;
+      --text: #e8ecf8;
+      --muted: #9aa7c7;
+      --accent: #68d5ff;
+      --warn: #ffcc66;
+      --line: #273252;
+    }
+    * { box-sizing: border-box; }
+    body { margin:0; font-family: Inter, system-ui, sans-serif; background: linear-gradient(180deg,#09101d 0%,#0b1020 100%); color:var(--text); line-height:1.55; }
+    .wrap { max-width: 1100px; margin: 0 auto; padding: 32px 20px 72px; }
+    .hero,.card { background: rgba(18,26,49,.92); border:1px solid var(--line); border-radius:18px; box-shadow: 0 10px 30px rgba(0,0,0,.25); }
+    .hero { padding: 28px; margin-bottom: 22px; }
+    .card { padding: 22px; margin-bottom: 18px; }
+    h1 { margin:0 0 10px; font-size:34px; line-height:1.15; }
+    h2 { margin:0 0 12px; font-size:22px; }
+    h3 { margin:16px 0 8px; font-size:17px; }
+    .subtitle,.muted { color: var(--muted); }
+    .badges { display:flex; flex-wrap:wrap; gap:10px; margin-top:14px; }
+    .badge { padding:7px 12px; border:1px solid var(--line); border-radius:999px; background:var(--panel2); font-size:13px; }
+    ul { margin: 8px 0 0 20px; padding:0; }
+    li { margin: 7px 0; }
+    code { color: var(--accent); }
+    .grid { display:grid; grid-template-columns: repeat(12,1fr); gap:18px; }
+    .col-12 { grid-column: span 12; }
+    .col-6 { grid-column: span 6; }
+    @media (max-width: 900px) { .col-6 { grid-column: span 12; } h1{font-size:28px;} }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <h1>Solfacil v6.9 Implementation Kickoff Constraints</h1>
+      <p class="subtitle">這不是新一輪 REQ / DESIGN / PLAN，而是 implementation 開始前的最後收口層。目的很直接：把剩下最容易在執行期漂移的點先釘死，避免 agent 或工程師在實作時自行發明規則。</p>
+      <div class="badges">
+        <span class="badge">Status: implementation preflight constraints</span>
+        <span class="badge">Date: 2026-04-15 UTC</span>
+        <span class="badge">Scope: v6.9 security correction</span>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="card col-12">
+        <h2>你先看這裡</h2>
+        <ul>
+          <li>inline login script / inline <code>onclick</code> 必須清掉；不允許用廣義 <code>script-src 'unsafe-inline'</code> 偷過。</li>
+          <li>login abuse control 不能帶著模糊參數開工，threshold / backoff / reset / Retry-After 必須先定。</li>
+          <li>machine bearer contract 必須先列出 scope；不能靠「反正有 machine contract」把 legacy bearer 全留著。</li>
+          <li>手動驗證必須有證據格式，不接受口頭「測過了」。</li>
+          <li>bridge 是短期工具，不是舒適圈。</li>
+        </ul>
+      </section>
+
+      <section class="card col-6">
+        <h2>固定執行約束</h2>
+        <h3>FE-6 / CSP</h3>
+        <ul>
+          <li>移除或外部化 inline login script 與 inline <code>onclick</code></li>
+          <li>不接受廣義 <code>script-src 'unsafe-inline'</code></li>
+          <li>若仍有 script 殘留，只能走 nonce/hash 例外</li>
+          <li>login page inline style 可暫時保留，但必須列為 temporary residual risk</li>
+        </ul>
+        <h3>Abuse-control</h3>
+        <ul>
+          <li>IP burst threshold</li>
+          <li>identifier failure threshold</li>
+          <li>backoff progression</li>
+          <li>success reset rule</li>
+          <li><code>Retry-After</code> 規則</li>
+        </ul>
+      </section>
+
+      <section class="card col-6">
+        <h2>Machine contract / Bridge discipline</h2>
+        <h3>Machine bearer scope</h3>
+        <ul>
+          <li>先列出 machine-bearer-eligible endpoints</li>
+          <li>列出 browser-cookie-only endpoints</li>
+          <li>SPA 不得使用 bearer</li>
+        </ul>
+        <h3>Bridge discipline</h3>
+        <ul>
+          <li>compatibility mode 預設 OFF</li>
+          <li>dual-cookie bridge 預設 OFF</li>
+          <li>每個 bridge 都要有 enable / disable 條件、removal owner、最大存在時間</li>
+        </ul>
+      </section>
+
+      <section class="card col-12">
+        <h2>測試證據格式</h2>
+        <div class="grid">
+          <div class="col-6">
+            <h3>Backend</h3>
+            <ul>
+              <li>test command output</li>
+              <li>必要的 curl probe output</li>
+              <li>bridge ON/OFF 狀態說明</li>
+            </ul>
+          </div>
+          <div class="col-6">
+            <h3>Frontend</h3>
+            <ul>
+              <li>browser screenshot</li>
+              <li>devtools network screenshot/export</li>
+              <li>storage inspection proof</li>
+              <li>console / CSP proof</li>
+            </ul>
+          </div>
+          <div class="col-6">
+            <h3>Deployment / Public boundary</h3>
+            <ul>
+              <li><code>curl -I</code> output</li>
+              <li>login response header / cookie proof</li>
+              <li>CSP/header proof from actual public boundary</li>
+              <li>operator checklist completion</li>
+            </ul>
+          </div>
+          <div class="col-6">
+            <h3>Final release</h3>
+            <ul>
+              <li>final acceptance matrix 每一格都要有證據</li>
+              <li>不接受口頭“測過了”</li>
+            </ul>
+          </div>
+        </div>
+      </section>
+
+      <section class="card col-12">
+        <h2>Operator-side prerequisite</h2>
+        <p class="muted">因為 deployment boundary 有一部分不在 repo 裡，所以 implementation 完成 ≠ rollout-ready。至少要有 operator-side checklist 或 config diff 覆蓋：</p>
+        <ul>
+          <li>ingress header / CSP changes</li>
+          <li>trusted proxy settings</li>
+          <li>secure cookie correctness</li>
+          <li>shared abuse-store provisioning</li>
+          <li>bridge toggle handling</li>
+        </ul>
+      </section>
+
+      <section class="card col-12">
+        <h2>Artifacts</h2>
+        <ul>
+          <li>Markdown source: <code>/home/alan/src/solfacil/docs/v6.9-implementation-kickoff-constraints.md</code></li>
+          <li>HTML summary: <code>/home/alan/src/solfacil/docs/v6.9-implementation-kickoff-constraints.html</code></li>
+        </ul>
+      </section>
+    </div>
+  </div>
+</body>
+</html>
