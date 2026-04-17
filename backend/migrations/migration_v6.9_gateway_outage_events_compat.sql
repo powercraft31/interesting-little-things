@@ -8,6 +8,8 @@ CREATE TABLE IF NOT EXISTS public.gateway_outage_events (
     created_at timestamp with time zone DEFAULT now() NOT NULL
 );
 
+ALTER TABLE IF EXISTS public.gateway_outage_events OWNER TO postgres;
+
 CREATE INDEX IF NOT EXISTS idx_goe_gateway_started
   ON public.gateway_outage_events (gateway_id, started_at DESC);
 
@@ -17,3 +19,8 @@ CREATE INDEX IF NOT EXISTS idx_goe_org_started
 CREATE INDEX IF NOT EXISTS idx_goe_open
   ON public.gateway_outage_events (gateway_id)
   WHERE ended_at IS NULL;
+
+GRANT SELECT, INSERT, UPDATE ON public.gateway_outage_events TO solfacil_app;
+GRANT SELECT, INSERT, UPDATE ON public.gateway_outage_events TO solfacil_service;
+GRANT USAGE, SELECT ON SEQUENCE public.gateway_outage_events_id_seq TO solfacil_app;
+GRANT USAGE, SELECT ON SEQUENCE public.gateway_outage_events_id_seq TO solfacil_service;

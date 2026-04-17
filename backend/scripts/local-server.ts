@@ -53,6 +53,7 @@ import { securityHeaders } from "../src/bff/middleware/security-headers";
 import { selectRateLimitStore, createAbuseControlMiddleware } from "../src/bff/middleware/rate-limit";
 import { getServicePool, closeAllPools, queryWithOrg } from "../src/shared/db";
 import { authMiddleware } from "../src/bff/middleware/auth";
+import { createCorsOriginValidator } from "../src/bff/middleware/cors-policy";
 import { createLoginHandler, createLogoutHandler } from "../src/bff/handlers/auth-login";
 import { createSessionHandler } from "../src/bff/handlers/auth-session";
 import { createAdminUsersHandler } from "../src/bff/handlers/admin-users";
@@ -169,18 +170,7 @@ app.use(authMiddleware);
 
 app.use(
   cors({
-    origin: (origin, callback) => {
-      if (
-        !origin ||
-        /^https?:\/\/(localhost|127\.0\.0\.1|152\.42\.235\.155|188\.166\.184\.87|solfacil\.alwayscontrol\.net)(:\d+)?$/.test(
-          origin,
-        )
-      ) {
-        callback(null, true);
-      } else {
-        callback(new Error("Not allowed by CORS"));
-      }
-    },
+    origin: createCorsOriginValidator(),
   }),
 );
 
