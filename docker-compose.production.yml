@@ -1,11 +1,12 @@
 version: '3.8'
 
 services:
-  solfacil-redis:
-    # Production on the shared host must not claim host port 6379.
-    # Keep Redis private to the Solfacil docker network.
-    ports: []
-
   solfacil-bff:
+    # Production reuses the already-running host Redis instead of trying to bind a new 6379.
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
     environment:
-      RATE_LIMIT_REDIS_URL: ${RATE_LIMIT_REDIS_URL:-redis://solfacil-redis:6379}
+      RATE_LIMIT_REDIS_URL: ${RATE_LIMIT_REDIS_URL:-redis://host.docker.internal:6379}
+    depends_on:
+      solfacil-db:
+        condition: service_healthy
