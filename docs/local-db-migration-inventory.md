@@ -32,7 +32,8 @@ Therefore, historical migrations whose effects are already baked into `ddl_base.
 | 11 | `backend/migrations/migration_v6.9_5min_partition_maintenance.sql` | compatibility | yes | Required so `solfacil_service` can maintain `asset_5min_metrics` partitions at runtime. |
 | 12 | `backend/migrations/migration_v6.9_hourly_metrics_schema_compat.sql` | compatibility | yes | Required so `asset_hourly_metrics` matches runtime hourly aggregator contract. |
 | 13 | `backend/migrations/migration_v6.9_gateway_home_alias_compat.sql` | compatibility | yes | Restores `gateways.home_alias`, which `/api/gateways` still queries and treats as nullable fallback metadata. |
-| 14 | `backend/migrations/migration_v7.0.sql` | schema | yes | Adds v7 protocol schema updates including `gateway_alarm_events` and `ESS` asset type support. |
+| 14 | `backend/migrations/migration_v6.9_gateway_outage_events_compat.sql` | compatibility | yes | Restores `gateway_outage_events`, which `/api/fleet/offline-events` still queries for outage history. |
+| 15 | `backend/migrations/migration_v7.0.sql` | schema | yes | Adds v7 protocol schema updates including `gateway_alarm_events` and `ESS` asset type support. |
 
 ### Historical migrations intentionally excluded from post-v5.10 runner
 
