@@ -97,6 +97,7 @@ import {
   runDbSubstrateProbes,
 } from "../src/shared/runtime/substrate";
 import { runRuntimeRetention } from "../src/shared/runtime/retention-job";
+import { captureRuntimeHealthSnapshot } from "../src/shared/runtime/health-snapshot-job";
 import { getAppPool } from "../src/shared/db";
 
 type LambdaHandler = (
@@ -582,6 +583,39 @@ void runDbSubstrateProbes({
 const RUNTIME_RETENTION_INTERVAL_MS = Number(
   process.env.RUNTIME_RETENTION_INTERVAL_MS ?? 60 * 60 * 1000,
 );
+const RUNTIME_HEALTH_SNAPSHOT_INTERVAL_MS = 5 * 60 * 1000;
+
+function scheduleRuntimeHealthSnapshots(): void {
+  if (!RUNTIME_FLAGS.governanceEnabled) {
+    return;
+  }
+
+  const tick = async (snapshotSource: "boot" | "cron"): Promise<void> => {
+    try {
+      await captureRuntimeHealthSnapshot({
+        flags: RUNTIME_FLAGS,
+        snapshotSource,
+      });
+    } catch (err) {
+      console.error(
+        `[runtime-health-snapshot:scheduler] ${JSON.stringify({
+          status: "failed",
+          snapshotSource,
+          error: err instanceof Error ? err.message : String(err),
+        })}`,
+      );
+    }
+  };
+
+  const firstTimer = setTimeout(() => {
+    void tick("boot");
+  }, 30_000);
+  const interval = setInterval(() => {
+    void tick("cron");
+  }, RUNTIME_HEALTH_SNAPSHOT_INTERVAL_MS);
+  firstTimer.unref?.();
+  interval.unref?.();
+}
 
 function scheduleRuntimeRetention(): void {
   if (!RUNTIME_FLAGS.governanceEnabled) {
@@ -625,6 +659,7 @@ function scheduleRuntimeRetention(): void {
   interval.unref?.();
 }
 
+scheduleRuntimeHealthSnapshots();
 scheduleRuntimeRetention();
 
 const server = app.listen(PORT, () => {
