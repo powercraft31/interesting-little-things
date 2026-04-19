@@ -7,3 +7,13 @@ services:
   solfacil-bff:
     environment:
       RATE_LIMIT_REDIS_URL: redis://solfacil-redis:6379
+      RUNTIME_GOVERNANCE_ENABLED: "true"
+      RUNTIME_EMIT_BFF_DB: "true"
+      RUNTIME_EMIT_M2_SCHEDULER: "true"
+      RUNTIME_EMIT_M3_DISPATCH: "true"
+      RUNTIME_EMIT_M4_BILLING: "true"
+
+  solfacil-m1:
+    environment:
+      RUNTIME_GOVERNANCE_ENABLED: "true"
+      RUNTIME_EMIT_M1_INGEST: "true"
