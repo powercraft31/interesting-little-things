@@ -12,7 +12,8 @@
     "lint": "eslint . --ext .ts",
     "local-server": "ts-node scripts/local-server.ts",
     "local-db:verify-contract": "ts-node scripts/verify-local-db-contract.ts",
-    "local-db:rebuild-check": "ts-node scripts/local-db-rebuild-check.ts"
+    "local-db:rebuild-check": "ts-node scripts/local-db-rebuild-check.ts",
+    "runtime:retention": "ts-node scripts/run-runtime-retention.ts"
   },
   "devDependencies": {
     "@types/aws-lambda": "^8.10.145",

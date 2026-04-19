@@ -7431,3 +7431,84 @@
 
 /* alerts result count (replaces inline style="font-size:12px;color:var(--text-muted)") */
 .alerts-result-count { font-size: 12px; color: var(--text-muted); }
+
+/* ============================================================
+   P7 — Runtime Governance (v6.10, admin-only internal surface)
+   Minimal styles only; deliberately not a dashboard redesign.
+   ============================================================ */
+.runtime-header { display: flex; flex-direction: column; gap: 8px; }
+.runtime-admin-chip {
+  display: inline-block; margin-left: 8px; padding: 1px 8px;
+  font-size: 0.68rem; border: 1px solid var(--border, #444);
+  border-radius: 10px; color: var(--text-muted, #888); vertical-align: middle;
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+.runtime-actions { display: flex; align-items: center; gap: 12px; }
+.runtime-captured-at { font-size: 0.8rem; color: var(--text-muted, #888); }
+
+.nav-item-internal .nav-internal-tag {
+  margin-left: 6px; font-size: 0.6rem; padding: 0 6px; border-radius: 8px;
+  border: 1px solid var(--border, #555); color: var(--text-muted, #888);
+  text-transform: uppercase; letter-spacing: 0.05em;
+}
+
+.runtime-kpi-grid { margin-top: 12px; }
+.runtime-posture-card .runtime-posture-value { letter-spacing: 0.08em; }
+.runtime-posture-ok .runtime-posture-value { color: var(--positive, #2bcc5a); }
+.runtime-posture-warning .runtime-posture-value { color: var(--warning, #e2a400); }
+.runtime-posture-degraded .runtime-posture-value { color: var(--warning, #e2a400); }
+.runtime-posture-critical .runtime-posture-value { color: var(--negative, #e24d4d); }
+.runtime-posture-disabled .runtime-posture-value { color: var(--text-muted, #888); }
+
+.runtime-components-row { display: flex; flex-wrap: wrap; gap: 8px; }
+.runtime-component {
+  border: 1px solid var(--border, #444); border-radius: 6px;
+  padding: 8px 12px; min-width: 140px;
+}
+.runtime-component-name { font-size: 0.8rem; color: var(--text-muted, #888); }
+.runtime-component-state { font-weight: 600; text-transform: uppercase; font-size: 0.85rem; }
+.runtime-component-ok .runtime-component-state { color: var(--positive, #2bcc5a); }
+.runtime-component-warning .runtime-component-state { color: var(--warning, #e2a400); }
+.runtime-component-degraded .runtime-component-state { color: var(--warning, #e2a400); }
+.runtime-component-critical .runtime-component-state { color: var(--negative, #e24d4d); }
+
+.runtime-issues-table td, .runtime-check-table td { font-size: 0.85rem; }
+.runtime-state, .runtime-sev, .runtime-check {
+  display: inline-block; padding: 1px 8px; border-radius: 10px;
+  font-size: 0.72rem; text-transform: uppercase; letter-spacing: 0.04em;
+}
+.runtime-state-detected, .runtime-state-ongoing { background: rgba(226,77,77,0.15); color: var(--negative, #e24d4d); }
+.runtime-state-recovered { background: rgba(43,204,90,0.15); color: var(--positive, #2bcc5a); }
+.runtime-state-suppressed { background: rgba(120,120,120,0.2); color: var(--text-muted, #888); }
+.runtime-state-closed { background: rgba(80,80,80,0.25); color: var(--text-muted, #888); }
+.runtime-sev-critical { background: rgba(226,77,77,0.2); color: var(--negative, #e24d4d); }
+.runtime-sev-degraded { background: rgba(226,164,0,0.2); color: var(--warning, #e2a400); }
+.runtime-sev-warning { background: rgba(226,164,0,0.15); color: var(--warning, #e2a400); }
+.runtime-sev-notice { background: rgba(80,120,200,0.2); color: #5a8ad0; }
+.runtime-sev-info { background: rgba(80,80,80,0.15); color: var(--text-muted, #888); }
+
+.runtime-check-pass { background: rgba(43,204,90,0.15); color: var(--positive, #2bcc5a); }
+.runtime-check-fail { background: rgba(226,77,77,0.2); color: var(--negative, #e24d4d); }
+.runtime-check-stale { background: rgba(226,164,0,0.15); color: var(--warning, #e2a400); }
+.runtime-check-unknown { background: rgba(80,80,80,0.15); color: var(--text-muted, #888); }
+
+.runtime-drawer {
+  margin-top: 16px; border: 1px solid var(--border, #444); border-radius: 8px;
+  padding: 16px; background: var(--surface, #1d1d1d);
+}
+.runtime-drawer-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 12px; }
+.runtime-drawer-dl { display: grid; grid-template-columns: max-content 1fr; gap: 4px 12px; font-size: 0.85rem; }
+.runtime-drawer-dl dt { color: var(--text-muted, #888); }
+.runtime-drawer-actions { display: flex; flex-wrap: wrap; gap: 8px; margin: 16px 0; align-items: center; }
+.runtime-note-input { flex: 1 1 240px; padding: 6px 8px; border: 1px solid var(--border, #444); border-radius: 4px; background: transparent; color: inherit; }
+.runtime-until-input { padding: 6px 8px; border: 1px solid var(--border, #444); border-radius: 4px; background: transparent; color: inherit; }
+.runtime-action-feedback { font-size: 0.78rem; color: var(--text-muted, #888); }
+.runtime-events-title { margin: 16px 0 8px; font-size: 0.9rem; color: var(--text-muted, #888); }
+.runtime-events-list { list-style: none; padding: 0; margin: 0; max-height: 240px; overflow-y: auto; }
+.runtime-event-item { padding: 4px 0; border-bottom: 1px solid var(--border, #333); font-size: 0.8rem; }
+.runtime-event-time { color: var(--text-muted, #888); font-family: var(--font-data, monospace); }
+.runtime-event-code { font-family: var(--font-data, monospace); }
+
+.runtime-empty { padding: 12px; color: var(--text-muted, #888); font-size: 0.9rem; }
+.runtime-count { color: var(--text-muted, #888); font-size: 0.8rem; }
+.runtime-admin-guard { padding: 24px; color: var(--text-muted, #888); }

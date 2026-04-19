@@ -1,5 +1,11 @@
 import cron from "node-cron";
 import { Pool } from "pg";
+import { parseRuntimeFlags } from "../../shared/runtime/flags";
+import {
+  emitDispatchLoopHeartbeat,
+  emitDispatchLoopStalled,
+  recordDispatchLoopAlive,
+} from "../../shared/runtime/dispatch-emitters";
 
 export function startCommandDispatcher(pool: Pool): void {
   // Existing: trade_schedules → dispatch_commands (every minute)
@@ -13,6 +19,8 @@ export function startCommandDispatcher(pool: Pool): void {
 }
 
 export async function runCommandDispatcher(pool: Pool): Promise<void> {
+  const runStartedAt = new Date();
+  let commandsDispatched = 0;
   const client = await pool.connect();
   try {
     await client.query("BEGIN");
@@ -104,6 +112,7 @@ export async function runCommandDispatcher(pool: Pool): Promise<void> {
 
     await client.query("COMMIT");
 
+    commandsDispatched = dueResult.rows.length;
     if (dueResult.rows.length > 0) {
       console.log(
         `[CommandDispatcher] Dispatched ${dueResult.rows.length} commands at ${new Date().toISOString()}`,
@@ -112,9 +121,52 @@ export async function runCommandDispatcher(pool: Pool): Promise<void> {
   } catch (err) {
     await client.query("ROLLBACK");
     console.error("[CommandDispatcher] Error:", err);
+    // WS7: dispatcher-owned non-progression fact. Best-effort; must not
+    // rethrow because the existing contract of this function is to swallow
+    // dispatch-loop failures (legacy caller behavior).
+    const error = err instanceof Error ? err : new Error(String(err));
+    void emitDispatchLoopStalled(
+      { flags: parseRuntimeFlags(process.env) },
+      { error, runStartedAt, phase: "run" },
+    ).catch(() => {
+      /* best-effort — dispatcher error path must not throw */
+    });
+    return;
   } finally {
     client.release();
   }
+
+  // WS7: success-path heartbeat + dispatch.loop.alive self-check contribution.
+  // These are strictly observational. Any emitter or self-check write failure
+  // is swallowed inside the helpers (safeEmit / degraded_fallback). The
+  // dispatcher run itself is already complete and cannot be affected.
+  const runFinishedAt = new Date();
+  const durationMs = runFinishedAt.getTime() - runStartedAt.getTime();
+  const flags = parseRuntimeFlags(process.env);
+
+  void emitDispatchLoopHeartbeat(
+    { flags },
+    {
+      commandsDispatched,
+      runStartedAt,
+      durationMs,
+    },
+  ).catch(() => {
+    /* best-effort — heartbeat must not break dispatcher */
+  });
+
+  void recordDispatchLoopAlive(
+    { flags },
+    {
+      observedAt: runFinishedAt,
+      durationMs,
+      detail: {
+        commands_dispatched: commandsDispatched,
+      },
+    },
+  ).catch(() => {
+    /* best-effort — self-check update must not break dispatcher */
+  });
 }
 
 export async function runPendingCommandDispatcher(pool: Pool): Promise<void> {

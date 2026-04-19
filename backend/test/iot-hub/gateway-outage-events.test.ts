@@ -1,3 +1,19 @@
+// Scope: this file tests domain-level outage / backfill behavior. Runtime
+// governance emission is covered in test/iot-hub/ws5-runtime-emitters.test.ts.
+// We mock the shared ingest-emitters module so the handler's fire-and-forget
+// runtime calls never reach the real service pool (which would leak open
+// PG connections after these tests finish when env vars happen to be set).
+jest.mock("../../src/shared/runtime/ingest-emitters", () => ({
+  emitIngestTelemetryStale: jest.fn(async () => ({ status: "persisted" })),
+  emitIngestTelemetryRecovered: jest.fn(async () => ({ status: "persisted" })),
+  maybeEmitIngestTelemetryRecovered: jest.fn(async () => ({
+    status: "no_active_issue",
+  })),
+  emitIngestFragmentBacklog: jest.fn(async () => ({ status: "persisted" })),
+  emitIngestParserFailed: jest.fn(async () => ({ status: "persisted" })),
+  recordIngestFreshness: jest.fn(async () => ({ status: "persisted" })),
+}));
+
 import { handleHeartbeat } from "../../src/iot-hub/handlers/heartbeat-handler";
 import {
   handleTelemetry,
@@ -253,18 +269,70 @@ describe("TelemetryHandler v6.1 — Backfill Trigger", () => {
 });
 
 // ─── Tests: Heartbeat Threshold ────────────────────────────────────────────
+describe("IoT retention compatibility proof", () => {
+  it("keeps current alert/fleet readers on hot-table semantics only in v6.10.1", () => {
+    const fs = require("fs");
+    const alerts = fs.readFileSync(
+      require.resolve("../../src/bff/handlers/get-alerts"),
+      "utf8",
+    );
+    const summary = fs.readFileSync(
+      require.resolve("../../src/bff/handlers/get-alerts-summary"),
+      "utf8",
+    );
+    const overview = fs.readFileSync(
+      require.resolve("../../src/bff/handlers/get-fleet-overview"),
+      "utf8",
+    );
+    const offlineEvents = fs.readFileSync(
+      require.resolve("../../src/bff/handlers/get-fleet-offline-events"),
+      "utf8",
+    );
+    const integradores = fs.readFileSync(
+      require.resolve("../../src/bff/handlers/get-fleet-integradores"),
+      "utf8",
+    );
+
+    expect(alerts).toContain("FROM gateway_alarm_events a");
+    expect(summary).toContain("FROM gateway_alarm_events a");
+    expect(alerts).not.toContain("gateway_alarm_events_archive");
+    expect(summary).not.toContain("gateway_alarm_events_archive");
+
+    expect(overview).toContain("FROM backfill_requests br");
+    expect(overview).toContain("WHERE br.status IN ('pending','in_progress','failed')");
+    expect(offlineEvents).toContain("FROM backfill_requests br");
+    expect(integradores).toContain("FROM backfill_requests br");
+    expect(overview).not.toContain("backfill_requests_archive");
+    expect(offlineEvents).not.toContain("backfill_requests_archive");
+    expect(integradores).not.toContain("backfill_requests_archive");
+  });
+
+  it("preserves the gateway alarm columns needed by current alert readers when archiving", () => {
+    const fs = require("fs");
+    const source = fs.readFileSync(
+      require.resolve("../../src/shared/runtime/retention-job"),
+      "utf8",
+    );
+
+    expect(source).toMatch(/INSERT INTO gateway_alarm_events_archive[\s\S]*id,[\s\S]*gateway_id,[\s\S]*org_id,[\s\S]*device_sn,[\s\S]*sub_dev_id,[\s\S]*sub_dev_name,[\s\S]*product_type,[\s\S]*event_id,[\s\S]*event_name,[\s\S]*event_type,[\s\S]*level,[\s\S]*status,[\s\S]*prop_id,[\s\S]*prop_name,[\s\S]*prop_value,[\s\S]*description,[\s\S]*event_create_time,[\s\S]*event_update_time,[\s\S]*created_at,[\s\S]*archived_at,[\s\S]*archive_reason/);
+    expect(source).toMatch(/FROM gateway_alarm_events[\s\S]*WHERE event_create_time < \$1/);
+    expect(source).toMatch(/ON CONFLICT \(id\) DO NOTHING/);
+  });
+});
+
 describe("GatewayConnectionManager v6.1 — Heartbeat Threshold", () => {
-  it("uses 15 min (900000 ms) threshold instead of 10 min", async () => {
+  it("uses 30 min (1800000 ms) threshold instead of the older 10/15 min assumptions", async () => {
     // Verify the constant by importing the module source
     const fs = require("fs");
     const source = fs.readFileSync(
       require.resolve("../../src/iot-hub/services/gateway-connection-manager"),
       "utf8",
     );
-    expect(source).toContain("900_000");
-    // Verify old 10-min threshold is gone (OFFLINE_THRESHOLD_MS was 600_000)
-    expect(source).toMatch(/OFFLINE_THRESHOLD_MS\s*=\s*900_000/);
+    expect(source).toContain("1_800_000");
+    // Verify older thresholds are gone
+    expect(source).toMatch(/OFFLINE_THRESHOLD_MS\s*=\s*1_800_000/);
+    expect(source).not.toMatch(/OFFLINE_THRESHOLD_MS\s*=\s*900_000/);
     expect(source).not.toMatch(/OFFLINE_THRESHOLD_MS\s*=\s*600_000/);
-    expect(source).toContain("15 minutes");
+    expect(source).toContain("30 minutes");
   });
 });

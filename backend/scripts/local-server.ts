@@ -73,6 +73,31 @@ import { handler as p5PostureOverrideHandler } from "../src/bff/handlers/post-p5
 // v7.0: P6 Alerts
 import { handler as alertsHandler } from "../src/bff/handlers/get-alerts";
 import { handler as alertsSummaryHandler } from "../src/bff/handlers/get-alerts-summary";
+// v6.10: WS3 Runtime Governance operator API
+import { handler as runtimeHealthHandler } from "../src/bff/handlers/get-runtime-health";
+import { handler as runtimeIssuesHandler } from "../src/bff/handlers/get-runtime-issues";
+import { handler as runtimeIssueDetailHandler } from "../src/bff/handlers/get-runtime-issue-detail";
+import { handler as runtimeEventsHandler } from "../src/bff/handlers/get-runtime-events";
+import { handler as runtimeSelfChecksHandler } from "../src/bff/handlers/get-runtime-self-checks";
+import { handler as runtimeIssueCloseHandler } from "../src/bff/handlers/post-runtime-issue-close";
+import { handler as runtimeIssueSuppressHandler } from "../src/bff/handlers/post-runtime-issue-suppress";
+import { handler as runtimeIssueNoteHandler } from "../src/bff/handlers/post-runtime-issue-note";
+
+// v6.10 WS4: runtime governance emitters
+import { parseRuntimeFlags } from "../src/shared/runtime/flags";
+import {
+  emitBffBootFailed,
+  emitBffBootReady,
+  emitBffBootStarted,
+  emitBffAuthAnomalyBurst,
+  wrapHandlerWithRuntimeBoundary,
+} from "../src/shared/runtime/bff-emitters";
+import {
+  attachPoolIdleErrorEmitter,
+  runDbSubstrateProbes,
+} from "../src/shared/runtime/substrate";
+import { runRuntimeRetention } from "../src/shared/runtime/retention-job";
+import { getAppPool } from "../src/shared/db";
 
 type LambdaHandler = (
   event: APIGatewayProxyEventV2,
@@ -81,9 +106,30 @@ type LambdaHandler = (
 // v6.9 B2: fail fast if JWT_SECRET is missing or weak
 validateJwtSecret();
 
+// v6.10 WS4: parse runtime flags once at boot. When the governance flag is
+// off, every emitter is a no-op — the BFF keeps running business flows as
+// if the spine were absent.
+const RUNTIME_FLAGS = parseRuntimeFlags(process.env);
+
 // v6.9 B6: abuse-control store selection (fail-fast in non-dev without Redis)
 const rateLimitStore = selectRateLimitStore();
-const abuseControl = createAbuseControlMiddleware(rateLimitStore);
+const abuseControl = createAbuseControlMiddleware(rateLimitStore, {
+  onThresholdHit: async (evt) => {
+    // Bounded auth anomaly fact — fires only at threshold crossings, not per 401.
+    await emitBffAuthAnomalyBurst(
+      { flags: RUNTIME_FLAGS },
+      {
+        tenantScope: evt.tenantScope,
+        reason: evt.reason,
+        retryAfterSeconds: evt.retryAfterSeconds,
+      },
+    );
+  },
+});
+
+// v6.10 WS4: emit bff.boot.started at the earliest point we still have a
+// functioning process. Fire-and-forget — if emit fails, boot continues.
+void emitBffBootStarted({ flags: RUNTIME_FLAGS });
 
 const PORT = Number(process.env.PORT) || 3000;
 
@@ -138,9 +184,15 @@ function makeStubEvent(
 }
 
 function wrapHandler(handler: LambdaHandler, method: string, path: string) {
+  // v6.10 WS4: wrap every lambda handler with a top-level runtime boundary.
+  // If the handler throws, we emit bff.handler.unhandled_exception (scoped
+  // by route) and still return a 500 envelope — response contract unchanged.
+  const bounded = wrapHandlerWithRuntimeBoundary(handler, {
+    flags: RUNTIME_FLAGS,
+  });
   return async (req: express.Request, res: express.Response): Promise<void> => {
     const event = makeStubEvent(req, method, path);
-    const result = await handler(event);
+    const result = await bounded(event);
 
     const statusCode =
       typeof result === "string" ? 200 : (result.statusCode ?? 200);
@@ -409,6 +461,57 @@ app.get(
 );
 // ────────────────────────────────────────────────────────────────────────
 
+// ── v6.10 WS3 Runtime Governance operator API (SOLFACIL_ADMIN only) ─────
+app.get(
+  "/api/runtime/health",
+  wrapHandler(runtimeHealthHandler, "GET", "/api/runtime/health"),
+);
+app.get(
+  "/api/runtime/issues",
+  wrapHandler(runtimeIssuesHandler, "GET", "/api/runtime/issues"),
+);
+app.get(
+  "/api/runtime/issues/:fingerprint",
+  wrapHandler(
+    runtimeIssueDetailHandler,
+    "GET",
+    "/api/runtime/issues/:fingerprint",
+  ),
+);
+app.get(
+  "/api/runtime/events",
+  wrapHandler(runtimeEventsHandler, "GET", "/api/runtime/events"),
+);
+app.get(
+  "/api/runtime/self-checks",
+  wrapHandler(runtimeSelfChecksHandler, "GET", "/api/runtime/self-checks"),
+);
+app.post(
+  "/api/runtime/issues/:fingerprint/close",
+  wrapHandler(
+    runtimeIssueCloseHandler,
+    "POST",
+    "/api/runtime/issues/:fingerprint/close",
+  ),
+);
+app.post(
+  "/api/runtime/issues/:fingerprint/suppress",
+  wrapHandler(
+    runtimeIssueSuppressHandler,
+    "POST",
+    "/api/runtime/issues/:fingerprint/suppress",
+  ),
+);
+app.post(
+  "/api/runtime/issues/:fingerprint/note",
+  wrapHandler(
+    runtimeIssueNoteHandler,
+    "POST",
+    "/api/runtime/issues/:fingerprint/note",
+  ),
+);
+// ────────────────────────────────────────────────────────────────────────
+
 // ── v5.6 System Heartbeat: 啟動自動化管線 ──────────────────────────────
 startScheduleGenerator(servicePool); // M2: 每小時生成 trade_schedules
 startCommandDispatcher(servicePool); // M3: 每分鐘推進狀態機 → dispatch_commands
@@ -448,7 +551,85 @@ app.get("/login", (_req, res) =>
 );
 // ────────────────────────────────────────────────────────────────────────
 
-app.listen(PORT, () => {
+// v6.10 WS4: register structured pool idle-error emitters. These replace the
+// free-form console.error paths in shared/db.ts with a bounded runtime fact
+// (db.pool.idle_error) when governance is on. When off, the listener fires
+// but emit no-ops.
+attachPoolIdleErrorEmitter(getAppPool(), {
+  pool: "app",
+  flags: RUNTIME_FLAGS,
+});
+attachPoolIdleErrorEmitter(servicePool, {
+  pool: "service",
+  flags: RUNTIME_FLAGS,
+});
+
+// v6.10 WS4: run one DB substrate probe cycle shortly after boot so operators
+// see baseline self-check state. Non-fatal — any failure degrades to fallback
+// log via the shared emitter, business flows continue regardless.
+void runDbSubstrateProbes({
+  flags: RUNTIME_FLAGS,
+  appPool: getAppPool(),
+  servicePool,
+});
+
+// v6.10 WS10: schedule the runtime retention executor best-effort.
+// Runs once shortly after boot and then on a fixed interval. The executor is
+// a full no-op when governance is off, so enabling the schedule here is safe
+// under disabled-mode. Any persistence failure is captured inside the
+// executor and surfaced via the shared fallback logger — it must NEVER throw
+// into the business request path.
+const RUNTIME_RETENTION_INTERVAL_MS = Number(
+  process.env.RUNTIME_RETENTION_INTERVAL_MS ?? 60 * 60 * 1000,
+);
+
+function scheduleRuntimeRetention(): void {
+  if (!RUNTIME_FLAGS.governanceEnabled) {
+    return;
+  }
+  const tick = async (): Promise<void> => {
+    try {
+      const result = await runRuntimeRetention({ flags: RUNTIME_FLAGS });
+      if (result.status === "degraded_fallback") {
+        console.error(
+          `[runtime-retention:scheduler] ${JSON.stringify({
+            status: result.status,
+            errors: result.errors,
+            recoveredAutoClosed: result.recoveredAutoClosed,
+            staleAutoClosed: result.staleAutoClosed,
+            eventsDeleted: result.eventsDeleted,
+            snapshotsDeleted: result.snapshotsDeleted,
+            closedIssuesDeleted: result.closedIssuesDeleted,
+            deviceCommandLogsArchived: result.deviceCommandLogsArchived,
+            deviceCommandLogsDeleted: result.deviceCommandLogsDeleted,
+            gatewayAlarmEventsArchived: result.gatewayAlarmEventsArchived,
+            gatewayAlarmEventsDeleted: result.gatewayAlarmEventsDeleted,
+            backfillRequestsDeleted: result.backfillRequestsDeleted,
+          })}`,
+        );
+      }
+    } catch {
+      // runRuntimeRetention is internally best-effort; this guard is defensive.
+    }
+  };
+  // Stagger the first tick so boot is not slowed by retention.
+  const firstDelayMs = Math.min(30_000, RUNTIME_RETENTION_INTERVAL_MS);
+  const firstTimer = setTimeout(() => {
+    void tick();
+  }, firstDelayMs);
+  const interval = setInterval(() => {
+    void tick();
+  }, Math.max(60_000, RUNTIME_RETENTION_INTERVAL_MS));
+  // Do not keep the event loop alive just for retention.
+  firstTimer.unref?.();
+  interval.unref?.();
+}
+
+scheduleRuntimeRetention();
+
+const server = app.listen(PORT, () => {
+  // v6.10 WS4: listen callback is our signal that the BFF is accepting.
+  void emitBffBootReady({ flags: RUNTIME_FLAGS });
   console.log(
     `Local API Gateway emulator running on port ${PORT} (host-local probe: http://127.0.0.1:${PORT})`,
   );
@@ -503,6 +684,14 @@ app.listen(PORT, () => {
   console.log("  POST /api/p5/posture-override/:id/cancel (v6.5)");
   console.log("  GET  /api/alerts                    (v7.0)");
   console.log("  GET  /api/alerts/summary             (v7.0)");
+  console.log("  GET  /api/runtime/health              (v6.10 WS3)");
+  console.log("  GET  /api/runtime/issues              (v6.10 WS3)");
+  console.log("  GET  /api/runtime/issues/:fp          (v6.10 WS3)");
+  console.log("  GET  /api/runtime/events              (v6.10 WS3)");
+  console.log("  GET  /api/runtime/self-checks          (v6.10 WS3)");
+  console.log("  POST /api/runtime/issues/:fp/close     (v6.10 WS3)");
+  console.log("  POST /api/runtime/issues/:fp/suppress  (v6.10 WS3)");
+  console.log("  POST /api/runtime/issues/:fp/note      (v6.10 WS3)");
   console.log("");
   console.log("Auth: JWT required for /api/* routes (except /api/auth/login, /api/auth/logout)");
   console.log(`  curl -X POST http://127.0.0.1:${PORT}/api/auth/login \\`);
@@ -510,6 +699,12 @@ app.listen(PORT, () => {
   console.log(
     '    -d \'{"email":"admin@solfacil.com.br","password":"solfacil2026"}\'',
   );
+});
+
+// v6.10 WS4: listen failure → bff.boot.failed. Fire-and-forget.
+server.on("error", (err: Error) => {
+  void emitBffBootFailed({ flags: RUNTIME_FLAGS }, err);
+  console.error("[Boot] listen error:", err);
 });
 
 // ── Graceful Shutdown ─────────────────────────────────────────────────

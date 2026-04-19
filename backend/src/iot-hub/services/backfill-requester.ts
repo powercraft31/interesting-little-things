@@ -83,6 +83,9 @@ export class BackfillRequester {
 
       // Check gateway is still connected
       if (!this.connectionManager.isGatewayConnected(req.gateway_id)) {
+        // Terminal rows must stamp completed_at so v6.10.1 retention cleanup can
+        // use the terminal timestamp first and only fall back to created_at for
+        // legacy/null evidence.
         await client.query(
           `UPDATE backfill_requests
            SET status = 'failed', completed_at = NOW()
@@ -145,7 +148,8 @@ export class BackfillRequester {
     const nextChunkStart = currentStart + CHUNK_DURATION_MS;
 
     if (nextChunkStart >= req.gap_end.getTime()) {
-      // All chunks sent — mark completed
+      // All chunks sent — mark completed. completed_at is the retention anchor
+      // for terminal rows once chunk publication is finished.
       await client.query(
         `UPDATE backfill_requests
          SET status = 'completed', completed_at = NOW()

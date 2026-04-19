@@ -1,0 +1,192 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solfacil v6.10 Runtime Governance Skeleton — REQ</title>
+  <style>
+    :root {
+      --bg: #0b1020;
+      --panel: #121a2b;
+      --panel-2: #18233a;
+      --text: #e8eefc;
+      --muted: #9fb0d1;
+      --line: #2b3958;
+      --accent: #68d5ff;
+      --good: #4ade80;
+      --warn: #fbbf24;
+      --bad: #fb7185;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      background: linear-gradient(180deg, #0b1020 0%, #0f172a 100%);
+      color: var(--text);
+      font: 16px/1.6 -apple-system, BlinkMacSystemFont, "Segoe UI", "PingFang TC", "Noto Sans TC", sans-serif;
+    }
+    .wrap { max-width: 1180px; margin: 0 auto; padding: 32px 20px 80px; }
+    .hero, .card { background: rgba(18,26,43,.92); border: 1px solid var(--line); border-radius: 18px; box-shadow: 0 10px 30px rgba(0,0,0,.22); }
+    .hero { padding: 28px; margin-bottom: 20px; }
+    h1, h2, h3 { margin: 0 0 12px; line-height: 1.25; }
+    h1 { font-size: 34px; }
+    h2 { font-size: 24px; margin-top: 28px; }
+    h3 { font-size: 18px; margin-top: 18px; }
+    p, li { color: var(--text); }
+    .muted { color: var(--muted); }
+    .badges { display: flex; flex-wrap: wrap; gap: 10px; margin: 14px 0 6px; }
+    .badge { padding: 6px 10px; border-radius: 999px; font-size: 13px; border: 1px solid var(--line); background: var(--panel-2); color: var(--text); }
+    .grid { display: grid; grid-template-columns: repeat(12, 1fr); gap: 20px; }
+    .col-8 { grid-column: span 8; }
+    .col-4 { grid-column: span 4; }
+    .col-6 { grid-column: span 6; }
+    .col-12 { grid-column: span 12; }
+    .card { padding: 22px; }
+    .kpi { display: grid; grid-template-columns: repeat(2, minmax(0,1fr)); gap: 12px; }
+    .mini { background: var(--panel-2); border: 1px solid var(--line); border-radius: 14px; padding: 14px; }
+    .mini .label { color: var(--muted); font-size: 13px; }
+    .mini .value { font-size: 26px; font-weight: 700; margin-top: 4px; }
+    .status-good { color: var(--good); }
+    .status-warn { color: var(--warn); }
+    .status-bad { color: var(--bad); }
+    ul { margin: 10px 0 0 20px; padding: 0; }
+    .truth-table { width: 100%; border-collapse: collapse; margin-top: 10px; }
+    .truth-table th, .truth-table td { border-bottom: 1px solid var(--line); padding: 10px 8px; text-align: left; vertical-align: top; }
+    .truth-table th { color: var(--muted); font-weight: 600; }
+    .quote { border-left: 4px solid var(--accent); padding: 10px 14px; background: rgba(104,213,255,.08); border-radius: 10px; }
+    code { color: var(--accent); }
+    .footer { margin-top: 24px; color: var(--muted); font-size: 14px; }
+    @media (max-width: 900px) {
+      .col-8, .col-4, .col-6, .col-12 { grid-column: span 12; }
+      h1 { font-size: 28px; }
+    }
+  </style>
+</head>
+<body>
+  <div class="wrap">
+    <section class="hero">
+      <div class="muted">REQ aligned · 2026-04-18 07:05:31 UTC · Baseline: v6.9 closure state</div>
+      <h1>Solfacil v6.10 Runtime Governance Skeleton</h1>
+      <p>這不是再加一個 ops 頁面。v6.10 的核心是把平台的 <strong>runtime facts</strong> 升格成一級公民：建立中央 doctor / observability spine，讓各模塊輸出標準化運行事實，並由中央治理 severity、lifecycle、summary 與 diagnosis。</p>
+      <div class="badges">
+        <span class="badge">Target: v6.10</span>
+        <span class="badge">Theme: Runtime Governance</span>
+        <span class="badge">Status: REQ aligned / ready for DESIGN</span>
+        <span class="badge">Source: <code>docs/v6.10-runtime-governance-req.md</code></span>
+      </div>
+    </section>
+
+    <div class="grid">
+      <section class="card col-8">
+        <h2>你先看這裡</h2>
+        <div class="quote">
+          <strong>一句話：</strong> v6.10 要插入一條共同脊椎，不是再長一顆平行腦袋。
+        </div>
+        <ul>
+          <li>v6.9 解的是 security closure；v6.10 解的是 <strong>runtime governance closure</strong>。</li>
+          <li>當前系統有 domain alarms、asset health、strategy facts，但沒有平台級統一治理語義。</li>
+          <li>現在可以人工看懂，但系統本身還不能清楚表達自己的運行狀態。</li>
+          <li>正確方向是中央 spine + 舊模塊標準化發送 facts，而不是每個模塊各自發明 severity/summary/rules。</li>
+        </ul>
+      </section>
+
+      <aside class="card col-4">
+        <h2>現況快照</h2>
+        <div class="kpi">
+          <div class="mini">
+            <div class="label">Live containers</div>
+            <div class="value">4</div>
+          </div>
+          <div class="mini">
+            <div class="label">Container health exposed</div>
+            <div class="value status-warn">1 / 4</div>
+          </div>
+          <div class="mini">
+            <div class="label">Log mode</div>
+            <div class="value status-warn">stdout</div>
+          </div>
+          <div class="mini">
+            <div class="label">Metrics / tracing</div>
+            <div class="value status-bad">none verified</div>
+          </div>
+        </div>
+        <p class="muted" style="margin-top:14px;">Evidence: docker runtime + repo inspection. DB container reports healthy; BFF/Redis/M1 currently have <code>health=none</code>. Logging is Docker <code>json-file</code> + ad hoc stdout.</p>
+      </aside>
+
+      <section class="card col-6">
+        <h2>為什麼現在要做</h2>
+        <ul>
+          <li>domain telemetry ≠ platform observability</li>
+          <li>runtime truth 目前碎片化在 logs / pages / tables / handlers</li>
+          <li>沒有 central lifecycle，operator 無法直接知道 issue 是否仍在發生</li>
+          <li>再不立 spine，後續每個模塊都會各自擴散語義</li>
+        </ul>
+      </section>
+
+      <section class="card col-6">
+        <h2>v6.10 必須交付的能力</h2>
+        <ul>
+          <li>canonical runtime event schema</li>
+          <li>severity taxonomy + lifecycle semantics</li>
+          <li>platform health summary model</li>
+          <li>priority modules emitting standardized facts</li>
+          <li>operator diagnosis surface</li>
+          <li>retention / dedup / correlation discipline</li>
+        </ul>
+      </section>
+
+      <section class="card col-12">
+        <h2>Truth Matrix</h2>
+        <table class="truth-table">
+          <thead>
+            <tr><th>Dimension</th><th>Current reality</th><th>Judgment</th></tr>
+          </thead>
+          <tbody>
+            <tr><td>Logs</td><td>Docker <code>json-file</code> + active stdout messages</td><td class="status-warn">Yes, but manual triage style</td></tr>
+            <tr><td>Health checks</td><td>Only DB container reports health; others show none</td><td class="status-bad">No platform-wide health model</td></tr>
+            <tr><td>Metrics</td><td>No Prometheus/OpenTelemetry-style evidence verified</td><td class="status-bad">Absent</td></tr>
+            <tr><td>Exception tracking</td><td>No Sentry/Rollbar/Bugsnag-style evidence verified</td><td class="status-bad">Absent</td></tr>
+            <tr><td>Structured runtime facts</td><td>Partial local fields like <code>traceId</code>, <code>level</code>, <code>module</code></td><td class="status-warn">Fragmented, not central</td></tr>
+            <tr><td>Operator diagnosis surface</td><td>Business/domain pages exist; platform-runtime diagnosis surface does not</td><td class="status-bad">Missing</td></tr>
+          </tbody>
+        </table>
+      </section>
+
+      <section class="card col-8">
+        <h2>REQ 主張</h2>
+        <p>v6.10 的設計方向必須是：</p>
+        <ul>
+          <li>中央 spine 定義 event code、severity、lifecycle、summary、retention</li>
+          <li>舊模塊保留業務邏輯，但改成輸出標準化 runtime facts</li>
+          <li>phase-1 優先接入 BFF / DB / Redis / scheduler / ingest / integrations 等高價值模塊</li>
+          <li>先讓系統能清楚講自己的病，再談更花俏的觀測面</li>
+        </ul>
+      </section>
+
+      <section class="card col-4">
+        <h2>非目標</h2>
+        <ul>
+          <li>不是重寫整個系統</li>
+          <li>不是把 P6 Alerts 直接包裝成平台 observability</li>
+          <li>不是 day-1 就變完整外部 observability stack</li>
+          <li>不是用 UI 掩蓋底層語義缺失</li>
+        </ul>
+      </section>
+
+      <section class="card col-12">
+        <h2>已固定的產品決策</h2>
+        <ol>
+          <li><strong>主要受眾切線：A</strong> — phase-1 先服務 internal engineering / ops，不以 customer-facing 簡化為主。</li>
+          <li><strong>首版偏向：A</strong> — 先做少數關鍵模塊的深治理，不做廣而淺的鋪陳。</li>
+          <li><strong>surface priority：B</strong> — backend contract first，UI 只做最小可用，不讓 dashboard polish 反過來主導 release。</li>
+        </ol>
+        <p class="muted">合併起來的 cut line 很清楚：v6.10 phase-1 是 internal-ops-first、narrow-but-deep、backend-governance-first。這樣才能最大化 truth density，避免做出外觀像 ops 系統、語義卻還是鬆散的假骨架。</p>
+      </section>
+    </div>
+
+    <div class="footer">
+      Source of truth: <code>/home/alan/src/solfacil/docs/v6.10-runtime-governance-req.md</code><br />
+      Companion HTML: <code>/home/alan/src/solfacil/docs/v6.10-runtime-governance-req.html</code>
+    </div>
+  </div>
+</body>
+</html>

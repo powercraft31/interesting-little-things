@@ -1,5 +1,12 @@
 import cron from "node-cron";
 import { Pool } from "pg";
+import { parseRuntimeFlags } from "../../shared/runtime/flags";
+import {
+  emitBillingJobFailed,
+  emitBillingJobHeartbeat,
+  maybeEmitBillingRecovered,
+  recordBillingJobsAlive,
+} from "../../shared/runtime/billing-emitters";
 import {
   calculateBaselineCost,
   calculateActualCost,
@@ -20,10 +27,14 @@ const DEFAULT_SCHEDULE: TariffSchedule = {
 };
 
 export async function runDailyBilling(pool: Pool): Promise<void> {
+  const runStartedAt = new Date();
+  let assetsSettled = 0;
+  let billingDate = "";
   try {
     const yesterday = new Date();
     yesterday.setDate(yesterday.getDate() - 1);
     const dateStr = yesterday.toISOString().split("T")[0];
+    billingDate = dateStr;
 
     // -- M4 BOUNDARY RULE: reads asset_hourly_metrics only. NEVER query telemetry_history directly.
 
@@ -340,10 +351,71 @@ export async function runDailyBilling(pool: Pool): Promise<void> {
     // Step 6 (v5.16): PS daily savings attribution
     await runDailyPsSavings(pool, brtWindowStart, brtWindowEnd);
 
+    assetsSettled = assetMap.size;
     console.log(`[BillingJob] Settled ${assetMap.size} assets for ${dateStr}`);
   } catch (err) {
     console.error("[BillingJob] Error:", err);
+    // WS8: M4-owned billing-job error fact. Strictly best-effort; the
+    // legacy contract of runDailyBilling() is to swallow failures, and that
+    // contract must be preserved. Emitter success/failure has no bearing on
+    // the caller's view of the billing pass.
+    const error = err instanceof Error ? err : new Error(String(err));
+    void emitBillingJobFailed(
+      { flags: parseRuntimeFlags(process.env) },
+      { error, phase: "run", billingDate: billingDate || undefined },
+    ).catch(() => {
+      /* best-effort — billing error fact must not throw */
+    });
+    return;
   }
+
+  // WS8: success-path billing-job heartbeat + scheduler.jobs.alive self-check
+  // contribution. Strictly observational. Emitter failure is swallowed inside
+  // the helpers (safeEmit / degraded_fallback). The billing pass itself is
+  // already committed and cannot be affected by runtime-governance writes.
+  const runFinishedAt = new Date();
+  const durationMs = runFinishedAt.getTime() - runStartedAt.getTime();
+  const flags = parseRuntimeFlags(process.env);
+
+  void emitBillingJobHeartbeat(
+    { flags },
+    {
+      assetsSettled,
+      billingDate,
+      runStartedAt,
+      durationMs,
+    },
+  ).catch(() => {
+    /* best-effort — heartbeat must not break billing */
+  });
+
+  // Canonical recovery: close out any active scheduler.billing_job.failed
+  // issue via the shared M9 projection. Authority comes from runtime_issues
+  // lookup by fingerprint — no process-local bookkeeping.
+  void maybeEmitBillingRecovered(
+    { flags },
+    {
+      observedAt: runFinishedAt,
+      phase: "run",
+      billingDate: billingDate || undefined,
+    },
+  ).catch(() => {
+    /* best-effort — recovery emission must not break billing */
+  });
+
+  void recordBillingJobsAlive(
+    { flags },
+    {
+      observedAt: runFinishedAt,
+      durationMs,
+      detail: {
+        assets_settled: assetsSettled,
+        billing_date: billingDate,
+      },
+    },
+  ).catch(() => {
+    /* best-effort — self-check update must not break billing */
+  });
 }
 
 /**

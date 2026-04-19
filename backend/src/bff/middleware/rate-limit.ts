@@ -130,12 +130,51 @@ const IP_LIMIT = 10;
 const EMAIL_LIMIT = 5;
 const RATE_LIMIT_MESSAGE = "Too many login attempts. Try again later.";
 
+// ── Threshold-hit hook (WS4: bounded auth anomaly runtime fact) ─────────
+
+export type AbuseControlThresholdReason =
+  | "ip_threshold_exceeded"
+  | "email_threshold_exceeded";
+
+export interface AbuseControlThresholdEvent {
+  readonly tenantScope: string;
+  readonly reason: AbuseControlThresholdReason;
+  readonly retryAfterSeconds: number;
+}
+
+export interface AbuseControlMiddlewareOptions {
+  /**
+   * Fires exactly once per preHandler call that results in a 429, so the
+   * BFF runtime spine can convert it into a bounded `bff.auth.anomaly_burst`
+   * fact. Errors inside the hook are swallowed — they must never surface to
+   * the client or break the 429 response contract.
+   */
+  readonly onThresholdHit?: (
+    event: AbuseControlThresholdEvent,
+  ) => Promise<void> | void;
+}
+
 // ── Middleware factory ──────────────────────────────────────────────────
 
-export function createAbuseControlMiddleware(store: RateLimitStore) {
+export function createAbuseControlMiddleware(
+  store: RateLimitStore,
+  options: AbuseControlMiddlewareOptions = {},
+) {
   function normalizeEmail(raw: unknown): string | null {
     if (typeof raw !== "string" || raw.trim() === "") return null;
     return raw.trim().toLowerCase();
+  }
+
+  async function fireThresholdHit(
+    event: AbuseControlThresholdEvent,
+  ): Promise<void> {
+    if (!options.onThresholdHit) return;
+    try {
+      await options.onThresholdHit(event);
+    } catch (err) {
+      // Never break auth or 429 response because of a runtime hook.
+      console.error("[rate-limit] onThresholdHit hook failed:", err);
+    }
   }
 
   async function preHandler(req: Request, res: Response, next: NextFunction): Promise<void> {
@@ -151,6 +190,11 @@ export function createAbuseControlMiddleware(store: RateLimitStore) {
       const retryAfter = await store.getRemainingTtl(ipKey);
       res.setHeader("Retry-After", String(retryAfter));
       res.status(429).json(fail(RATE_LIMIT_MESSAGE));
+      await fireThresholdHit({
+        tenantScope: `ip:${ip}`,
+        reason: "ip_threshold_exceeded",
+        retryAfterSeconds: retryAfter,
+      });
       return;
     }
 
@@ -161,6 +205,11 @@ export function createAbuseControlMiddleware(store: RateLimitStore) {
         const retryAfter = await store.getRemainingTtl(emailKey);
         res.setHeader("Retry-After", String(retryAfter));
         res.status(429).json(fail(RATE_LIMIT_MESSAGE));
+        await fireThresholdHit({
+          tenantScope: `email:${email}`,
+          reason: "email_threshold_exceeded",
+          retryAfterSeconds: retryAfter,
+        });
         return;
       }
     }

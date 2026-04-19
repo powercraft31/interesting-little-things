@@ -1,5 +1,12 @@
 import cron from "node-cron";
 import { Pool } from "pg";
+import { parseRuntimeFlags } from "../../shared/runtime/flags";
+import {
+  emitSchedulerFailed,
+  emitSchedulerHeartbeat,
+  maybeEmitSchedulerRecovered,
+  recordSchedulerJobsAlive,
+} from "../../shared/runtime/scheduler-emitters";
 
 export function startScheduleGenerator(pool: Pool): void {
   // 立即執行一次（系統啟動時），然後每小時定期跑
@@ -8,6 +15,10 @@ export function startScheduleGenerator(pool: Pool): void {
 }
 
 export async function runScheduleGenerator(pool: Pool): Promise<void> {
+  const runStartedAt = new Date();
+  let assetsProcessed = 0;
+  let slotsGenerated = 0;
+
   try {
     // 1. 取得每小時平均 PLD 作為代理電價（因為 pld_horario 只有 Jan 2026 歷史資料）
     const pldResult = await pool.query<{ hora: number; avg_pld: number }>(`
@@ -51,6 +62,7 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
       LEFT JOIN gateways g ON g.gateway_id = a.gateway_id
       WHERE a.is_active = true
     `);
+    assetsProcessed = assetsResult.rows.length;
 
     for (const asset of assetsResult.rows) {
       const powerKw = Number(asset.capacidade_kw ?? 5) * 0.8; // 額定功率的 80%
@@ -129,6 +141,7 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
         `,
           [assetId, orgId, plannedTime, action, volume, pld],
         );
+        slotsGenerated += 1;
       }
     }
 
@@ -143,7 +156,7 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
         const plannedTime = new Date();
         plannedTime.setUTCHours(hour + 3, 0, 0, 0); // BRT → UTC
 
-        await pool.query(
+        const psResult = await pool.query(
           `INSERT INTO trade_schedules
             (asset_id, org_id, planned_time, action, expected_volume_kwh, target_pld_price, status, target_mode)
           VALUES ($1, $2, $3, 'discharge', $4, 0, 'scheduled', 'peak_shaving')
@@ -155,6 +168,7 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
             Number(asset.capacidade_kw ?? 5) * 0.8,
           ],
         );
+        slotsGenerated += psResult.rowCount ?? 0;
       }
     }
 
@@ -163,5 +177,63 @@ export async function runScheduleGenerator(pool: Pool): Promise<void> {
     );
   } catch (err) {
     console.error("[ScheduleGenerator] Error:", err);
+    // WS6: optimization-scheduler-owned error fact. Best-effort; must not
+    // rethrow because the existing contract of this function is to swallow
+    // schedule-generator failures (legacy caller behavior).
+    const error = err instanceof Error ? err : new Error(String(err));
+    void emitSchedulerFailed(
+      { flags: parseRuntimeFlags(process.env) },
+      { error, phase: "run" },
+    ).catch(() => {
+      /* best-effort — scheduler error path must not throw */
+    });
+    return;
   }
+
+  // WS6: success-path heartbeat + scheduler.jobs.alive self-check contribution.
+  // These are strictly observational. Any emitter or self-check write failure
+  // is swallowed inside the helpers (safeEmit / degraded_fallback). The
+  // schedule-generator run itself is already complete and cannot be affected.
+  const runFinishedAt = new Date();
+  const durationMs = runFinishedAt.getTime() - runStartedAt.getTime();
+  const flags = parseRuntimeFlags(process.env);
+
+  void emitSchedulerHeartbeat(
+    { flags },
+    {
+      assetsProcessed,
+      slotsGenerated,
+      runStartedAt,
+      durationMs,
+    },
+  ).catch(() => {
+    /* best-effort — heartbeat must not break scheduler */
+  });
+
+  // Canonical recovery: close out any active scheduler.schedule_generator.failed
+  // issue via the shared M9 projection. Authority comes from runtime_issues
+  // lookup by fingerprint — no process-local bookkeeping.
+  void maybeEmitSchedulerRecovered(
+    { flags },
+    {
+      observedAt: runFinishedAt,
+      phase: "run",
+    },
+  ).catch(() => {
+    /* best-effort — recovery emission must not break scheduler */
+  });
+
+  void recordSchedulerJobsAlive(
+    { flags },
+    {
+      observedAt: runFinishedAt,
+      durationMs,
+      detail: {
+        assets_processed: assetsProcessed,
+        slots_generated: slotsGenerated,
+      },
+    },
+  ).catch(() => {
+    /* best-effort — self-check update must not break scheduler */
+  });
 }

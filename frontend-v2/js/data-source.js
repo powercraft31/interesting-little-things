@@ -594,6 +594,50 @@ var DataSource = (function () {
     },
   };
 
+  // ── Runtime (P7 — v6.10 runtime governance, admin-only) ───
+  // Consumes backend /api/runtime/* contract directly.
+  // No mock fallback: frontend must not invent runtime semantics.
+  var runtime = {
+    health: function () {
+      return apiGet("/api/runtime/health");
+    },
+    issues: function () {
+      return apiGet("/api/runtime/issues");
+    },
+    issueDetail: function (fingerprint) {
+      return apiGet(
+        "/api/runtime/issues/" + encodeURIComponent(fingerprint),
+      );
+    },
+    events: function (limit) {
+      var qs = limit ? "?limit=" + encodeURIComponent(limit) : "";
+      return apiGet("/api/runtime/events" + qs);
+    },
+    selfChecks: function () {
+      return apiGet("/api/runtime/self-checks");
+    },
+    closeIssue: function (fingerprint, body) {
+      return apiPost(
+        "/api/runtime/issues/" + encodeURIComponent(fingerprint) + "/close",
+        body || {},
+      );
+    },
+    suppressIssue: function (fingerprint, body) {
+      return apiPost(
+        "/api/runtime/issues/" +
+          encodeURIComponent(fingerprint) +
+          "/suppress",
+        body || {},
+      );
+    },
+    noteIssue: function (fingerprint, body) {
+      return apiPost(
+        "/api/runtime/issues/" + encodeURIComponent(fingerprint) + "/note",
+        body || {},
+      );
+    },
+  };
+
   // ── Asset (P3 History) ───────────────────────────────────
   var asset = {
     telemetry: function (assetId, from, to, resolution) {
@@ -640,5 +684,6 @@ var DataSource = (function () {
     alerts: alerts,
     performance: performance,
     asset: asset,
+    runtime: runtime,
   };
 })();

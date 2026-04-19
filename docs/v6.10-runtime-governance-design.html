@@ -1,0 +1,118 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solfacil v6.10 Runtime Governance Skeleton — DESIGN</title>
+  <style>
+    :root { --bg:#0b1020; --panel:#121a2b; --panel2:#18233a; --text:#e8eefc; --muted:#9fb0d1; --line:#2b3958; --accent:#68d5ff; --good:#4ade80; --warn:#fbbf24; }
+    *{box-sizing:border-box} body{margin:0;background:linear-gradient(180deg,#0b1020,#0f172a);color:var(--text);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC",sans-serif}
+    .wrap{max-width:1200px;margin:0 auto;padding:32px 20px 80px}.hero,.card{background:rgba(18,26,43,.94);border:1px solid var(--line);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.22)}
+    .hero{padding:28px;margin-bottom:20px}.card{padding:22px}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:20px}.col-12{grid-column:span 12}.col-8{grid-column:span 8}.col-4{grid-column:span 4}.col-6{grid-column:span 6}
+    h1,h2,h3{margin:0 0 12px;line-height:1.25} h1{font-size:34px} h2{font-size:24px;margin-top:28px} p,li{color:var(--text)} .muted{color:var(--muted)} .badges{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 6px}.badge{padding:6px 10px;border-radius:999px;font-size:13px;border:1px solid var(--line);background:var(--panel2)}
+    .quote{border-left:4px solid var(--accent);padding:10px 14px;background:rgba(104,213,255,.08);border-radius:10px}.mini-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.mini{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:14px}.mini .label{color:var(--muted);font-size:13px}.mini .value{font-size:22px;font-weight:700;margin-top:4px}
+    table{width:100%;border-collapse:collapse;margin-top:10px} th,td{border-bottom:1px solid var(--line);padding:10px 8px;text-align:left;vertical-align:top} th{color:var(--muted);font-weight:600}
+    code{color:var(--accent)} .footer{margin-top:24px;color:var(--muted);font-size:14px}
+    @media (max-width:900px){.col-12,.col-8,.col-6,.col-4{grid-column:span 12}h1{font-size:28px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <section class="hero">
+    <div class="muted">DESIGN aligned · Claude-authored with Ryan review/revision · 2026-04-18</div>
+    <h1>Solfacil v6.10 Runtime Governance Skeleton</h1>
+    <p>這份 DESIGN 把 REQ 收斂成可落地的架構：<strong>spine 放在 M9 shared layer</strong>，用統一 event contract、lifecycle、health summary、self-check read model 與 <code>/api/runtime/*</code> backend surface，去建立 phase-1 的 runtime governance 骨架。</p>
+    <div class="badges">
+      <span class="badge">Status: reviewed / revised</span>
+      <span class="badge">Audience: internal ops first</span>
+      <span class="badge">Coverage: narrow but deep</span>
+      <span class="badge">Surface priority: backend first</span>
+      <span class="badge">Source: <code>docs/v6.10-runtime-governance-design.md</code></span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="card col-8">
+      <h2>你先看這裡</h2>
+      <div class="quote"><strong>設計一句話：</strong> 把 runtime governance spine 安裝進 M9 shared layer，讓各模塊 emit 標準化 facts，由 spine 統一做 event schema、severity、lifecycle、issue projection、self-check 與 health summary。</div>
+      <ul>
+        <li>不是新 monolith，也不是先做一頁漂亮 dashboard。</li>
+        <li>phase-1 只接最關鍵的 runtime path：BFF、DB、M1 ingest、M3 dispatch、scheduler/cron。</li>
+        <li>operator-facing 核心是 <code>/api/runtime/*</code>；UI 只做最小可用的 <code>#runtime</code>。</li>
+        <li>P5/P6 domain surfaces 明確分離，不混寫、不共表、不偷語義。</li>
+      </ul>
+    </section>
+
+    <aside class="card col-4">
+      <h2>核心設計判斷</h2>
+      <div class="mini-grid">
+        <div class="mini"><div class="label">Spine placement</div><div class="value">M9</div></div>
+        <div class="mini"><div class="label">Primary contract</div><div class="value">/api/runtime/*</div></div>
+        <div class="mini"><div class="label">Issue model</div><div class="value">1 row / fingerprint</div></div>
+        <div class="mini"><div class="label">Self-check read model</div><div class="value">explicit table</div></div>
+      </div>
+    </aside>
+
+    <section class="card col-6">
+      <h2>架構落點</h2>
+      <ul>
+        <li><code>backend/src/shared/runtime/*</code> 成為 spine 主體</li>
+        <li><code>types/runtime.ts</code> 定義 canonical event / issue / lifecycle types</li>
+        <li><code>002_runtime_governance.sql</code> 建 runtime tables</li>
+        <li>BFF 暴露 read/write operator endpoints</li>
+      </ul>
+    </section>
+
+    <section class="card col-6">
+      <h2>資料模型決策</h2>
+      <ul>
+        <li><code>runtime_events</code>：append-only raw history</li>
+        <li><code>runtime_issues</code>：單 row projection，reopen 不創第二個 issue id，而是同 row 開新 cycle</li>
+        <li><code>runtime_self_checks</code>：latest-state read model</li>
+        <li><code>runtime_health_snapshots</code>：5 分鐘 cadence 的 posture snapshots</li>
+      </ul>
+    </section>
+
+    <section class="card col-12">
+      <h2>Phase-1 onboarding set</h2>
+      <table>
+        <thead><tr><th>Source</th><th>Why first</th><th>What becomes governed</th></tr></thead>
+        <tbody>
+          <tr><td>BFF request lifecycle</td><td>所有 user-facing path 的入口</td><td>unhandled exception boundary、auth failure bursts、wrapHandler catch-all</td></tr>
+          <tr><td>Shared DB pool</td><td>幾乎所有 runtime path 的共用底座</td><td>reachability、query timeout、connection failure、self-check results</td></tr>
+          <tr><td>M1 ingest pipeline</td><td>沒有新鮮資料就沒有平台真相</td><td>telemetry stale、fragment backlog、parser failure bursts</td></tr>
+          <tr><td>M3 dispatch loops</td><td>最典型的「系統活著但工作沒在做」</td><td>dispatcher / timeout checker heartbeat、ack stall</td></tr>
+          <tr><td>Scheduler / cron</td><td>時間邊界正確性的來源</td><td>schedule generator、aggregators、billing job heartbeats / errors</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card col-6">
+      <h2>Ryan review 後修正的關鍵點</h2>
+      <ul>
+        <li>修掉 <code>runtime_issues</code> reopen identity 矛盾：現在明確採用單 row / fingerprint + <code>cycle_count</code></li>
+        <li>補齊 <code>runtime_self_checks</code> table，讓 <code>/api/runtime/self-checks</code> 有明確讀模型</li>
+        <li>澄清 <code>overall: "disabled"</code> 只是 API-level posture，不是 severity/state enum</li>
+        <li>澄清 <code>redis.*</code> 在 phase-1 只是 reserved namespace，不進固定 component summary</li>
+      </ul>
+    </section>
+
+    <section class="card col-6">
+      <h2>明確 defer 的東西</h2>
+      <ul>
+        <li>SSE push for runtime issues</li>
+        <li>alert routing（email / Slack / webhook）</li>
+        <li>customer-facing subset</li>
+        <li>trend charts / broader UX polish</li>
+        <li>external-source event ingest</li>
+      </ul>
+    </section>
+  </div>
+
+  <div class="footer">
+    Markdown source: <code>/home/alan/src/solfacil/docs/v6.10-runtime-governance-design.md</code><br/>
+    Related REQ HTML: <code>/home/alan/src/solfacil/docs/v6.10-runtime-governance-req.html</code>
+  </div>
+</div>
+</body>
+</html>

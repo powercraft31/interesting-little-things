@@ -7,6 +7,20 @@ import type { ParsedTelemetry } from "../../shared/types/telemetry";
 import { DeviceAssetCache } from "./device-asset-cache";
 import { MessageBuffer } from "./message-buffer";
 import { parseProtocolTimestamp } from "../../shared/protocol-time";
+import { parseRuntimeFlags } from "../../shared/runtime/flags";
+import {
+  emitIngestFragmentBacklog,
+  emitIngestParserFailed,
+} from "../../shared/runtime/ingest-emitters";
+
+/**
+ * Fragment backlog thresholds (v6.10 WS5).
+ *
+ * HIGH crosses the emit boundary once per backlog episode; LOW re-arms so a
+ * new backlog emits a fresh detect after the queue drains.
+ */
+const FRAGMENT_BACKLOG_HIGH_WATER = 100;
+const FRAGMENT_BACKLOG_LOW_WATER = 50;
 
 /**
  * FragmentAssembler — Per-gateway fragment accumulator for Solfacil Protocol v1.2.
@@ -69,6 +83,7 @@ function getInstances(pool: Pool): {
 
 export class FragmentAssembler {
   private readonly accumulators = new Map<string, Accumulator>();
+  private backlogAlertActive = false;
 
   constructor(
     private readonly pool: Pool,
@@ -84,11 +99,26 @@ export class FragmentAssembler {
     let recordedAt: Date;
     try {
       recordedAt = parseProtocolTimestamp(payload.timeStamp);
-    } catch {
+    } catch (err) {
       console.warn(`[FragmentAssembler] Invalid timeStamp "${payload.timeStamp}" for ${clientId}, skipping`);
+      // WS5: emit runtime parser-failure fact (best-effort). Does NOT collapse
+      // into domain alarm semantics; a malformed fragment stays silent for
+      // business logic and is visible only via runtime_issues.
+      void emitIngestParserFailed(
+        { flags: parseRuntimeFlags(process.env) },
+        {
+          parserId: "fragment-assembler.protocol-timestamp",
+          error: err instanceof Error ? err : new Error(String(err)),
+          gatewayId: clientId,
+          reason: "invalid_protocol_timestamp",
+        },
+      ).catch(() => {
+        /* best-effort — ingest flow must not break on emitter failure */
+      });
       return;
     }
     const acc = this.getOrCreateAccumulator(clientId, recordedAt);
+    this.maybeEmitBacklog();
 
     const isCoreMessage = this.classifyAndAccumulate(acc, data);
 
@@ -180,12 +210,34 @@ export class FragmentAssembler {
     });
   }
 
+  private maybeEmitBacklog(): void {
+    const size = this.accumulators.size;
+    if (size >= FRAGMENT_BACKLOG_HIGH_WATER && !this.backlogAlertActive) {
+      this.backlogAlertActive = true;
+      const sample = Array.from(this.accumulators.keys()).slice(0, 5);
+      void emitIngestFragmentBacklog(
+        { flags: parseRuntimeFlags(process.env) },
+        {
+          backlogCount: size,
+          thresholdCount: FRAGMENT_BACKLOG_HIGH_WATER,
+          assemblerKind: "live",
+          sampleClientIds: sample,
+        },
+      ).catch(() => {
+        /* best-effort — backlog emit must not break fragment flow */
+      });
+    } else if (size <= FRAGMENT_BACKLOG_LOW_WATER && this.backlogAlertActive) {
+      this.backlogAlertActive = false;
+    }
+  }
+
   private async mergeAndPersist(clientId: string): Promise<void> {
     const acc = this.accumulators.get(clientId);
     if (!acc) return;
 
     // Remove accumulator immediately to prevent double-flush
     this.accumulators.delete(clientId);
+    this.maybeEmitBacklog();
 
     // Step 1: Write ems_health to gateways (always, even without core)
     if (acc.ems) {

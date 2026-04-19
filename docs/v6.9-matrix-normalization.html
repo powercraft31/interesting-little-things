@@ -1,0 +1,69 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solfacil v6.9 Matrix Normalization</title>
+  <style>
+    :root { --bg:#0b1020; --panel:#121a2b; --panel2:#18233a; --text:#e8eefc; --muted:#9fb0d1; --line:#2b3958; --accent:#68d5ff; }
+    *{box-sizing:border-box} body{margin:0;background:linear-gradient(180deg,#0b1020,#0f172a);color:var(--text);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC",sans-serif}
+    .wrap{max-width:1180px;margin:0 auto;padding:32px 20px 80px}.hero,.card{background:rgba(18,26,43,.94);border:1px solid var(--line);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.22)} .hero{padding:28px;margin-bottom:20px}.card{padding:22px}.grid{display:grid;grid-template-columns:repeat(12,1fr);gap:20px}.col-12{grid-column:span 12}.col-8{grid-column:span 8}.col-4{grid-column:span 4}.col-6{grid-column:span 6}
+    h1,h2{margin:0 0 12px;line-height:1.25} h1{font-size:34px} h2{font-size:24px;margin-top:28px}.muted{color:var(--muted)} .badge{display:inline-block;padding:6px 10px;border-radius:999px;font-size:13px;border:1px solid var(--line);background:var(--panel2);margin:6px 8px 0 0}
+    .quote{border-left:4px solid var(--accent);padding:10px 14px;background:rgba(104,213,255,.08);border-radius:10px} table{width:100%;border-collapse:collapse;margin-top:10px} th,td{border-bottom:1px solid var(--line);padding:10px 8px;text-align:left;vertical-align:top} th{color:var(--muted)} code{color:var(--accent)}
+    @media (max-width:900px){.col-12,.col-8,.col-4,.col-6{grid-column:span 12}h1{font-size:28px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <section class="hero">
+    <div class="muted">v6.9 canonicalization · code-backed normalization · 2026-04-18</div>
+    <h1>Solfacil v6.9 Matrix Normalization</h1>
+    <p>這次不是照舊 design 檔抄寫，而是以<strong>最終完成代碼</strong>反推 canonical architecture truth，將 v6.9 從 topic-style security docs 拉回矩陣式主文檔/模塊文檔框架。</p>
+    <span class="badge">code-backed</span>
+    <span class="badge">matrix restored</span>
+    <span class="badge">baseline for v6.10 corrected</span>
+  </section>
+
+  <div class="grid">
+    <section class="card col-8">
+      <h2>你先看這裡</h2>
+      <div class="quote"><strong>最核心判斷：</strong> 6.9 的內容方向本來就大致正確，但 canonical packaging 錯了。現在已經回正：v6.9 不再只存在於 <code>docs/v6.9-*.md</code>，而是有自己的 matrix-aligned canonical set。</div>
+      <ul>
+        <li>BFF final code 確認：cookie-first auth、session endpoint、abuse control、security headers。</li>
+        <li>shared final code 確認：JWT secret fail-fast、無 production-capable fallback。</li>
+        <li>frontend final code 確認：browser 以 <code>/api/auth/session</code> 為 session truth，不再把 auth token 放進 localStorage。</li>
+        <li>DB final truth：v6.9 無 schema delta，這件事現在也被 canonical 文檔化。</li>
+      </ul>
+    </section>
+
+    <section class="card col-4">
+      <h2>Canonical set</h2>
+      <ul>
+        <li><code>design/backend_architecture/00_MASTER_ARCHITECTURE_v6.9.md</code></li>
+        <li><code>design/backend_architecture/05_BFF_MODULE_v6.9.md</code></li>
+        <li><code>design/backend_architecture/06_IDENTITY_MODULE_v6.9.md</code></li>
+        <li><code>design/backend_architecture/09_SHARED_LAYER_v6.9.md</code></li>
+        <li><code>design/backend_architecture/10_DATABASE_SCHEMA_v6.9.md</code></li>
+        <li><code>docs/FRONTEND_ARCHITECTURE_v6.9.md</code></li>
+      </ul>
+    </section>
+
+    <section class="card col-12">
+      <h2>Code evidence → canonical doc mapping</h2>
+      <table>
+        <thead><tr><th>Final code evidence</th><th>What it proves</th><th>Canonical doc owner</th></tr></thead>
+        <tbody>
+          <tr><td><code>backend/src/bff/middleware/auth.ts</code></td><td>cookie-first auth resolution; browser/machine split; cookie wins</td><td><code>05_BFF_MODULE_v6.9.md</code> + <code>06_IDENTITY_MODULE_v6.9.md</code></td></tr>
+          <tr><td><code>backend/src/bff/handlers/auth-login.ts</code><br/><code>auth-session.ts</code></td><td>browser login no token body; machine explicit token path; session endpoint as browser truth</td><td><code>05_BFF_MODULE_v6.9.md</code> + <code>06_IDENTITY_MODULE_v6.9.md</code></td></tr>
+          <tr><td><code>backend/src/bff/middleware/rate-limit.ts</code><br/><code>backend/scripts/local-server.ts</code></td><td>login abuse control is app-owned and non-dev fail-fast without Redis</td><td><code>05_BFF_MODULE_v6.9.md</code></td></tr>
+          <tr><td><code>backend/src/bff/middleware/security-headers.ts</code></td><td>browser hardening headers are app-layer owned; HSTS stays ingress-owned</td><td><code>05_BFF_MODULE_v6.9.md</code> + <code>00_MASTER_ARCHITECTURE_v6.9.md</code></td></tr>
+          <tr><td><code>backend/src/shared/auth/validate-jwt-secret.ts</code><br/><code>tenant-context.ts</code></td><td>JWT secret fail-fast and no weak fallback</td><td><code>09_SHARED_LAYER_v6.9.md</code></td></tr>
+          <tr><td><code>frontend-v2/js/login.js</code><br/><code>app.js</code><br/><code>data-source.js</code></td><td>cookie-first browser auth completed on frontend path</td><td><code>FRONTEND_ARCHITECTURE_v6.9.md</code></td></tr>
+          <tr><td>absence of new auth/session DDL</td><td>v6.9 schema unchanged</td><td><code>10_DATABASE_SCHEMA_v6.9.md</code></td></tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+</div>
+</body>
+</html>

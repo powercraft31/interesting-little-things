@@ -9,6 +9,7 @@ export type LocalDbContractFacts = {
   asset5MinOwner: string | null;
   assetTypeConstraintDef: string | null;
   fiveMinPartitionProbeSucceeded: boolean;
+  runtimeEventsPartitions: string[];
 };
 
 export type ContractCheck = {
@@ -32,10 +33,19 @@ const REQUIRED_TABLES = [
   "asset_hourly_metrics",
   "gateways",
   "device_command_logs",
+  "device_command_logs_archive",
   "backfill_requests",
   "gateway_alarm_events",
+  "gateway_alarm_events_archive",
   "ems_health",
+  "runtime_events",
+  "runtime_issues",
+  "runtime_self_checks",
+  "runtime_health_snapshots",
 ] as const;
+
+const RUNTIME_EVENTS_DEFAULT_PARTITION = "runtime_events_default";
+const RUNTIME_EVENTS_MONTHLY_PATTERN = /^runtime_events_\d{6}$/;
 
 const REQUIRED_COLUMNS: Record<string, readonly string[]> = {
   asset_hourly_metrics: [
@@ -47,15 +57,34 @@ const REQUIRED_COLUMNS: Record<string, readonly string[]> = {
     "peak_battery_power_kw",
   ],
   device_command_logs: ["dispatched_at", "acked_at"],
+  device_command_logs_archive: ["archived_at", "archive_reason"],
+  gateway_alarm_events_archive: ["archived_at", "archive_reason"],
 };
 
 const REQUIRED_INDEXES = [
   "idx_backfill_active",
+  "idx_backfill_requests_terminal_cutoff",
+  "idx_device_command_logs_retention_eligibility",
+  "idx_device_command_logs_archive_archived_at",
+  "device_command_logs_archive_pkey",
+  "idx_gateway_alarm_events_retention_cutoff",
+  "idx_gateway_alarm_events_archive_archived_at",
+  "gateway_alarm_events_archive_pkey",
   "idx_telemetry_unique_asset_time",
   "idx_gae_gateway_event",
   "idx_gae_org",
   "idx_gae_status_active",
   "idx_gae_event_create_time",
+  "idx_runtime_events_observed_at",
+  "idx_runtime_events_fingerprint_observed",
+  "idx_runtime_events_source_observed",
+  "idx_runtime_events_severity_observed",
+  "idx_runtime_issues_state_last_observed",
+  "idx_runtime_issues_source_state",
+  "idx_runtime_issues_tenant_scope_state",
+  "idx_runtime_issues_active",
+  "idx_runtime_issues_closed_at",
+  "idx_runtime_health_snapshots_captured_at",
 ] as const;
 
 function toStringSet(items: readonly string[]): Set<string> {
@@ -128,6 +157,28 @@ export function verifyLocalDbContract(facts: LocalDbContractFacts): LocalDbContr
     ),
   );
 
+  const runtimePartitions = toStringSet(facts.runtimeEventsPartitions);
+  const hasDefaultPartition = runtimePartitions.has(RUNTIME_EVENTS_DEFAULT_PARTITION);
+  const hasMonthlyPartition = facts.runtimeEventsPartitions.some((name) =>
+    RUNTIME_EVENTS_MONTHLY_PATTERN.test(name),
+  );
+
+  checks.push(
+    buildCheck(
+      "runtime_events partition: default partition bootstrapped",
+      hasDefaultPartition,
+      `missing runtime_events partition: ${RUNTIME_EVENTS_DEFAULT_PARTITION}`,
+    ),
+  );
+
+  checks.push(
+    buildCheck(
+      "runtime_events partition: at least one monthly partition bootstrapped",
+      hasMonthlyPartition,
+      "missing runtime_events partition: at least one monthly partition (runtime_events_YYYYMM)",
+    ),
+  );
+
   const failures = checks.flatMap((check) => (check.ok || !check.failure ? [] : [check.failure]));
   return {
     ok: failures.length === 0,
@@ -171,6 +222,10 @@ async function collectExistingColumns(pool: Queryable): Promise<Record<string, s
         (table_name = 'asset_hourly_metrics' AND column_name = ANY(ARRAY['pv_generation_kwh', 'grid_import_kwh', 'grid_export_kwh', 'load_consumption_kwh', 'avg_battery_soc', 'peak_battery_power_kw']))
         OR
         (table_name = 'device_command_logs' AND column_name = ANY(ARRAY['dispatched_at', 'acked_at']))
+        OR
+        (table_name = 'device_command_logs_archive' AND column_name = ANY(ARRAY['archived_at', 'archive_reason']))
+        OR
+        (table_name = 'gateway_alarm_events_archive' AND column_name = ANY(ARRAY['archived_at', 'archive_reason']))
       )
     ORDER BY table_name, column_name
   `);
@@ -206,43 +261,101 @@ export async function probeFiveMinPartitionCreation(pool: Queryable): Promise<bo
 }
 
 export async function collectLocalDbContractFacts(pool: Queryable): Promise<LocalDbContractFacts> {
-  const [existingTables, existingIndexes, existingColumns, schemaPrivilegeRows, ownerRows, constraintRows, fiveMinPartitionProbeSucceeded] =
-    await Promise.all([
-      querySingleColumn(
-        pool,
-        `SELECT tablename
-         FROM pg_tables
-         WHERE schemaname = 'public'
-           AND tablename = ANY(ARRAY['asset_5min_metrics', 'asset_hourly_metrics', 'gateways', 'device_command_logs', 'backfill_requests', 'gateway_alarm_events', 'ems_health'])
-         ORDER BY tablename`,
-      ),
-      querySingleColumn(
-        pool,
-        `SELECT indexname
-         FROM pg_indexes
-         WHERE schemaname = 'public'
-           AND indexname = ANY(ARRAY['idx_backfill_active', 'idx_telemetry_unique_asset_time', 'idx_gae_gateway_event', 'idx_gae_org', 'idx_gae_status_active', 'idx_gae_event_create_time'])
-         ORDER BY indexname`,
-      ),
-      collectExistingColumns(pool),
-      pool.query<{ has_create: boolean }>(
-        "SELECT has_schema_privilege('solfacil_service', 'public', 'CREATE') AS has_create",
-      ),
-      pool.query<{ owner_name: string | null }>(`
+  const [
+    existingTables,
+    existingIndexes,
+    existingColumns,
+    schemaPrivilegeRows,
+    ownerRows,
+    constraintRows,
+    fiveMinPartitionProbeSucceeded,
+    runtimeEventsPartitions,
+  ] = await Promise.all([
+    querySingleColumn(
+      pool,
+      `SELECT c.relname AS table_name
+       FROM pg_class c
+       JOIN pg_namespace n ON n.oid = c.relnamespace
+       WHERE n.nspname = 'public'
+         AND c.relkind IN ('r', 'p')
+         AND c.relname = ANY(ARRAY[
+           'asset_5min_metrics',
+           'asset_hourly_metrics',
+           'gateways',
+           'device_command_logs',
+           'device_command_logs_archive',
+           'backfill_requests',
+           'gateway_alarm_events',
+           'gateway_alarm_events_archive',
+           'ems_health',
+           'runtime_events',
+           'runtime_issues',
+           'runtime_self_checks',
+           'runtime_health_snapshots'
+         ])
+       ORDER BY c.relname`,
+    ),
+    querySingleColumn(
+      pool,
+      `SELECT indexname
+       FROM pg_indexes
+       WHERE schemaname = 'public'
+         AND indexname = ANY(ARRAY[
+           'idx_backfill_active',
+           'idx_backfill_requests_terminal_cutoff',
+           'idx_device_command_logs_retention_eligibility',
+           'idx_device_command_logs_archive_archived_at',
+           'device_command_logs_archive_pkey',
+           'idx_gateway_alarm_events_retention_cutoff',
+           'idx_gateway_alarm_events_archive_archived_at',
+           'gateway_alarm_events_archive_pkey',
+           'idx_telemetry_unique_asset_time',
+           'idx_gae_gateway_event',
+           'idx_gae_org',
+           'idx_gae_status_active',
+           'idx_gae_event_create_time',
+           'idx_runtime_events_observed_at',
+           'idx_runtime_events_fingerprint_observed',
+           'idx_runtime_events_source_observed',
+           'idx_runtime_events_severity_observed',
+           'idx_runtime_issues_state_last_observed',
+           'idx_runtime_issues_source_state',
+           'idx_runtime_issues_tenant_scope_state',
+           'idx_runtime_issues_active',
+           'idx_runtime_issues_closed_at',
+           'idx_runtime_health_snapshots_captured_at'
+         ])
+       ORDER BY indexname`,
+    ),
+    collectExistingColumns(pool),
+    pool.query<{ has_create: boolean }>(
+      "SELECT has_schema_privilege('solfacil_service', 'public', 'CREATE') AS has_create",
+    ),
+    pool.query<{ owner_name: string | null }>(`
         SELECT pg_get_userbyid(c.relowner) AS owner_name
         FROM pg_class c
         JOIN pg_namespace n ON n.oid = c.relnamespace
         WHERE n.nspname = 'public' AND c.relname = 'asset_5min_metrics'
         LIMIT 1
       `),
-      pool.query<{ constraint_def: string | null }>(`
+    pool.query<{ constraint_def: string | null }>(`
         SELECT pg_get_constraintdef(oid) AS constraint_def
         FROM pg_constraint
         WHERE conname = 'assets_asset_type_check'
         LIMIT 1
       `),
-      probeFiveMinPartitionCreation(pool),
-    ]);
+    probeFiveMinPartitionCreation(pool),
+    querySingleColumn(
+      pool,
+      `SELECT child.relname AS partition_name
+       FROM pg_inherits i
+       JOIN pg_class parent ON parent.oid = i.inhparent
+       JOIN pg_class child ON child.oid = i.inhrelid
+       JOIN pg_namespace n ON n.oid = child.relnamespace
+       WHERE n.nspname = 'public' AND parent.relname = 'runtime_events'
+       ORDER BY child.relname`,
+    ),
+  ]);
 
   return {
     existingTables,
@@ -252,6 +365,7 @@ export async function collectLocalDbContractFacts(pool: Queryable): Promise<Loca
     asset5MinOwner: ownerRows.rows[0]?.owner_name ?? null,
     assetTypeConstraintDef: constraintRows.rows[0]?.constraint_def ?? null,
     fiveMinPartitionProbeSucceeded,
+    runtimeEventsPartitions,
   };
 }
 

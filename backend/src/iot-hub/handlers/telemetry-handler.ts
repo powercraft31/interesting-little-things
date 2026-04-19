@@ -2,6 +2,12 @@ import { Pool } from "pg";
 import type { SolfacilMessage } from "../../shared/types/solfacil-protocol";
 import { FragmentAssembler } from "../services/fragment-assembler";
 import { parseProtocolTimestamp } from "../../shared/protocol-time";
+import { parseRuntimeFlags } from "../../shared/runtime/flags";
+import {
+  emitIngestTelemetryStale,
+  maybeEmitIngestTelemetryRecovered,
+  recordIngestFreshness,
+} from "../../shared/runtime/ingest-emitters";
 
 /**
  * PR3 / v6.1: TelemetryHandler
@@ -13,6 +19,11 @@ import { parseProtocolTimestamp } from "../../shared/protocol-time";
  * When a gap > 5 min is detected on the Gateway primary telemetry stream,
  * inserts a backfill_request. This is the sole backfill trigger path
  * (heartbeat-handler no longer triggers backfill).
+ *
+ * v6.10 WS5: The same gap boundary also emits `ingest.telemetry.stale`
+ * (best-effort) and every successfully parsed telemetry cadence ticks the
+ * `ingest.freshness` self-check. Runtime governance is strictly observational
+ * and never gates the existing backfill/telemetry flow.
  *
  * TimeStamp Rule: `recorded_at` comes from `payload.timeStamp`.
  * Server-side NOW() is FORBIDDEN for telemetry writes.
@@ -44,6 +55,12 @@ function getLastTelemetryCache(pool: Pool): Map<string, Date> {
   return cache;
 }
 
+interface GapCheckResult {
+  readonly previousDate: Date | null;
+  readonly gapMs: number | null;
+  readonly gapDetected: boolean;
+}
+
 /**
  * Handle telemetry data message from a gateway.
  * Delegates to FragmentAssembler for fragment accumulation and merge.
@@ -55,14 +72,22 @@ export async function handleTelemetry(
   _clientId: string,
   payload: SolfacilMessage,
 ): Promise<void> {
-  // v6.1: Gateway-level telemetry gap detection for backfill trigger
+  // v6.1: Gateway-level telemetry gap detection for backfill trigger.
+  // v6.10 WS5 / I3 fix: same boundary drives runtime governance —
+  // stale + recovery lifecycle + ingest.freshness self-check state.
   let currentDate: Date;
+  let gap: GapCheckResult | null = null;
   try {
     currentDate = parseProtocolTimestamp(payload.timeStamp);
-    await checkTelemetryGap(pool, gatewayId, currentDate);
+    gap = await checkTelemetryGap(pool, gatewayId, currentDate);
   } catch {
-    // Invalid timestamp - skip gap check, still pass to assembler
+    // Invalid timestamp - skip gap check + runtime governance, still pass to assembler
+    const assembler = getAssembler(pool);
+    assembler.receive(payload.clientId, payload);
+    return;
   }
+
+  emitRuntimeGovernance(gatewayId, currentDate, gap);
 
   const assembler = getAssembler(pool);
   assembler.receive(payload.clientId, payload);
@@ -71,24 +96,28 @@ export async function handleTelemetry(
 /**
  * v6.1: Check for telemetry gap > 5 min on gateway primary stream.
  * If gap detected, insert backfill_request with status='pending'.
+ * Domain-level only — runtime governance emission is handled separately
+ * at the same boundary by emitRuntimeGovernance().
  */
 async function checkTelemetryGap(
   pool: Pool,
   gatewayId: string,
   currentDate: Date,
-): Promise<void> {
+): Promise<GapCheckResult> {
   const cache = getLastTelemetryCache(pool);
-  const previousDate = cache.get(gatewayId);
+  const previousDate = cache.get(gatewayId) ?? null;
 
   cache.set(gatewayId, currentDate);
 
-  if (previousDate === undefined) return;
+  if (previousDate === null) {
+    return { previousDate: null, gapMs: null, gapDetected: false };
+  }
 
   const gapMs = currentDate.getTime() - previousDate.getTime();
 
   if (gapMs < 0) {
     console.warn(`[TelemetryHandler] Clock rollback detected for ${gatewayId}: ${gapMs}ms, skipping gap check`);
-    return;
+    return { previousDate, gapMs, gapDetected: false };
   }
 
   if (gapMs > BACKFILL_GAP_THRESHOLD_MS) {
@@ -100,7 +129,98 @@ async function checkTelemetryGap(
     console.log(
       `[TelemetryHandler] Backfill trigger: ${gatewayId}, gap=${Math.round(gapMs / 60000)}min`,
     );
+    return { previousDate, gapMs, gapDetected: true };
   }
+
+  return { previousDate, gapMs, gapDetected: false };
+}
+
+/**
+ * v6.10 WS5 / I3 fix: drive M1 runtime governance at the telemetry boundary.
+ *
+ *  - On gap boundary: emit `ingest.telemetry.stale` (detect) AND flip the
+ *    ingest.freshness self-check to last_status='stale'.
+ *  - On fresh arrival (no gap): call the canonical-authority recovery helper.
+ *    Recovery is driven by the runtime_issues row itself (same fingerprint),
+ *    not by process-local state, so a restart between detect and recovery
+ *    cannot lose authority. Then record freshness 'pass'. No new event codes.
+ *
+ * All runtime emission is fire-and-forget; emitters themselves enforce the
+ * disabled / best-effort / no-active-issue contracts so the ingest hot path
+ * stays silent.
+ */
+function emitRuntimeGovernance(
+  gatewayId: string,
+  currentDate: Date,
+  gap: GapCheckResult,
+): void {
+  const flags = parseRuntimeFlags(process.env);
+  const tenantScope = `gateway:${gatewayId}`;
+
+  if (gap.gapDetected && gap.previousDate !== null && gap.gapMs !== null) {
+    void emitIngestTelemetryStale(
+      { flags },
+      {
+        tenantScope,
+        gatewayId,
+        lastObservedAt: gap.previousDate,
+        observedAt: currentDate,
+        staleForMs: gap.gapMs,
+        thresholdMs: BACKFILL_GAP_THRESHOLD_MS,
+      },
+    ).catch(() => {
+      /* best-effort — runtime emission never blocks backfill flow */
+    });
+
+    void recordIngestFreshness(
+      { flags },
+      {
+        status: "stale",
+        observedAt: gap.previousDate,
+        detail: {
+          gateway_id: gatewayId,
+          last_observed_at: gap.previousDate.toISOString(),
+          observed_at: currentDate.toISOString(),
+          stale_for_ms: gap.gapMs,
+          threshold_ms: BACKFILL_GAP_THRESHOLD_MS,
+        },
+      },
+    ).catch(() => {
+      /* best-effort — emitter already logs its own fallback */
+    });
+
+    return;
+  }
+
+  // Fresh arrival: canonical recovery. Authority is the runtime_issues row —
+  // the helper is a no-op when there's no active detected/ongoing issue, so
+  // normal cadence does not synthesize recovered rows.
+  if (gap.previousDate !== null) {
+    const recoveryGapMs = currentDate.getTime() - gap.previousDate.getTime();
+    void maybeEmitIngestTelemetryRecovered(
+      { flags },
+      {
+        tenantScope,
+        gatewayId,
+        lastObservedAt: gap.previousDate,
+        observedAt: currentDate,
+        gapMs: recoveryGapMs,
+      },
+    ).catch(() => {
+      /* best-effort */
+    });
+  }
+
+  void recordIngestFreshness(
+    { flags },
+    {
+      status: "pass",
+      observedAt: currentDate,
+      detail: { gateway_id: gatewayId, observed_at: currentDate.toISOString() },
+    },
+  ).catch(() => {
+    /* best-effort — emitter already logs its own fallback */
+  });
 }
 
 /** For testing: destroy the cached assembler for a pool. */

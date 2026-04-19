@@ -253,9 +253,8 @@ describe("CommandTracker", () => {
       expect(updateQ!.sql).toContain("LIMIT 1");
     });
 
-    it("inserts standalone set_reply when no pending command found", async () => {
+    it("inserts standalone terminal set_reply with resolved_at when no matching command is found", async () => {
       const pool = createMockPool();
-      // Simulate no pending command found
       pool.setResult("update_pending", { rows: [], rowCount: 0 });
 
       await handleSetReply(
@@ -265,12 +264,32 @@ describe("CommandTracker", () => {
         SET_REPLY_SUCCESS,
       );
 
-      // Should have UPDATE (rowCount=0) then INSERT
       const insertQ = pool.queries.find((q) =>
         q.sql.includes("INSERT INTO device_command_logs") &&
         q.sql.includes("'set_reply'"),
       );
       expect(insertQ).toBeDefined();
+      expect(insertQ!.sql).toContain("resolved_at");
+    });
+
+    it("does not mark standalone accepted set_reply as terminal", async () => {
+      const pool = createMockPool();
+      pool.setResult("update_pending", { rows: [], rowCount: 0 });
+
+      await handleSetReply(
+        pool as unknown as import("pg").Pool,
+        "gw-001",
+        "CID",
+        SET_REPLY_ACCEPTED,
+      );
+
+      const insertQ = pool.queries.find((q) =>
+        q.sql.includes("INSERT INTO device_command_logs") &&
+        q.sql.includes("'set_reply'"),
+      );
+      expect(insertQ).toBeDefined();
+      expect(insertQ!.sql).not.toContain("resolved_at");
+      expect(insertQ!.params[3]).toBe("accepted");
     });
 
     it("parses device_timestamp from payload.timeStamp", async () => {

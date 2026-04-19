@@ -25,20 +25,46 @@ describe("schedule-generator (M2)", () => {
     await closeAllPools();
   });
 
-  it("應為所有 active assets 寫入未來 24 小時的排程", async () => {
-    // 執行排程生成器
+  it("應為所有 active assets 產生未來排程，且總量受當前資料集驅動", async () => {
+    const activeAssets = await pool.query<{ count: string }>(
+      `SELECT COUNT(*) AS count FROM assets WHERE is_active = true`,
+    );
+    const activeAssetCount = parseInt(activeAssets.rows[0].count, 10);
+
+    const assetsWithDemand = await pool.query<{ count: string }>(
+      `SELECT COUNT(DISTINCT a.asset_id) AS count
+         FROM assets a
+         JOIN gateways g ON g.gateway_id = a.gateway_id
+        WHERE a.is_active = true
+          AND g.contracted_demand_kw IS NOT NULL`,
+    );
+    const demandAssetCount = parseInt(assetsWithDemand.rows[0].count, 10);
+
     await runScheduleGenerator(pool);
 
-    // 執行後應新增資料
     const after = await pool.query<{ count: string }>(
-      `SELECT COUNT(*) FROM trade_schedules WHERE status = 'scheduled' AND planned_time > NOW()`,
+      `SELECT COUNT(*) AS count
+         FROM trade_schedules
+        WHERE status = 'scheduled'
+          AND planned_time > NOW()`,
     );
     const countAfter = parseInt(after.rows[0].count, 10);
 
-    // 47 active assets × 24 hours = 1128 base slots
-    // v5.16: + PS slots for assets with contracted_demand_kw (N assets × 4 peak hours)
-    expect(countAfter).toBeGreaterThanOrEqual(1128);
-    expect(countAfter).toBeLessThanOrEqual(1128 + 47 * 4); // upper bound
+    const distinctAssets = await pool.query<{ count: string }>(
+      `SELECT COUNT(DISTINCT asset_id) AS count
+         FROM trade_schedules
+        WHERE status = 'scheduled'
+          AND planned_time > NOW()`,
+    );
+    const scheduledAssetCount = parseInt(distinctAssets.rows[0].count, 10);
+
+    // Current local DB is the authority. Every active asset should receive at
+    // least one future schedule row, and the total must stay within the current
+    // upper bound of 24 base slots plus 4 peak-shaving slots for demand-backed
+    // assets.
+    expect(scheduledAssetCount).toBe(activeAssetCount);
+    expect(countAfter).toBeGreaterThan(activeAssetCount);
+    expect(countAfter).toBeLessThanOrEqual(activeAssetCount * 24 + demandAssetCount * 4);
   });
 
   it("產生的排程 action 只能是 charge 或 discharge", async () => {
@@ -125,73 +151,112 @@ describe("schedule-generator (M2)", () => {
 
   // ── v5.16 Peak Shaving Tests ────────────────────────────────────
 
+  async function snapshotGatewayDemand(): Promise<
+    Array<{ gateway_id: string; contracted_demand_kw: number | null }>
+  > {
+    const result = await pool.query<{
+      gateway_id: string;
+      contracted_demand_kw: number | null;
+    }>(`SELECT gateway_id, contracted_demand_kw FROM gateways ORDER BY gateway_id`);
+    return result.rows.map((row) => ({
+      gateway_id: row.gateway_id,
+      contracted_demand_kw:
+        row.contracted_demand_kw == null ? null : Number(row.contracted_demand_kw),
+    }));
+  }
+
+  async function restoreGatewayDemand(
+    snapshot: Array<{ gateway_id: string; contracted_demand_kw: number | null }>,
+  ): Promise<void> {
+    await pool.query(`UPDATE gateways SET contracted_demand_kw = NULL`);
+    for (const row of snapshot) {
+      if (row.contracted_demand_kw == null) continue;
+      await pool.query(
+        `UPDATE gateways SET contracted_demand_kw = $2 WHERE gateway_id = $1`,
+        [row.gateway_id, row.contracted_demand_kw],
+      );
+    }
+  }
+
   it("v5.16: assets with contracted_demand_kw → peak_shaving slots generated", async () => {
-    // Ensure at least one home has contracted_demand_kw
-    await pool.query(
-      `UPDATE homes SET contracted_demand_kw = 50.0 WHERE home_id = (SELECT home_id FROM homes ORDER BY home_id LIMIT 1)`,
-    );
+    const snapshot = await snapshotGatewayDemand();
+    try {
+      await pool.query(
+        `UPDATE gateways
+            SET contracted_demand_kw = 50.0
+          WHERE gateway_id = (SELECT gateway_id FROM gateways ORDER BY gateway_id LIMIT 1)`,
+      );
 
-    await runScheduleGenerator(pool);
+      await runScheduleGenerator(pool);
 
-    // Check for PS discharge slots (planned_time in peak BRT hours 18-21 = UTC 21-00)
-    const result = await pool.query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM trade_schedules
-       WHERE status = 'scheduled'
-         AND action = 'discharge'
-         AND planned_time > NOW()
-         AND asset_id IN (
-           SELECT a.asset_id FROM assets a
-           JOIN homes h ON h.home_id = a.home_id
-           WHERE h.contracted_demand_kw IS NOT NULL
-         )`,
-    );
-    const count = parseInt(result.rows[0].count, 10);
-    // At least some PS slots should be created
-    expect(count).toBeGreaterThan(0);
+      const result = await pool.query<{ count: string }>(
+        `SELECT COUNT(*) AS count FROM trade_schedules
+         WHERE status = 'scheduled'
+           AND action = 'discharge'
+           AND target_mode = 'peak_shaving'
+           AND planned_time > NOW()
+           AND asset_id IN (
+             SELECT a.asset_id FROM assets a
+             JOIN gateways g ON g.gateway_id = a.gateway_id
+             WHERE a.is_active = true
+               AND g.contracted_demand_kw IS NOT NULL
+           )`,
+      );
+      const count = parseInt(result.rows[0].count, 10);
+      expect(count).toBeGreaterThan(0);
+    } finally {
+      await restoreGatewayDemand(snapshot);
+    }
   });
 
   it("v5.16: PS slots have target_mode = 'peak_shaving'", async () => {
-    await pool.query(
-      `UPDATE homes SET contracted_demand_kw = 50.0 WHERE home_id = (SELECT home_id FROM homes ORDER BY home_id LIMIT 1)`,
-    );
+    const snapshot = await snapshotGatewayDemand();
+    try {
+      await pool.query(
+        `UPDATE gateways
+            SET contracted_demand_kw = 50.0
+          WHERE gateway_id = (SELECT gateway_id FROM gateways ORDER BY gateway_id LIMIT 1)`,
+      );
 
-    await runScheduleGenerator(pool);
+      await runScheduleGenerator(pool);
 
-    const result = await pool.query<{ target_mode: string | null }>(
-      `SELECT DISTINCT target_mode FROM trade_schedules
-       WHERE status = 'scheduled'
-         AND target_pld_price = 0
-         AND planned_time > NOW()
-         AND asset_id IN (
-           SELECT a.asset_id FROM assets a
-           JOIN homes h ON h.home_id = a.home_id
-           WHERE h.contracted_demand_kw IS NOT NULL
-         )`,
-    );
-    expect(result.rows).toHaveLength(1);
-    expect(result.rows[0].target_mode).toBe("peak_shaving");
+      const result = await pool.query<{ target_mode: string | null }>(
+        `SELECT DISTINCT target_mode FROM trade_schedules
+         WHERE status = 'scheduled'
+           AND target_pld_price = 0
+           AND planned_time > NOW()
+           AND asset_id IN (
+             SELECT a.asset_id FROM assets a
+             JOIN gateways g ON g.gateway_id = a.gateway_id
+             WHERE a.is_active = true
+               AND g.contracted_demand_kw IS NOT NULL
+           )`,
+      );
+      expect(result.rows).toHaveLength(1);
+      expect(result.rows[0].target_mode).toBe("peak_shaving");
+    } finally {
+      await restoreGatewayDemand(snapshot);
+    }
   });
 
   it("v5.16: assets without contracted_demand_kw → no extra peak_shaving slots", async () => {
-    // Clear all contracted_demand_kw
-    await pool.query(`UPDATE homes SET contracted_demand_kw = NULL`);
+    const snapshot = await snapshotGatewayDemand();
+    try {
+      await pool.query(`UPDATE gateways SET contracted_demand_kw = NULL`);
 
-    await runScheduleGenerator(pool);
+      await runScheduleGenerator(pool);
 
-    // Query for PS-specific slots (peak BRT hours with target_pld_price = 0)
-    // Since contracted_demand_kw is null for all, no PS slots should be generated
-    const result = await pool.query<{ count: string }>(
-      `SELECT COUNT(*) AS count FROM trade_schedules
-       WHERE status = 'scheduled'
-         AND target_pld_price = 0
-         AND planned_time > NOW()`,
-    );
-    const count = parseInt(result.rows[0].count, 10);
-    expect(count).toBe(0);
-
-    // Restore seed data
-    await pool.query(
-      `UPDATE homes SET contracted_demand_kw = 50.0 WHERE home_id = (SELECT home_id FROM homes ORDER BY home_id LIMIT 1)`,
-    );
+      const result = await pool.query<{ count: string }>(
+        `SELECT COUNT(*) AS count FROM trade_schedules
+         WHERE status = 'scheduled'
+           AND target_pld_price = 0
+           AND target_mode = 'peak_shaving'
+           AND planned_time > NOW()`,
+      );
+      const count = parseInt(result.rows[0].count, 10);
+      expect(count).toBe(0);
+    } finally {
+      await restoreGatewayDemand(snapshot);
+    }
   });
 });

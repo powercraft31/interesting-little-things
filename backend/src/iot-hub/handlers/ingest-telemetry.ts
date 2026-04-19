@@ -24,6 +24,8 @@ import { resolveAdapter } from "../parsers/AdapterRegistry";
 import { type StandardTelemetry } from "../parsers/StandardTelemetry";
 import { DynamicAdapter } from "../parsers/DynamicAdapter";
 import { type ParserRule as DynamicParserRule } from "../../shared/types/api";
+import { parseRuntimeFlags } from "../../shared/runtime/flags";
+import { emitIngestParserFailed } from "../../shared/runtime/ingest-emitters";
 
 interface IngestResult {
   success: true;
@@ -270,7 +272,26 @@ export async function handler(event: unknown): Promise<IngestResult> {
   // ── 新：Dynamic Parser Engine（Phase 6.4）────────────────────────────────
   if (rule && "parserType" in rule && rule.parserType === "dynamic") {
     const adapter = new DynamicAdapter();
-    const telemetryList = adapter.parse(raw, rule, orgId);
+    let telemetryList: StandardTelemetry[];
+    try {
+      telemetryList = adapter.parse(raw, rule, orgId);
+    } catch (err) {
+      // WS5: runtime parser-failure fact for DynamicAdapter rejection.
+      // Keep existing throw semantics — runtime emission is observational.
+      void emitIngestParserFailed(
+        { flags: parseRuntimeFlags(process.env) },
+        {
+          parserId: "DynamicAdapter",
+          error: err instanceof Error ? err : new Error(String(err)),
+          orgId,
+          deviceId: (raw.deviceId as string) ?? undefined,
+          reason: "dynamic_adapter_parse",
+        },
+      ).catch(() => {
+        /* best-effort — parser emit must not alter error semantics */
+      });
+      throw err;
+    }
 
     const recordCounts = await Promise.all(
       telemetryList.map(async (t) => {
@@ -313,7 +334,22 @@ export async function handler(event: unknown): Promise<IngestResult> {
     try {
       const adapter = resolveAdapter(event);
       telemetry = adapter.normalize(event, orgId);
-    } catch {
+    } catch (err) {
+      // WS5: runtime parser-failure fact — ACL adapter rejection.
+      // Preserves existing fallback behavior (existing code falls through to
+      // the generic-rest minimal envelope); runtime emission is observational.
+      void emitIngestParserFailed(
+        { flags: parseRuntimeFlags(process.env) },
+        {
+          parserId: `acl-adapter:${manufacturer}`,
+          error: err instanceof Error ? err : new Error(String(err)),
+          orgId,
+          deviceId: (raw.deviceId as string) ?? undefined,
+          reason: "acl_adapter_resolve",
+        },
+      ).catch(() => {
+        /* best-effort — parser emit never alters fallback behavior */
+      });
       // 最终降级：从 raw 构造最小 StandardTelemetry
       telemetry = {
         orgId,

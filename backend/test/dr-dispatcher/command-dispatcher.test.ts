@@ -9,20 +9,39 @@ jest.mock("node-cron", () => ({
 describe("command-dispatcher (M3)", () => {
   let pool: Pool;
   let testTradeId: number;
+  let fixtureAssetId: string;
+  let fixtureOrgId: string;
+  let fixtureGatewayId: string;
 
   beforeAll(() => {
     pool = getServicePool();
   });
 
   beforeEach(async () => {
+    const fixture = await pool.query<{
+      asset_id: string;
+      org_id: string;
+      gateway_id: string;
+    }>(`
+      SELECT asset_id, org_id, gateway_id
+      FROM assets
+      WHERE is_active = true
+        AND org_id = 'ORG_ENERGIA_001'
+      ORDER BY asset_id
+      LIMIT 1
+    `);
+    fixtureAssetId = fixture.rows[0].asset_id;
+    fixtureOrgId = fixture.rows[0].org_id;
+    fixtureGatewayId = fixture.rows[0].gateway_id;
+
     // 插入一筆「時間已到」的測試排程
     const result = await pool.query<{ id: number }>(`
       INSERT INTO trade_schedules
         (asset_id, org_id, planned_time, action, expected_volume_kwh, target_pld_price, status)
       VALUES
-        ('ASSET_SP_001', 'ORG_ENERGIA_001', NOW() - INTERVAL '2 minutes', 'discharge', 5.0, 350.00, 'scheduled')
+        ($1, $2, NOW() - INTERVAL '2 minutes', 'discharge', 5.0, 350.00, 'scheduled')
       RETURNING id
-    `);
+    `, [fixtureAssetId, fixtureOrgId]);
     testTradeId = result.rows[0].id;
   });
 
@@ -72,15 +91,15 @@ describe("command-dispatcher (M3)", () => {
       INSERT INTO trade_schedules
         (asset_id, org_id, planned_time, action, expected_volume_kwh, target_pld_price, status, target_mode)
       VALUES
-        ('ASSET_SP_001', 'ORG_ENERGIA_001', NOW() - INTERVAL '1 minute', 'discharge', 4.0, 0, 'scheduled', 'peak_shaving')
+        ($1, $2, NOW() - INTERVAL '1 minute', 'discharge', 4.0, 0, 'scheduled', 'peak_shaving')
       RETURNING id
-    `);
+    `, [fixtureAssetId, fixtureOrgId]);
     const psTradeId = psResult.rows[0].id;
 
     // Ensure gateway has contracted_demand_kw (v5.20: moved from homes to gateways)
     await pool.query(
-      `UPDATE gateways SET contracted_demand_kw = 50.0
-       WHERE gateway_id = (SELECT gateway_id FROM assets WHERE asset_id = 'ASSET_SP_001')`,
+      `UPDATE gateways SET contracted_demand_kw = 50.0 WHERE gateway_id = $1`,
+      [fixtureGatewayId],
     );
 
     await runCommandDispatcher(pool);
@@ -91,8 +110,9 @@ describe("command-dispatcher (M3)", () => {
       commanded_power_kw: number;
     }>(
       `SELECT target_mode, commanded_power_kw FROM dispatch_records
-       WHERE asset_id = 'ASSET_SP_001' AND target_mode = 'peak_shaving'
+       WHERE asset_id = $1 AND target_mode = 'peak_shaving'
        ORDER BY dispatched_at DESC LIMIT 1`,
+      [fixtureAssetId],
     );
     expect(dr.rows).toHaveLength(1);
     expect(dr.rows[0].target_mode).toBe("peak_shaving");
@@ -101,7 +121,8 @@ describe("command-dispatcher (M3)", () => {
 
     // Cleanup
     await pool.query(
-      `DELETE FROM dispatch_records WHERE asset_id = 'ASSET_SP_001' AND target_mode = 'peak_shaving'`,
+      `DELETE FROM dispatch_records WHERE asset_id = $1 AND target_mode = 'peak_shaving'`,
+      [fixtureAssetId],
     );
     await pool.query(`DELETE FROM dispatch_commands WHERE trade_id = $1`, [
       psTradeId,
@@ -113,30 +134,32 @@ describe("command-dispatcher (M3)", () => {
     // Set billing_power_factor = 0 in tariff_schedules
     await pool.query(
       `UPDATE tariff_schedules SET billing_power_factor = 0
-       WHERE org_id = 'ORG_ENERGIA_001' AND effective_to IS NULL`,
+       WHERE org_id = $1 AND effective_to IS NULL`,
+      [fixtureOrgId],
     );
 
     // Ensure gateway has contracted_demand_kw (v5.20: moved from homes to gateways)
     await pool.query(
-      `UPDATE gateways SET contracted_demand_kw = 60.0
-       WHERE gateway_id = (SELECT gateway_id FROM assets WHERE asset_id = 'ASSET_SP_001')`,
+      `UPDATE gateways SET contracted_demand_kw = 60.0 WHERE gateway_id = $1`,
+      [fixtureGatewayId],
     );
 
     const psResult = await pool.query<{ id: number }>(`
       INSERT INTO trade_schedules
         (asset_id, org_id, planned_time, action, expected_volume_kwh, target_pld_price, status, target_mode)
       VALUES
-        ('ASSET_SP_001', 'ORG_ENERGIA_001', NOW() - INTERVAL '1 minute', 'discharge', 4.0, 0, 'scheduled', 'peak_shaving')
+        ($1, $2, NOW() - INTERVAL '1 minute', 'discharge', 4.0, 0, 'scheduled', 'peak_shaving')
       RETURNING id
-    `);
+    `, [fixtureAssetId, fixtureOrgId]);
     const psTradeId = psResult.rows[0].id;
 
     await runCommandDispatcher(pool);
 
     const dr = await pool.query<{ commanded_power_kw: number }>(
       `SELECT commanded_power_kw FROM dispatch_records
-       WHERE asset_id = 'ASSET_SP_001' AND target_mode = 'peak_shaving'
+       WHERE asset_id = $1 AND target_mode = 'peak_shaving'
        ORDER BY dispatched_at DESC LIMIT 1`,
+      [fixtureAssetId],
     );
     expect(dr.rows).toHaveLength(1);
     // pf=0 → fallback: peak_limit_kva = contractedKw = 60.0
@@ -145,10 +168,12 @@ describe("command-dispatcher (M3)", () => {
     // Cleanup & restore
     await pool.query(
       `UPDATE tariff_schedules SET billing_power_factor = 0.92
-       WHERE org_id = 'ORG_ENERGIA_001' AND effective_to IS NULL`,
+       WHERE org_id = $1 AND effective_to IS NULL`,
+      [fixtureOrgId],
     );
     await pool.query(
-      `DELETE FROM dispatch_records WHERE asset_id = 'ASSET_SP_001' AND target_mode = 'peak_shaving'`,
+      `DELETE FROM dispatch_records WHERE asset_id = $1 AND target_mode = 'peak_shaving'`,
+      [fixtureAssetId],
     );
     await pool.query(`DELETE FROM dispatch_commands WHERE trade_id = $1`, [
       psTradeId,
@@ -162,9 +187,9 @@ describe("command-dispatcher (M3)", () => {
       INSERT INTO trade_schedules
         (asset_id, org_id, planned_time, action, expected_volume_kwh, target_pld_price, status)
       VALUES
-        ('ASSET_SP_001', 'ORG_ENERGIA_001', NOW() - INTERVAL '20 minutes', 'charge', 3.0, 100.00, 'executing')
+        ($1, $2, NOW() - INTERVAL '20 minutes', 'charge', 3.0, 100.00, 'executing')
       RETURNING id
-    `);
+    `, [fixtureAssetId, fixtureOrgId]);
     const staleId = result.rows[0].id;
 
     await runCommandDispatcher(pool);

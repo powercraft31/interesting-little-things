@@ -5,6 +5,11 @@ services:
     image: postgres:15-alpine
     container_name: solfacil-db
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     environment:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres_admin_2026
@@ -26,6 +31,11 @@ services:
     image: redis:7-alpine
     container_name: solfacil-redis
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     ports:
       - "127.0.0.1:6379:6379"
     networks:
@@ -35,6 +45,11 @@ services:
     image: node:20-alpine
     container_name: solfacil-bff
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     working_dir: /app
     volumes:
       - ./backend:/app
@@ -61,6 +76,11 @@ services:
     image: node:20-alpine
     container_name: solfacil-m1
     restart: unless-stopped
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "5"
     working_dir: /app
     volumes:
       - ./backend:/app

@@ -3,6 +3,8 @@ import type { SolfacilMessage, SolfacilListItem } from "../../shared/types/solfa
 import { parseTelemetryPayload } from "../services/fragment-assembler";
 import { DeviceAssetCache } from "../services/device-asset-cache";
 import { parseProtocolTimestamp } from "../../shared/protocol-time";
+import { parseRuntimeFlags } from "../../shared/runtime/flags";
+import { emitIngestParserFailed } from "../../shared/runtime/ingest-emitters";
 
 /**
  * BackfillAssembler — Accumulates fragmented backfill messages per clientId.
@@ -89,8 +91,20 @@ class BackfillAssembler {
     let recordedAt: Date;
     try {
       recordedAt = parseProtocolTimestamp(payload.timeStamp);
-    } catch {
+    } catch (err) {
       console.warn(`[BackfillAssembler] Invalid timeStamp "${payload.timeStamp}" for ${gatewayId}, skipping`);
+      // WS5: runtime parser-failure fact — backfill fragment rejected.
+      void emitIngestParserFailed(
+        { flags: parseRuntimeFlags(process.env) },
+        {
+          parserId: "missed-data.protocol-timestamp",
+          error: err instanceof Error ? err : new Error(String(err)),
+          gatewayId,
+          reason: "invalid_protocol_timestamp",
+        },
+      ).catch(() => {
+        /* best-effort — backfill flow must not break on emitter failure */
+      });
       return;
     }
     const acc = this.getOrCreateAccumulator(clientId, recordedAt);

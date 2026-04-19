@@ -317,9 +317,23 @@ describe("POST /api/hems/batch-dispatch", () => {
     expect(summary.pending).toBe(2);
     expect(summary.skipped).toBe(0);
 
+    // Verify recent-history and active-command checks stay on the hot table only
+    expect(mockQueryWithOrg.mock.calls[1][0]).toContain("FROM device_command_logs");
+    expect(mockQueryWithOrg.mock.calls[1][0]).not.toContain(
+      "device_command_logs_archive",
+    );
+    expect(mockQueryWithOrg.mock.calls[2][0]).toContain("FROM device_command_logs");
+    expect(mockQueryWithOrg.mock.calls[2][0]).toContain(
+      "result IN ('pending', 'dispatched', 'accepted')",
+    );
+    expect(mockQueryWithOrg.mock.calls[2][0]).not.toContain(
+      "device_command_logs_archive",
+    );
+
     // Verify INSERT calls include batch_id and source='p4'
     const insertCall = mockQueryWithOrg.mock.calls[4]; // 5th call = first INSERT
     expect(insertCall[0]).toContain("INSERT INTO device_command_logs");
+    expect(insertCall[0]).toContain("'pending'");
     expect(insertCall[0]).toContain("batch_id");
     expect(insertCall[0]).toContain("'p4'");
 

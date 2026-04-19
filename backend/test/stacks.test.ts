@@ -29,10 +29,40 @@ describe("CDK Stacks", () => {
     // Should have an HTTP API
     template.resourceCountIs("AWS::ApiGatewayV2::Api", 1);
 
-    // Should have 15 Lambda functions (dashboard, assets, trades, revenue-trend,
-    // get-gateways, patch-gateway-home-alias,
-    // gateway detail/schedule/put-schedule, hems batch-dispatch/history, fleet overview/integradores/offline-events/charts)
-    template.resourceCountIs("AWS::Lambda::Function", 15);
+    // 18 pre-existing handlers (dashboard, assets, trades, revenue-trend,
+    // get-gateways, patch-gateway-home-alias, gateway detail/schedule/
+    // put-schedule, fleet overview/integradores/offline-events/charts,
+    // energy-24h, energy-stats, hems batch-dispatch/history, hems targeting)
+    // + 8 new v6.10 WS3 runtime-governance handlers = 26.
+    template.resourceCountIs("AWS::Lambda::Function", 26);
+  });
+
+  test("BffStack wires all 8 /api/runtime/* operator routes (v6.10 WS3)", () => {
+    const stack = new BffStack(app, "TestBffRuntime", {
+      stage: DEFAULT_STAGE,
+      eventBus: eventBus.bus,
+    });
+    const template = Template.fromStack(stack);
+
+    const routes = template.findResources("AWS::ApiGatewayV2::Route");
+    const routeKeys = Object.values(routes).map(
+      (r: { Properties?: { RouteKey?: string } }) =>
+        r.Properties?.RouteKey ?? "",
+    );
+
+    const expected = [
+      "GET /api/runtime/health",
+      "GET /api/runtime/issues",
+      "GET /api/runtime/issues/{fingerprint}",
+      "GET /api/runtime/events",
+      "GET /api/runtime/self-checks",
+      "POST /api/runtime/issues/{fingerprint}/close",
+      "POST /api/runtime/issues/{fingerprint}/suppress",
+      "POST /api/runtime/issues/{fingerprint}/note",
+    ];
+    for (const key of expected) {
+      expect(routeKeys).toContain(key);
+    }
   });
 
   test("MarketBillingStack creates Lambda functions", () => {

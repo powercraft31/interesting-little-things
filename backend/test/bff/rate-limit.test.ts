@@ -370,6 +370,105 @@ describe("abuse-control middleware", () => {
   });
 });
 
+// ── WS4: bounded auth anomaly emission hook ─────────────────────────────
+
+describe("abuse-control middleware — bounded auth anomaly emission (WS4)", () => {
+  it("calls onThresholdHit exactly once when the IP threshold is crossed", async () => {
+    const store = new MemoryRateLimitStore();
+    const hits: Array<{ scope: string; reason: string }> = [];
+    const { preHandler, postHandler } = createAbuseControlMiddleware(store, {
+      onThresholdHit: async (evt) => {
+        hits.push({ scope: evt.tenantScope, reason: evt.reason });
+      },
+    });
+
+    const ip = "9.9.9.9";
+    // 10 failures with differing emails — pushes IP count to 10.
+    for (let i = 0; i < 10; i++) {
+      const req = mockReq(ip, { email: `u${i}@t.com` });
+      const res = mockRes();
+      let nextCalled = false;
+      await preHandler(req, res, () => { nextCalled = true; });
+      if (nextCalled) {
+        res.statusCode = 401;
+        await postHandler(req, res);
+      }
+    }
+
+    // 11th attempt: this one should trigger the 429 path and exactly one hit.
+    const req = mockReq(ip, { email: "fresh@t.com" });
+    const res = mockRes();
+    await preHandler(req, res, () => {});
+    expect(res.statusCode).toBe(429);
+    expect(hits).toHaveLength(1);
+    expect(hits[0].reason).toBe("ip_threshold_exceeded");
+    expect(hits[0].scope).toContain(ip);
+
+    // A second 429 from the same bucket must NOT double-emit in one call.
+    const res2 = mockRes();
+    await preHandler(mockReq(ip, { email: "again@t.com" }), res2, () => {});
+    expect(res2.statusCode).toBe(429);
+    // Still at most one additional hit per preHandler invocation.
+    expect(hits.length).toBeLessThanOrEqual(2);
+  });
+
+  it("does NOT call onThresholdHit for normal sub-threshold failures", async () => {
+    const store = new MemoryRateLimitStore();
+    const hits: unknown[] = [];
+    const { preHandler, postHandler } = createAbuseControlMiddleware(store, {
+      onThresholdHit: async (evt) => {
+        hits.push(evt);
+      },
+    });
+
+    // 3 failed attempts — well under both thresholds.
+    for (let i = 0; i < 3; i++) {
+      const req = mockReq("1.1.1.1", { email: `a${i}@b.com` });
+      const res = mockRes();
+      let nextCalled = false;
+      await preHandler(req, res, () => { nextCalled = true; });
+      if (nextCalled) {
+        res.statusCode = 401;
+        await postHandler(req, res);
+      }
+    }
+
+    expect(hits).toHaveLength(0);
+  });
+
+  it("callback errors do not break the middleware response", async () => {
+    const store = new MemoryRateLimitStore();
+    const { preHandler, postHandler } = createAbuseControlMiddleware(store, {
+      onThresholdHit: async () => {
+        throw new Error("runtime-emit-exploded");
+      },
+    });
+
+    const ip = "2.2.2.2";
+    const email = "victim@test.com";
+    for (let i = 0; i < 5; i++) {
+      const req = mockReq(ip, { email });
+      const res = mockRes();
+      await preHandler(req, res, () => {
+        res.statusCode = 401;
+      });
+      await postHandler(req, res);
+    }
+
+    // 6th attempt — must still 429, not surface the callback error.
+    const req = mockReq(ip, { email });
+    const res = mockRes();
+    let threw = false;
+    try {
+      await preHandler(req, res, () => {});
+    } catch {
+      threw = true;
+    }
+    expect(threw).toBe(false);
+    expect(res.statusCode).toBe(429);
+  });
+});
+
 // ── Store selection ─────────────────────────────────────────────────────
 
 describe("selectRateLimitStore", () => {

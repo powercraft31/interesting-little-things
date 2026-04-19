@@ -87,14 +87,38 @@ var PAGES = [
     navKey: "nav.alerts",
     roles: ["admin", "integrador"],
   },
+  {
+    id: "runtime",
+    hash: "#runtime",
+    labelKey: "page.runtime",
+    icon: "\u{1F527}",
+    navKey: "nav.runtime",
+    roles: ["admin"],
+  },
 ];
 
 // =========================================================
 // STATE
 // =========================================================
 var currentPage = "fleet";
+// currentRole is the frontend role vocabulary ("admin" | "integrador").
+// It is OVERWRITTEN from the authenticated backend session role during
+// bootstrapApp() — see mapSessionRoleToFrontendRole(). The "admin" literal
+// here is only a pre-bootstrap placeholder; no gating runs before bootstrap.
 var currentRole = "admin";
 var pageInitialized = {};
+
+// =========================================================
+// SESSION ROLE PROJECTION (v6.10 WS9)
+// Backend session role vocabulary: SOLFACIL_ADMIN | ORG_MANAGER |
+// ORG_OPERATOR | ORG_VIEWER. Frontend role vocabulary: admin | integrador.
+// Only SOLFACIL_ADMIN maps to the frontend "admin" role; every other
+// authenticated role maps to "integrador" so admin-only surfaces
+// (e.g. #runtime) are not accessible to non-admin sessions.
+// =========================================================
+function mapSessionRoleToFrontendRole(sessionRole) {
+  return sessionRole === "SOLFACIL_ADMIN" ? "admin" : "integrador";
+}
 
 // =========================================================
 // ROUTER
@@ -177,6 +201,9 @@ function initPage(pageId) {
       break;
     case "alerts":
       if (typeof AlertsPage !== "undefined") promise = AlertsPage.init();
+      break;
+    case "runtime":
+      if (typeof RuntimePage !== "undefined") promise = RuntimePage.init();
       break;
     case "performance":
       if (typeof PerformancePage !== "undefined")
@@ -352,6 +379,7 @@ function switchRole(role) {
     hems: typeof HEMSPage !== "undefined" ? HEMSPage : null,
     vpp: typeof StrategyPage !== "undefined" ? StrategyPage : null,
     alerts: typeof AlertsPage !== "undefined" ? AlertsPage : null,
+    runtime: typeof RuntimePage !== "undefined" ? RuntimePage : null,
     performance:
       typeof PerformancePage !== "undefined" ? PerformancePage : null,
   };
@@ -445,12 +473,28 @@ function bootstrapApp() {
   // Initialize mock data (runs once, memoized)
   initMockData();
 
+  // v6.10 WS9: Project authenticated backend session role into the frontend
+  // role model BEFORE any role-gated rendering/navigation runs. Without this
+  // step currentRole silently stays "admin" regardless of session truth,
+  // which makes #runtime admin gating non-functional for ORG_MANAGER users.
+  var sessionRole =
+    (window.currentUser && window.currentUser.role) || null;
+  var initialRole = mapSessionRoleToFrontendRole(sessionRole);
+
   // Set up role switcher
   var roleSelect = document.getElementById("role-select");
   if (roleSelect) {
-    roleSelect.addEventListener("change", function (e) {
-      switchRole(e.target.value);
-    });
+    // Non-admin sessions must not be able to escalate to "admin" via the
+    // demo role-switcher. Lock the control to the derived role.
+    if (initialRole !== "admin") {
+      roleSelect.value = "integrador";
+      roleSelect.disabled = true;
+    } else {
+      roleSelect.value = "admin";
+      roleSelect.addEventListener("change", function (e) {
+        switchRole(e.target.value);
+      });
+    }
   }
 
   // Set up sidebar nav clicks
@@ -541,6 +585,13 @@ function bootstrapApp() {
     delete pageInitialized[currentPage];
     initPage(currentPage);
   });
+
+  // Apply the session-derived role BEFORE initial navigation so that
+  // navigateTo()'s role.includes(currentRole) check and the per-element
+  // data-role gating both see real session truth. switchRole() also sets
+  // body theme, role badge, nav visibility, and redirects if currentPage
+  // is not accessible to the derived role.
+  switchRole(initialRole);
 
   // Navigate to initial page
   var hash = (location.hash || "#fleet").split("?")[0];

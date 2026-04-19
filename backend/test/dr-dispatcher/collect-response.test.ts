@@ -31,6 +31,8 @@ describe("collect-response ACK handler (v5.9)", () => {
   let handler: (req: Request, res: Response) => Promise<void>;
   let testTradeId: number;
   let testDispatchId: number;
+  let fixtureAssetId: string;
+  let fixtureOrgId: string;
 
   beforeAll(() => {
     pool = getServicePool();
@@ -38,14 +40,28 @@ describe("collect-response ACK handler (v5.9)", () => {
   });
 
   beforeEach(async () => {
+    const fixture = await pool.query<{
+      asset_id: string;
+      org_id: string;
+    }>(`
+      SELECT asset_id, org_id
+      FROM assets
+      WHERE is_active = true
+        AND org_id = 'ORG_ENERGIA_001'
+      ORDER BY asset_id
+      LIMIT 1
+    `);
+    fixtureAssetId = fixture.rows[0].asset_id;
+    fixtureOrgId = fixture.rows[0].org_id;
+
     // Insert a trade_schedule in 'executing' state
     const tradeResult = await pool.query<{ id: number }>(`
       INSERT INTO trade_schedules
         (asset_id, org_id, planned_time, action, expected_volume_kwh, target_pld_price, status)
       VALUES
-        ('ASSET_SP_001', 'ORG_ENERGIA_001', NOW() - INTERVAL '2 minutes', 'discharge', 5.0, 350.00, 'executing')
+        ($1, $2, NOW() - INTERVAL '2 minutes', 'discharge', 5.0, 350.00, 'executing')
       RETURNING id
-    `);
+    `, [fixtureAssetId, fixtureOrgId]);
     testTradeId = tradeResult.rows[0].id;
 
     // Insert a dispatch_command in 'dispatched' state
@@ -54,10 +70,10 @@ describe("collect-response ACK handler (v5.9)", () => {
       INSERT INTO dispatch_commands
         (trade_id, asset_id, org_id, action, volume_kwh, status, m1_boundary)
       VALUES
-        ($1, 'ASSET_SP_001', 'ORG_ENERGIA_001', 'discharge', 5.0, 'dispatched', true)
+        ($1, $2, $3, 'discharge', 5.0, 'dispatched', true)
       RETURNING id
     `,
-      [testTradeId],
+      [testTradeId, fixtureAssetId, fixtureOrgId],
     );
     testDispatchId = dispatchResult.rows[0].id;
   });

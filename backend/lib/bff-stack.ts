@@ -169,6 +169,57 @@ export class BffStack extends cdk.Stack {
       stage,
     );
 
+    // v6.10 WS3: Runtime Governance operator API (SOLFACIL_ADMIN only).
+    // Handlers enforce admin role and the disabled-posture contract internally.
+    const getRuntimeHealth = this.createHandler(
+      "GetRuntimeHealth",
+      handlersDir,
+      "get-runtime-health.handler",
+      stage,
+    );
+    const getRuntimeIssues = this.createHandler(
+      "GetRuntimeIssues",
+      handlersDir,
+      "get-runtime-issues.handler",
+      stage,
+    );
+    const getRuntimeIssueDetail = this.createHandler(
+      "GetRuntimeIssueDetail",
+      handlersDir,
+      "get-runtime-issue-detail.handler",
+      stage,
+    );
+    const getRuntimeEvents = this.createHandler(
+      "GetRuntimeEvents",
+      handlersDir,
+      "get-runtime-events.handler",
+      stage,
+    );
+    const getRuntimeSelfChecks = this.createHandler(
+      "GetRuntimeSelfChecks",
+      handlersDir,
+      "get-runtime-self-checks.handler",
+      stage,
+    );
+    const postRuntimeIssueClose = this.createHandler(
+      "PostRuntimeIssueClose",
+      handlersDir,
+      "post-runtime-issue-close.handler",
+      stage,
+    );
+    const postRuntimeIssueSuppress = this.createHandler(
+      "PostRuntimeIssueSuppress",
+      handlersDir,
+      "post-runtime-issue-suppress.handler",
+      stage,
+    );
+    const postRuntimeIssueNote = this.createHandler(
+      "PostRuntimeIssueNote",
+      handlersDir,
+      "post-runtime-issue-note.handler",
+      stage,
+    );
+
     // ── Route Bindings ─────────────────────────────────────────────
     this.addRoute(httpApi, "GET", "/dashboard", getDashboard);
     this.addRoute(httpApi, "GET", "/assets", getAssets);
@@ -244,6 +295,42 @@ export class BffStack extends cdk.Stack {
     );
     // v6.4: P4 HEMS targeting route
     this.addRoute(httpApi, "GET", "/api/hems/targeting", getHemsTargeting);
+
+    // v6.10 WS3: Runtime Governance operator routes (SOLFACIL_ADMIN only).
+    // Kept separate from P5/P6 route families by design.
+    this.addRoute(httpApi, "GET", "/api/runtime/health", getRuntimeHealth);
+    this.addRoute(httpApi, "GET", "/api/runtime/issues", getRuntimeIssues);
+    this.addRoute(
+      httpApi,
+      "GET",
+      "/api/runtime/issues/{fingerprint}",
+      getRuntimeIssueDetail,
+    );
+    this.addRoute(httpApi, "GET", "/api/runtime/events", getRuntimeEvents);
+    this.addRoute(
+      httpApi,
+      "GET",
+      "/api/runtime/self-checks",
+      getRuntimeSelfChecks,
+    );
+    this.addRoute(
+      httpApi,
+      "POST",
+      "/api/runtime/issues/{fingerprint}/close",
+      postRuntimeIssueClose,
+    );
+    this.addRoute(
+      httpApi,
+      "POST",
+      "/api/runtime/issues/{fingerprint}/suppress",
+      postRuntimeIssueSuppress,
+    );
+    this.addRoute(
+      httpApi,
+      "POST",
+      "/api/runtime/issues/{fingerprint}/note",
+      postRuntimeIssueNote,
+    );
 
     // ── Outputs ────────────────────────────────────────────────────
     this.apiUrl = new cdk.CfnOutput(this, "BffApiUrl", {

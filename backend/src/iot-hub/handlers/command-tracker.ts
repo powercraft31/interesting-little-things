@@ -136,21 +136,41 @@ export async function handleSetReply(
     });
     await pool.query(`SELECT pg_notify('command_status', $1)`, [notifyPayload]);
   } else {
-    // No pending command found — log as standalone set_reply
-    await pool.query(
-      `INSERT INTO device_command_logs
-         (gateway_id, command_type, config_name, message_id,
-          result, error_message, device_timestamp, resolved_at)
-       VALUES ($1, 'set_reply', $2, $3, $4, $5, $6, NOW())`,
-      [
-        gatewayId,
-        configName,
-        payload.messageId,
-        result,
-        errorMessage,
-        deviceTimestamp,
-      ],
-    );
+    // No matching in-flight command found — log as standalone set_reply.
+    // Preserve retention eligibility evidence exactly as the live lifecycle does:
+    // - accepted stays non-terminal (no resolved_at)
+    // - terminal replies (success/fail/timeout/etc.) record resolved_at
+    if (result === "accepted") {
+      await pool.query(
+        `INSERT INTO device_command_logs
+           (gateway_id, command_type, config_name, message_id,
+            result, error_message, device_timestamp)
+         VALUES ($1, 'set_reply', $2, $3, $4, $5, $6)`,
+        [
+          gatewayId,
+          configName,
+          payload.messageId,
+          result,
+          errorMessage,
+          deviceTimestamp,
+        ],
+      );
+    } else {
+      await pool.query(
+        `INSERT INTO device_command_logs
+           (gateway_id, command_type, config_name, message_id,
+            result, error_message, device_timestamp, resolved_at)
+         VALUES ($1, 'set_reply', $2, $3, $4, $5, $6, NOW())`,
+        [
+          gatewayId,
+          configName,
+          payload.messageId,
+          result,
+          errorMessage,
+          deviceTimestamp,
+        ],
+      );
+    }
   }
 
   if (result === "accepted") {

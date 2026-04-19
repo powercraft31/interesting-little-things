@@ -1,0 +1,94 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solfacil v6.10 Runtime Governance — PLAN</title>
+  <style>
+    :root { --bg:#0b1020; --panel:#121a2b; --panel2:#18233a; --text:#e8eefc; --muted:#9fb0d1; --line:#2b3958; --accent:#68d5ff; }
+    *{box-sizing:border-box} body{margin:0;background:linear-gradient(180deg,#0b1020,#0f172a);color:var(--text);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC",sans-serif}
+    .wrap{max-width:1200px;margin:0 auto;padding:32px 20px 80px}.hero,.card{background:rgba(18,26,43,.94);border:1px solid var(--line);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.22)}.hero{padding:28px;margin-bottom:20px}.card{padding:22px}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:20px}.col-12{grid-column:span 12}.col-8{grid-column:span 8}.col-4{grid-column:span 4}.col-6{grid-column:span 6}
+    h1,h2{margin:0 0 12px;line-height:1.25} h1{font-size:34px} h2{font-size:24px;margin-top:28px}.muted{color:var(--muted)} .badges{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 6px}.badge{padding:6px 10px;border-radius:999px;font-size:13px;border:1px solid var(--line);background:var(--panel2)}
+    .quote{border-left:4px solid var(--accent);padding:10px 14px;background:rgba(104,213,255,.08);border-radius:10px}.mini-grid{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px}.mini{background:var(--panel2);border:1px solid var(--line);border-radius:14px;padding:14px}.mini .label{color:var(--muted);font-size:13px}.mini .value{font-size:22px;font-weight:700;margin-top:4px}
+    table{width:100%;border-collapse:collapse;margin-top:10px} th,td{border-bottom:1px solid var(--line);padding:10px 8px;text-align:left;vertical-align:top} th{color:var(--muted)} code{color:var(--accent)} ul{margin:10px 0 0 20px;padding:0}
+    @media (max-width:900px){.col-12,.col-8,.col-4,.col-6{grid-column:span 12}h1{font-size:28px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <section class="hero">
+    <div class="muted">PLAN generated from accepted REQ + finalized canonical DESIGN · 2026-04-18</div>
+    <h1>Solfacil v6.10 Runtime Governance</h1>
+    <p>這份 PLAN 已經不是重新設計，而是把既定架構拆成可執行 workstreams：先 DB/migration，再 M9 spine，再 M5 operator API，再 module emitter onboarding，最後才是 minimal frontend 與 rollout hardening。</p>
+    <div class="badges">
+      <span class="badge">Status: PLAN drafted</span>
+      <span class="badge">Baseline: v6.9 normalized matrix</span>
+      <span class="badge">Review state: DESIGN passed Claude round-3</span>
+      <span class="badge">Source: <code>docs/v6.10-runtime-governance-plan.md</code></span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="card col-8">
+      <h2>你先看這裡</h2>
+      <div class="quote"><strong>實作主線：</strong> migration / flags 先落地，shared-layer spine 先成型，API contract 先穩，module emitters 分批接入，UI 最後只做最小可用，整個 rollout 全程保持 feature-flag-gated 與可回退。</div>
+      <ul>
+        <li>這份 PLAN 沒有重開 DESIGN，切線守住了 A / A / B。</li>
+        <li>它按 matrix ownership 拆成 WS0–WS10，不是散裝 task list。</li>
+        <li>測試分成 slice-level、integration、final acceptance 三層，沒有用「run tests」混過去。</li>
+      </ul>
+    </section>
+
+    <aside class="card col-4">
+      <h2>實作順序</h2>
+      <div class="mini-grid">
+        <div class="mini"><div class="label">First</div><div class="value">WS0 / WS1</div></div>
+        <div class="mini"><div class="label">Core center</div><div class="value">WS2</div></div>
+        <div class="mini"><div class="label">Contract before UI</div><div class="value">WS3 → WS9</div></div>
+        <div class="mini"><div class="label">Last gate</div><div class="value">WS10</div></div>
+      </div>
+    </aside>
+
+    <section class="card col-12">
+      <h2>Workstream map</h2>
+      <table>
+        <thead><tr><th>WS</th><th>Owner</th><th>Purpose</th></tr></thead>
+        <tbody>
+          <tr><td>WS0</td><td>cross-cutting</td><td>bootstrap / feature flag / disabled-mode semantics</td></tr>
+          <tr><td>WS1</td><td>DB</td><td><code>runtime_*</code> schema + partition bootstrap + DB verification</td></tr>
+          <tr><td>WS2</td><td>M9</td><td>spine contract / persistence / projection / self-check / health</td></tr>
+          <tr><td>WS3</td><td>M5</td><td><code>/api/runtime/*</code> operator contract</td></tr>
+          <tr><td>WS4</td><td>M5 + M9/db</td><td>BFF boot/error/auth facts + DB substrate facts</td></tr>
+          <tr><td>WS5</td><td>M1</td><td>ingest freshness / parser / backlog emitters</td></tr>
+          <tr><td>WS6</td><td>M2</td><td>optimization scheduler emitters</td></tr>
+          <tr><td>WS7</td><td>M3</td><td>dispatch liveness / ack-stall emitters</td></tr>
+          <tr><td>WS8</td><td>M4</td><td>billing heartbeat / error emitters</td></tr>
+          <tr><td>WS9</td><td>frontend + M5</td><td>minimal <code>#runtime</code> page</td></tr>
+          <tr><td>WS10</td><td>cross-workstream</td><td>retention / acceptance / rollout-hardening</td></tr>
+        </tbody>
+      </table>
+    </section>
+
+    <section class="card col-6">
+      <h2>最關鍵 gate</h2>
+      <ul>
+        <li><strong>Gate B</strong>：`002_runtime_governance.sql` 必須先證明 idempotent</li>
+        <li><strong>Gate C</strong>：M9 spine 先穩，module emitters 才能接</li>
+        <li><strong>Gate D</strong>：runtime API contract 先穩，frontend 才能開工</li>
+        <li><strong>Gate G</strong>：final acceptance matrix 全過才算 release-ready</li>
+      </ul>
+    </section>
+
+    <section class="card col-6">
+      <h2>測試不是一句話帶過</h2>
+      <ul>
+        <li>slice-level：每個 WS 自己的 unit / handler / projection / schema 驗證</li>
+        <li>integration：migration→API、BFF/DB、M1、scheduler/dispatch/billing、operator action、flag isolation</li>
+        <li>final acceptance：有明確 matrix，包含 browser/manual/operator verification</li>
+      </ul>
+    </section>
+  </div>
+</div>
+</body>
+</html>

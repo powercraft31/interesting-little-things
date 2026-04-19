@@ -115,9 +115,11 @@ describe("PUT /api/devices/:assetId/schedule", () => {
     expect(body.data).toHaveProperty("commandId", 42);
     expect(body.data).toHaveProperty("status", "pending_dispatch");
 
-    // Verify INSERT was called with correct params
+    // Verify INSERT was called against the hot table with correct params
     const insertCall = mockQueryWithOrg.mock.calls[1];
     expect(insertCall[0]).toContain("INSERT INTO device_command_logs");
+    expect(insertCall[0]).not.toContain("device_command_logs_archive");
+    expect(insertCall[0]).toContain("'pending_dispatch'");
     expect(insertCall[1][0]).toBe("WKRD24070202100144F");
     // payload should contain the slots
     const payload = JSON.parse(insertCall[1][1]);

@@ -1,0 +1,107 @@
+<!doctype html>
+<html lang="zh-Hant">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Solfacil v6.10 Runtime Governance — REQ + DESIGN Bundle</title>
+  <style>
+    :root { --bg:#0b1020; --panel:#121a2b; --panel2:#18233a; --text:#e8eefc; --muted:#9fb0d1; --line:#2b3958; --accent:#68d5ff; --good:#4ade80; --warn:#fbbf24; }
+    *{box-sizing:border-box} body{margin:0;background:linear-gradient(180deg,#0b1020,#0f172a);color:var(--text);font:16px/1.6 -apple-system,BlinkMacSystemFont,"Segoe UI","PingFang TC","Noto Sans TC",sans-serif}
+    .wrap{max-width:1200px;margin:0 auto;padding:32px 20px 80px}.hero,.card{background:rgba(18,26,43,.94);border:1px solid var(--line);border-radius:18px;box-shadow:0 10px 30px rgba(0,0,0,.22)} .hero{padding:28px;margin-bottom:20px}.card{padding:22px}
+    .grid{display:grid;grid-template-columns:repeat(12,1fr);gap:20px}.col-12{grid-column:span 12}.col-6{grid-column:span 6}.col-4{grid-column:span 4}.col-8{grid-column:span 8}
+    h1,h2{margin:0 0 12px;line-height:1.25} h1{font-size:34px} h2{font-size:24px;margin-top:28px} .muted{color:var(--muted)} .badges{display:flex;gap:10px;flex-wrap:wrap;margin:14px 0 6px}.badge{padding:6px 10px;border-radius:999px;font-size:13px;border:1px solid var(--line);background:var(--panel2)}
+    .quote{border-left:4px solid var(--accent);padding:10px 14px;background:rgba(104,213,255,.08);border-radius:10px} a{color:var(--accent);text-decoration:none} ul{margin:10px 0 0 20px;padding:0} table{width:100%;border-collapse:collapse;margin-top:10px} th,td{border-bottom:1px solid var(--line);padding:10px 8px;text-align:left;vertical-align:top} th{color:var(--muted);font-weight:600}
+    @media (max-width:900px){.col-12,.col-8,.col-6,.col-4{grid-column:span 12}h1{font-size:28px}}
+  </style>
+</head>
+<body>
+<div class="wrap">
+  <section class="hero">
+    <div class="muted">v6.10 doc bundle · REQ finalized + DESIGN closed + PLAN drafted · 2026-04-18</div>
+    <h1>Solfacil v6.10 Runtime Governance</h1>
+    <p>目前文檔鏈已經校正到正確位置：<strong>REQ 定義問題與邊界</strong>，<strong>DESIGN 定義架構與契約</strong>，而且 DESIGN 現在已經回到 <strong>矩陣架構的複數文檔包裝</strong>。單一 synthesis doc 保留做審閱入口，但 canonical design truth 已拆回編號延續的 framework 文件集。</p>
+    <div class="badges">
+      <span class="badge">REQ: aligned / ready</span>
+      <span class="badge">DESIGN: closed after Claude round-3</span>
+      <span class="badge">PLAN: drafted</span>
+      <span class="badge">Phase posture: A / A / B</span>
+    </div>
+  </section>
+
+  <div class="grid">
+    <section class="card col-8">
+      <h2>你先看這裡</h2>
+      <div class="quote"><strong>最重要結論：</strong> v6.10 已經不是「要不要做 observability 模塊」的討論，而是「要如何把 runtime governance spine 正確插進 M9，並用最小 phase-1 範圍做出可信 operator contract」。</div>
+      <ul>
+        <li>REQ 已固定：internal-ops-first、narrow-but-deep、backend-first。</li>
+        <li>DESIGN 已固定：spine 在 M9、runtime tables additive、<code>/api/runtime/*</code> 為主、<code>#runtime</code> 只做最小 UI。</li>
+        <li>canonical design 已拆回矩陣文件：master + M5 + M9 + DB schema + frontend extension。</li>
+        <li>P5/P6 與 platform runtime 明確分治，不混合語義。</li>
+      </ul>
+    </section>
+
+    <section class="card col-4">
+      <h2>Artifacts</h2>
+      <ul>
+        <li><a href="file:///home/alan/src/solfacil/docs/v6.10-runtime-governance-req.html">REQ HTML</a></li>
+        <li><a href="file:///home/alan/src/solfacil/docs/v6.10-runtime-governance-design.html">DESIGN synthesis HTML</a></li>
+        <li><a href="file:///home/alan/src/solfacil/docs/v6.10-runtime-governance-plan.html">PLAN HTML</a></li>
+        <li><code>docs/v6.10-runtime-governance-plan.md</code></li>
+        <li><code>design/backend_architecture/00_MASTER_ARCHITECTURE_v6.10.md</code></li>
+        <li><code>design/backend_architecture/01_IOT_HUB_MODULE_v6.10.md</code></li>
+        <li><code>design/backend_architecture/02_OPTIMIZATION_ENGINE_MODULE_v6.10.md</code></li>
+        <li><code>design/backend_architecture/03_DR_DISPATCHER_MODULE_v6.10.md</code></li>
+        <li><code>design/backend_architecture/04_MARKET_BILLING_MODULE_v6.10.md</code></li>
+        <li><code>design/backend_architecture/05_BFF_MODULE_v6.10.md</code></li>
+        <li><code>design/backend_architecture/09_SHARED_LAYER_v6.10.md</code></li>
+        <li><code>design/backend_architecture/10_DATABASE_SCHEMA_v6.10.md</code></li>
+        <li><code>docs/FRONTEND_ARCHITECTURE_v6.10.md</code></li>
+      </ul>
+    </section>
+
+    <section class="card col-6">
+      <h2>REQ distilled</h2>
+      <ul>
+        <li>問題不是缺 log，而是缺 governed runtime meaning。</li>
+        <li>目標不是加頁面，而是建立 central doctor / observability spine。</li>
+        <li>舊模塊輸出 facts；治理語義集中到 spine。</li>
+        <li>phase-1 只做少數高價值 runtime-critical modules。</li>
+      </ul>
+    </section>
+
+    <section class="card col-6">
+      <h2>DESIGN distilled</h2>
+      <ul>
+        <li>spine lives in <code>backend/src/shared/runtime/*</code></li>
+        <li>tables: <code>runtime_events</code>, <code>runtime_issues</code>, <code>runtime_self_checks</code>, <code>runtime_health_snapshots</code></li>
+        <li>API: <code>/api/runtime/health</code>, <code>/issues</code>, <code>/events</code>, <code>/self-checks</code>, operator actions</li>
+        <li>UI: minimal <code>#runtime</code> only</li>
+      </ul>
+    </section>
+
+    <section class="card col-6">
+      <h2>PLAN distilled</h2>
+      <ul>
+        <li>WS0/WS1 先做 flags + additive schema</li>
+        <li>WS2 先把 M9 spine 做穩，再開始 module emitters</li>
+        <li>WS3 runtime API contract 先穩，WS9 frontend 最後才接</li>
+        <li>驗證分成 slice-level、integration、final acceptance matrix 三層</li>
+      </ul>
+    </section>
+
+    <section class="card col-12">
+      <h2>Why this doc chain is now credible</h2>
+      <table>
+        <thead><tr><th>Stage</th><th>What was fixed</th><th>Why it matters</th></tr></thead>
+        <tbody>
+          <tr><td>REQ</td><td>把「新增 ops 模塊」矯正成「runtime governance skeleton」</td><td>避免 UI-first / module-first 誤解</td></tr>
+          <tr><td>Initial DESIGN</td><td>把 spine 放進 M9，建立 event/lifecycle/health/operator contract</td><td>形成真正可用的架構中樞</td></tr>
+          <tr><td>Ryan review</td><td>抓出 issue identity 與 self-check read model 兩個設計缺口</td><td>避免 schema 和 lifecycle 互相打架</td></tr>
+          <tr><td>Revised DESIGN</td><td>明確採單 row / fingerprint + <code>cycle_count</code>，補 <code>runtime_self_checks</code></td><td>讓 phase-1 contract 變得一致且可實做</td></tr>
+        </tbody>
+      </table>
+    </section>
+  </div>
+</div>
+</body>
+</html>

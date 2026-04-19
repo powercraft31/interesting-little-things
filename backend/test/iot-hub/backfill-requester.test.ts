@@ -169,13 +169,14 @@ describe("BackfillRequester", () => {
     // Should NOT publish (all chunks done)
     expect(cm.publishToGateway).not.toHaveBeenCalled();
 
-    // Should mark completed
+    // Should mark completed and stamp terminal evidence for retention cleanup
     const completedUpdate = queries.find(
       (q) =>
         q.sql.includes("UPDATE backfill_requests") &&
         q.sql.includes("'completed'"),
     );
     expect(completedUpdate).toBeDefined();
+    expect(completedUpdate?.sql).toContain("completed_at = NOW()");
   });
 
   it("marks request failed when gateway is offline", async () => {
@@ -187,14 +188,33 @@ describe("BackfillRequester", () => {
     await jest.advanceTimersByTimeAsync(10_000);
     requester.stop();
 
-    // Should mark failed
+    // Should mark failed and stamp completed_at for terminal retention cleanup
     const failedUpdate = queries.find(
       (q) =>
         q.sql.includes("UPDATE backfill_requests") &&
         q.sql.includes("'failed'"),
     );
     expect(failedUpdate).toBeDefined();
+    expect(failedUpdate?.sql).toContain("completed_at = NOW()");
     expect(cm.publishToGateway).not.toHaveBeenCalled();
+  });
+
+  it("marks request failed with completed_at when first publish fails", async () => {
+    const { pool, queries } = createMockPool([BASE_REQUEST]);
+    const cm = createMockConnectionManager(true, false); // publish failure
+    const requester = new BackfillRequester(pool, cm);
+
+    requester.start();
+    await jest.advanceTimersByTimeAsync(10_000);
+    requester.stop();
+
+    const failedUpdate = queries.find(
+      (q) =>
+        q.sql.includes("UPDATE backfill_requests") &&
+        q.sql.includes("'failed'"),
+    );
+    expect(failedUpdate).toBeDefined();
+    expect(failedUpdate?.sql).toContain("completed_at = NOW()");
   });
 
   it("publishes to correct topic format: platform/ems/{gatewayId}/data/get_missed", async () => {
