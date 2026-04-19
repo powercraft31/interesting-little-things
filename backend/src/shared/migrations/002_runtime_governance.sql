@@ -172,6 +172,34 @@ CREATE TABLE IF NOT EXISTS runtime_health_snapshots (
 CREATE INDEX IF NOT EXISTS idx_runtime_health_snapshots_captured_at
   ON runtime_health_snapshots (captured_at DESC);
 
+DO $runtime_grants$
+DECLARE
+  runtime_table TEXT;
+BEGIN
+  FOREACH runtime_table IN ARRAY ARRAY[
+    'runtime_events',
+    'runtime_events_default',
+    'runtime_issues',
+    'runtime_self_checks',
+    'runtime_health_snapshots'
+  ] LOOP
+    IF EXISTS (
+      SELECT 1
+      FROM pg_class c
+      JOIN pg_namespace n ON n.oid = c.relnamespace
+      WHERE n.nspname = 'public' AND c.relname = runtime_table
+    ) THEN
+      EXECUTE format(
+        'GRANT SELECT, INSERT, UPDATE, DELETE ON TABLE public.%I TO solfacil_app, solfacil_service',
+        runtime_table
+      );
+    END IF;
+  END LOOP;
+
+  EXECUTE 'GRANT USAGE, SELECT ON SEQUENCE public.runtime_health_snapshots_id_seq TO solfacil_app, solfacil_service';
+END
+$runtime_grants$;
+
 
 -- ── 5. Pooling posture notes (no RLS in phase-1) ─────────────
 -- Runtime-governance tables are platform-scoped operational tables.

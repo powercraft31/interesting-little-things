@@ -6,6 +6,8 @@ export type LocalDbContractFacts = {
   existingColumns: Record<string, string[]>;
   existingIndexes: string[];
   schemaCreatePrivilege: boolean;
+  runtimeTablesDmlPrivilege: boolean;
+  runtimeHealthSnapshotSequencePrivilege: boolean;
   asset5MinOwner: string | null;
   assetTypeConstraintDef: string | null;
   fiveMinPartitionProbeSucceeded: boolean;
@@ -129,6 +131,22 @@ export function verifyLocalDbContract(facts: LocalDbContractFacts): LocalDbContr
       "schema privilege: solfacil_service has CREATE on public",
       facts.schemaCreatePrivilege,
       "missing privilege: solfacil_service lacks CREATE on schema public",
+    ),
+  );
+
+  checks.push(
+    buildCheck(
+      "runtime DML privilege: solfacil_app/solfacil_service can read-write runtime tables",
+      facts.runtimeTablesDmlPrivilege,
+      "missing privilege: runtime tables are not granted to solfacil_app/solfacil_service",
+    ),
+  );
+
+  checks.push(
+    buildCheck(
+      "runtime snapshot sequence privilege: solfacil_app/solfacil_service can use runtime_health_snapshots_id_seq",
+      facts.runtimeHealthSnapshotSequencePrivilege,
+      "missing privilege: runtime_health_snapshots_id_seq is not granted to solfacil_app/solfacil_service",
     ),
   );
 
@@ -266,6 +284,8 @@ export async function collectLocalDbContractFacts(pool: Queryable): Promise<Loca
     existingIndexes,
     existingColumns,
     schemaPrivilegeRows,
+    runtimeTablePrivilegeRows,
+    runtimeSnapshotSequencePrivilegeRows,
     ownerRows,
     constraintRows,
     fiveMinPartitionProbeSucceeded,
@@ -331,6 +351,19 @@ export async function collectLocalDbContractFacts(pool: Queryable): Promise<Loca
     pool.query<{ has_create: boolean }>(
       "SELECT has_schema_privilege('solfacil_service', 'public', 'CREATE') AS has_create",
     ),
+    pool.query<{ has_runtime_table_dml: boolean }>(`
+      SELECT bool_and(
+               has_table_privilege('solfacil_app', format('public.%I', table_name), 'SELECT,INSERT,UPDATE,DELETE')
+               AND has_table_privilege('solfacil_service', format('public.%I', table_name), 'SELECT,INSERT,UPDATE,DELETE')
+             ) AS has_runtime_table_dml
+      FROM unnest(ARRAY['runtime_events', 'runtime_events_default', 'runtime_issues', 'runtime_self_checks', 'runtime_health_snapshots']) AS t(table_name)
+    `),
+    pool.query<{ has_runtime_snapshot_sequence_privilege: boolean }>(`
+      SELECT (
+        has_sequence_privilege('solfacil_app', 'public.runtime_health_snapshots_id_seq', 'USAGE,SELECT')
+        AND has_sequence_privilege('solfacil_service', 'public.runtime_health_snapshots_id_seq', 'USAGE,SELECT')
+      ) AS has_runtime_snapshot_sequence_privilege
+    `),
     pool.query<{ owner_name: string | null }>(`
         SELECT pg_get_userbyid(c.relowner) AS owner_name
         FROM pg_class c
@@ -362,6 +395,9 @@ export async function collectLocalDbContractFacts(pool: Queryable): Promise<Loca
     existingColumns,
     existingIndexes,
     schemaCreatePrivilege: schemaPrivilegeRows.rows[0]?.has_create ?? false,
+    runtimeTablesDmlPrivilege: runtimeTablePrivilegeRows.rows[0]?.has_runtime_table_dml ?? false,
+    runtimeHealthSnapshotSequencePrivilege:
+      runtimeSnapshotSequencePrivilegeRows.rows[0]?.has_runtime_snapshot_sequence_privilege ?? false,
     asset5MinOwner: ownerRows.rows[0]?.owner_name ?? null,
     assetTypeConstraintDef: constraintRows.rows[0]?.constraint_def ?? null,
     fiveMinPartitionProbeSucceeded,

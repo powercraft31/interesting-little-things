@@ -50,6 +50,12 @@ describe("002_runtime_governance.sql migration artifact", () => {
     expect(migration).toMatch(/FOR i IN 0\.\.3/i);
   });
 
+  it("grants runtime tables and snapshot sequence to runtime roles for in-place upgrades", () => {
+    expect(migration).toMatch(/GRANT\s+SELECT,\s+INSERT,\s+UPDATE,\s+DELETE\s+ON TABLE public\.%I TO solfacil_app, solfacil_service/i);
+    expect(migration).toMatch(/runtime_events_default/i);
+    expect(migration).toMatch(/GRANT\s+USAGE,\s+SELECT\s+ON SEQUENCE public\.runtime_health_snapshots_id_seq TO solfacil_app, solfacil_service/i);
+  });
+
   it("enforces that runtime_health_snapshots.overall cannot be the API-only 'disabled' value", () => {
     const match = migration.match(/overall[\s\S]*?CHECK\s*\([^)]*\)/i);
     expect(match).not.toBeNull();
