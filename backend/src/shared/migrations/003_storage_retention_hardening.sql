@@ -65,6 +65,11 @@ CREATE TABLE IF NOT EXISTS public.gateway_alarm_events_archive (
 CREATE INDEX IF NOT EXISTS idx_gateway_alarm_events_archive_archived_at
   ON public.gateway_alarm_events_archive (archived_at DESC);
 
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.device_command_logs_archive
+  TO solfacil_app, solfacil_service;
+GRANT SELECT, INSERT, UPDATE, DELETE ON public.gateway_alarm_events_archive
+  TO solfacil_app, solfacil_service;
+
 -- ── 3. helper hot-table indexes for retention executor scans ──
 
 CREATE INDEX IF NOT EXISTS idx_runtime_issues_closed_at

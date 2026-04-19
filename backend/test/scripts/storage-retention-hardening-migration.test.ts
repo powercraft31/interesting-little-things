@@ -28,6 +28,15 @@ describe("003_storage_retention_hardening.sql migration artifact", () => {
     expect(migration).toMatch(/gateway_alarm_events_archive[\s\S]*archive_reason\s+TEXT\s+NOT NULL/i);
   });
 
+  it("grants archive-table DML access to runtime roles for in-place upgrades", () => {
+    expect(migration).toMatch(
+      /GRANT\s+SELECT,\s+INSERT,\s+UPDATE,\s+DELETE\s+ON\s+public\.device_command_logs_archive\s+TO\s+solfacil_app,\s+solfacil_service/i,
+    );
+    expect(migration).toMatch(
+      /GRANT\s+SELECT,\s+INSERT,\s+UPDATE,\s+DELETE\s+ON\s+public\.gateway_alarm_events_archive\s+TO\s+solfacil_app,\s+solfacil_service/i,
+    );
+  });
+
   it("defines helper indexes for all retention-scan surfaces", () => {
     expect(migration).toMatch(/idx_runtime_issues_closed_at/i);
     expect(migration).toMatch(/idx_device_command_logs_retention_eligibility/i);
