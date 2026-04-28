@@ -20,37 +20,55 @@ export async function upsertIntent(
   intent: Omit<StrategyIntent, "id" | "created_at" | "updated_at">,
 ): Promise<StrategyIntent> {
   const sql = `
-    INSERT INTO strategy_intents (
-      org_id, family, status, governance_mode, urgency,
-      title, reason_summary, evidence_snapshot,
-      scope_gateway_ids, scope_summary, constraints,
-      suggested_playbook, handoff_snapshot, arbitration_note,
-      actor, decided_at, expires_at
-    ) VALUES (
-      $1, $2, $3, $4, $5,
-      $6, $7, $8,
-      $9, $10, $11,
-      $12, $13, $14,
-      $15, $16, $17
+    WITH existing AS (
+      SELECT id
+      FROM strategy_intents
+      WHERE org_id = $1
+        AND family = $2
+        AND status NOT IN ${TERMINAL_STATUSES}
+        AND scope_gateway_ids = $9::jsonb
+      ORDER BY created_at DESC
+      LIMIT 1
+    ), updated AS (
+      UPDATE strategy_intents
+      SET status             = $3,
+          governance_mode    = $4,
+          urgency            = $5,
+          title              = $6,
+          reason_summary     = $7,
+          evidence_snapshot  = $8::jsonb,
+          scope_gateway_ids  = $9::jsonb,
+          scope_summary      = $10,
+          constraints        = $11::jsonb,
+          suggested_playbook = $12,
+          handoff_snapshot   = $13::jsonb,
+          arbitration_note   = $14,
+          actor              = $15,
+          decided_at         = $16,
+          expires_at         = $17,
+          updated_at         = NOW()
+      WHERE id = (SELECT id FROM existing)
+      RETURNING *
+    ), inserted AS (
+      INSERT INTO strategy_intents (
+        org_id, family, status, governance_mode, urgency,
+        title, reason_summary, evidence_snapshot,
+        scope_gateway_ids, scope_summary, constraints,
+        suggested_playbook, handoff_snapshot, arbitration_note,
+        actor, decided_at, expires_at
+      )
+      SELECT
+        $1, $2, $3, $4, $5,
+        $6, $7, $8::jsonb,
+        $9::jsonb, $10, $11::jsonb,
+        $12, $13::jsonb, $14,
+        $15, $16, $17
+      WHERE NOT EXISTS (SELECT 1 FROM updated)
+      RETURNING *
     )
-    ON CONFLICT (id) DO UPDATE SET
-      status            = EXCLUDED.status,
-      governance_mode   = EXCLUDED.governance_mode,
-      urgency           = EXCLUDED.urgency,
-      title             = EXCLUDED.title,
-      reason_summary    = EXCLUDED.reason_summary,
-      evidence_snapshot = EXCLUDED.evidence_snapshot,
-      scope_gateway_ids = EXCLUDED.scope_gateway_ids,
-      scope_summary     = EXCLUDED.scope_summary,
-      constraints       = EXCLUDED.constraints,
-      suggested_playbook= EXCLUDED.suggested_playbook,
-      handoff_snapshot  = EXCLUDED.handoff_snapshot,
-      arbitration_note  = EXCLUDED.arbitration_note,
-      actor             = EXCLUDED.actor,
-      decided_at        = EXCLUDED.decided_at,
-      expires_at        = EXCLUDED.expires_at,
-      updated_at        = NOW()
-    RETURNING *
+    SELECT * FROM updated
+    UNION ALL
+    SELECT * FROM inserted
   `;
 
   const params = [
