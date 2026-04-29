@@ -28,4 +28,16 @@ describe("frontend CSP regression guard", () => {
 
     expect(offenders).toEqual([]);
   });
+
+  test("P2 diagnostics button headers reset native button chrome", () => {
+    const css = fs.readFileSync(path.join(repoRoot, "frontend-v2/css/pages.css"), "utf8");
+    const headerRule = css.match(/\.vu-diag-panel-header\s*\{(?<body>[^}]*)\}/)?.groups?.body ?? "";
+
+    expect(headerRule).toContain("background: transparent;");
+    expect(headerRule).toContain("border: 0;");
+    expect(headerRule).toContain("width: 100%;");
+    expect(headerRule).toContain("font: inherit;");
+    expect(headerRule).toContain("color: inherit;");
+    expect(headerRule).toContain("text-align: left;");
+  });
 });
