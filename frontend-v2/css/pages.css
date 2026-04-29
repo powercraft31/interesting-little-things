@@ -4357,20 +4357,21 @@
 }
 
 /* ---- v6.2: Enhanced schedule select contrast ---- */
-/* Use a native-dropdown-safe palette: many mobile browsers render popup menus
-   with a system white surface and ignore dark option backgrounds. */
+/* Closed controls must follow the current theme.  Native dropdown popups may be
+   rendered by the OS/browser, but forcing the closed select to white in dark
+   mode breaks the Device page visual contract. */
 .schedule-section .schedule-table select.config-input,
 .schedule-section .schedule-table .slot-end,
 .schedule-section .schedule-table .slot-direction,
 .schedule-section .schedule-table .slot-export,
 .schedule-section .schedule-table .schedule-mode-select {
-  background: #ffffff !important;
-  border: 1px solid #cbd5e1 !important;
+  background: var(--surface-1, var(--card)) !important;
+  border: 1px solid var(--border) !important;
   border-radius: var(--radius-sm);
-  color: #111827 !important;
-  -webkit-text-fill-color: #111827;
+  color: var(--text) !important;
+  -webkit-text-fill-color: var(--text);
   text-shadow: none !important;
-  color-scheme: light;
+  color-scheme: dark;
   font-weight: 500;
 }
 
@@ -4386,8 +4387,8 @@
 .schedule-section .schedule-table .slot-direction option,
 .schedule-section .schedule-table .slot-export option,
 .schedule-section .schedule-table .schedule-mode-select option {
-  background: #ffffff !important;
-  color: #111827 !important;
+  background: var(--surface-1, var(--card)) !important;
+  color: var(--text) !important;
 }
 
 [data-theme="light"] .schedule-section .schedule-table select.config-input,
@@ -4397,7 +4398,19 @@
 [data-theme="light"] .schedule-section .schedule-table .schedule-mode-select {
   background: #ffffff !important;
   color: #111827 !important;
+  -webkit-text-fill-color: #111827;
   border-color: #cbd5e1 !important;
+  color-scheme: light;
+}
+
+[data-theme="light"] .schedule-section .schedule-table select.config-input option,
+[data-theme="light"] .schedule-section .schedule-table select.config-input optgroup,
+[data-theme="light"] .schedule-section .schedule-table .slot-end option,
+[data-theme="light"] .schedule-section .schedule-table .slot-direction option,
+[data-theme="light"] .schedule-section .schedule-table .slot-export option,
+[data-theme="light"] .schedule-section .schedule-table .schedule-mode-select option {
+  background: #ffffff !important;
+  color: #111827 !important;
 }
 
 /* ---- v6.2: Responsive improvements for Devices page ---- */

@@ -40,4 +40,17 @@ describe("frontend CSP regression guard", () => {
     expect(headerRule).toContain("color: inherit;");
     expect(headerRule).toContain("text-align: left;");
   });
+
+  test("P2 schedule selects stay dark in dark theme", () => {
+    const css = fs.readFileSync(path.join(repoRoot, "frontend-v2/css/pages.css"), "utf8");
+    const scheduleRule = css.match(
+      /\.schedule-section \.schedule-table select\.config-input,[\s\S]*?\.schedule-section \.schedule-table \.schedule-mode-select\s*\{(?<body>[^}]*)\}/,
+    )?.groups?.body ?? "";
+
+    expect(scheduleRule).toContain("background: var(--surface-1, var(--card)) !important;");
+    expect(scheduleRule).toContain("color: var(--text) !important;");
+    expect(scheduleRule).toContain("color-scheme: dark;");
+    expect(scheduleRule).not.toContain("background: #ffffff !important;");
+    expect(scheduleRule).not.toContain("color-scheme: light;");
+  });
 });
