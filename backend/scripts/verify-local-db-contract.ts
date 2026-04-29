@@ -44,12 +44,20 @@ const REQUIRED_TABLES = [
   "runtime_issues",
   "runtime_self_checks",
   "runtime_health_snapshots",
+  "strategy_intents",
+  "posture_overrides",
 ] as const;
 
 const RUNTIME_EVENTS_DEFAULT_PARTITION = "runtime_events_default";
 const RUNTIME_EVENTS_MONTHLY_PATTERN = /^runtime_events_\d{6}$/;
 
 const REQUIRED_COLUMNS: Record<string, readonly string[]> = {
+  assets: [
+    "rated_max_power_kw",
+    "rated_max_current_a",
+    "rated_min_power_kw",
+    "rated_min_current_a",
+  ],
   asset_hourly_metrics: [
     "pv_generation_kwh",
     "grid_import_kwh",
@@ -58,7 +66,7 @@ const REQUIRED_COLUMNS: Record<string, readonly string[]> = {
     "avg_battery_soc",
     "peak_battery_power_kw",
   ],
-  device_command_logs: ["dispatched_at", "acked_at"],
+  device_command_logs: ["dispatched_at", "acked_at", "batch_id", "source"],
   device_command_logs_archive: ["archived_at", "archive_reason"],
   gateway_alarm_events_archive: ["archived_at", "archive_reason"],
 };
@@ -237,9 +245,11 @@ async function collectExistingColumns(pool: Queryable): Promise<Record<string, s
     FROM information_schema.columns
     WHERE table_schema = 'public'
       AND (
+        (table_name = 'assets' AND column_name = ANY(ARRAY['rated_max_power_kw', 'rated_max_current_a', 'rated_min_power_kw', 'rated_min_current_a']))
+        OR
         (table_name = 'asset_hourly_metrics' AND column_name = ANY(ARRAY['pv_generation_kwh', 'grid_import_kwh', 'grid_export_kwh', 'load_consumption_kwh', 'avg_battery_soc', 'peak_battery_power_kw']))
         OR
-        (table_name = 'device_command_logs' AND column_name = ANY(ARRAY['dispatched_at', 'acked_at']))
+        (table_name = 'device_command_logs' AND column_name = ANY(ARRAY['dispatched_at', 'acked_at', 'batch_id', 'source']))
         OR
         (table_name = 'device_command_logs_archive' AND column_name = ANY(ARRAY['archived_at', 'archive_reason']))
         OR
@@ -311,7 +321,9 @@ export async function collectLocalDbContractFacts(pool: Queryable): Promise<Loca
            'runtime_events',
            'runtime_issues',
            'runtime_self_checks',
-           'runtime_health_snapshots'
+           'runtime_health_snapshots',
+           'strategy_intents',
+           'posture_overrides'
          ])
        ORDER BY c.relname`,
     ),
