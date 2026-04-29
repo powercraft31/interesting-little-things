@@ -6972,6 +6972,8 @@
   color: inherit;
   font: inherit;
   text-align: left;
+  appearance: none;
+  -webkit-appearance: none;
   cursor: pointer;
   user-select: none;
   transition: background var(--transition-fast);
